@@ -1,0 +1,91 @@
+<div class="max-w-[1440px] mx-auto px-4 sm:px-8 py-14 space-y-10">
+    <div class="border-b border-hairline pb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+            <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-1">Private Client Settlement</p>
+            <h1 class="font-serif text-4xl sm:text-5xl text-obsidian font-normal">Won Auctions, Invoices &amp; Logistics</h1>
+        </div>
+        <a href="/buyer/dashboard" class="text-xs uppercase tracking-widest text-stone hover:text-obsidian">← Collector Dashboard</a>
+    </div>
+
+    <!-- Payment Integration Transparency Banner -->
+    <div class="bg-alabaster border border-hairline p-5 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <span class="uppercase tracking-widest text-[10px] font-semibold text-bronze block">Stripe Checkout &amp; Webhook Interface</span>
+            <p class="text-charcoal mt-0.5">
+                Raw card details are never stored on ArtAlly servers. Set <code class="bg-white px-1.5 py-0.5 border border-hairline">STRIPE_SECRET_KEY</code> in <code class="bg-white px-1.5 py-0.5 border border-hairline">.env</code> for live card processing, or use the verified Sandbox Settlement button below to test order state transitions.
+            </p>
+        </div>
+    </div>
+
+    <?php if (empty($orders)): ?>
+        <div class="bg-white border border-hairline p-16 text-center space-y-4">
+            <h2 class="font-serif text-3xl text-obsidian">No Won Auction Invoices Yet</h2>
+            <p class="text-xs text-stone">When you win a timed auction above the reserve price, your invoice and settlement details will appear here automatically.</p>
+            <a href="/auctions" class="inline-block bg-obsidian text-ivory px-7 py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">Explore Active Lots</a>
+        </div>
+    <?php else: ?>
+        <div class="space-y-6">
+            <?php foreach ($orders as $ord): ?>
+                <?php $art = $ord['artwork'] ?? []; ?>
+                <div class="bg-white border border-hairline p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                    <div class="lg:col-span-2 aspect-square bg-alabaster overflow-hidden border border-hairline">
+                        <img src="<?= e($art['primary_image'] ?? '') ?>" alt="" class="w-full h-full object-cover">
+                    </div>
+
+                    <div class="lg:col-span-6 space-y-2 text-xs">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="font-mono font-semibold text-obsidian"><?= e($ord['order_number']) ?></span>
+                            <span class="px-2.5 py-0.5 text-[10px] uppercase tracking-widest font-semibold <?= ($ord['payment_status'] ?? '') === 'paid' ? 'bg-[#1A2E22] text-ivory' : 'bg-bronze text-white' ?>">
+                                Payment: <?= e(strtoupper($ord['payment_status'])) ?>
+                            </span>
+                            <span class="px-2.5 py-0.5 text-[10px] uppercase tracking-widest bg-alabaster border border-hairline">
+                                Logistics: <?= e(strtoupper(str_replace('_', ' ', $ord['fulfillment_status'] ?? 'awaiting_payment'))) ?>
+                            </span>
+                        </div>
+
+                        <h2 class="font-serif text-3xl text-obsidian"><?= e($art['title'] ?? 'Acquired Lot') ?></h2>
+                        <p class="text-stone"><?= e($art['medium'] ?? '') ?> · <?= e($art['dimensions'] ?? '') ?></p>
+
+                        <div class="grid grid-cols-3 gap-4 pt-3 border-t border-hairline">
+                            <div>
+                                <span class="text-stone block text-[10px] uppercase">Hammer Price</span>
+                                <span class="font-semibold text-obsidian"><?= format_money_exact($ord['hammer_price']) ?></span>
+                            </div>
+                            <div>
+                                <span class="text-stone block text-[10px] uppercase">Buyer’s Premium</span>
+                                <span class="font-semibold text-obsidian"><?= format_money_exact($ord['buyer_premium']) ?></span>
+                            </div>
+                            <div>
+                                <span class="text-stone block text-[10px] uppercase">Museum Crating</span>
+                                <span class="font-semibold text-obsidian"><?= format_money_exact($ord['shipping_fee'] ?? 450) ?></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-4 lg:text-right border-t lg:border-t-0 lg:border-l border-hairline pt-4 lg:pt-0 lg:pl-8 space-y-4">
+                        <div>
+                            <p class="text-[10px] uppercase tracking-widest text-stone">Total Invoice Amount</p>
+                            <p class="font-serif text-3xl font-semibold text-obsidian"><?= format_money_exact($ord['total_amount'], $ord['currency'] ?? 'USD') ?></p>
+                            <p class="text-[11px] text-stone">Payment Deadline: <?= e(gmdate('d M Y', strtotime($ord['payment_deadline'] ?? '+7 days'))) ?></p>
+                        </div>
+
+                        <?php if (($ord['payment_status'] ?? '') !== 'paid'): ?>
+                            <form action="/buyer/orders/pay" method="POST">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="order_id" value="<?= (int)$ord['id'] ?>">
+                                <button type="submit" class="w-full bg-obsidian text-ivory py-3.5 px-6 text-xs uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                                    Confirm &amp; Settle Invoice Now
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <div class="p-3 bg-ivory border border-hairline text-[11px] text-charcoal">
+                                ✓ Settled on <?= e($ord['paid_at'] ?? '') ?> UTC<br>
+                                Accompanied by signed Certificate of Authenticity.
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+</div>

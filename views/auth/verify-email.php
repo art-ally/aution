@@ -1,0 +1,22 @@
+<div class="max-w-xl mx-auto px-4 sm:px-8 py-20">
+    <div class="bg-white border border-hairline p-8 sm:p-12 text-center space-y-6">
+        <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold">Paddle &amp; Identity Compliance</p>
+        <h1 class="font-serif text-4xl text-obsidian">Email &amp; Collector Verification</h1>
+        <p class="text-xs text-charcoal leading-relaxed">
+            Account Email: <strong><?= e($user['email']) ?></strong><br>
+            Verification Status:
+            <?php if (!empty($user['email_verified_at'])): ?>
+                <span class="text-bronze font-semibold">Verified on <?= e($user['email_verified_at']) ?> UTC</span>
+            <?php else: ?>
+                <span class="text-red-700 font-semibold">Pending Verification</span>
+            <?php endif; ?>
+        </p>
+
+        <form action="/verify-email" method="POST">
+            <?= csrf_field() ?>
+            <button type="submit" class="w-full bg-obsidian text-ivory py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">
+                Confirm Verification &amp; Activate Paddle
+            </button>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,24 @@
+<% var $watchedIds = user_watchlist_ids(); %>
+<div class="max-w-[1440px] mx-auto px-4 sm:px-8 py-14">
+    <div class="border-b border-hairline pb-8 mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+            <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-1">Private Client Selection</p>
+            <h1 class="font-serif text-4xl sm:text-5xl text-obsidian font-normal">Saved Lots &amp; Collector Watchlist</h1>
+        </div>
+        <a href="/catalogue" class="text-xs uppercase tracking-widest text-obsidian hover:text-bronze font-semibold">Explore More Artworks →</a>
+    </div>
+
+    <% if (empty($watchedArtworks)) { %>
+        <div class="bg-white border border-hairline p-16 text-center space-y-4">
+            <h2 class="font-serif text-3xl text-obsidian">Your Collector Watchlist Is Currently Empty</h2>
+            <p class="text-xs text-stone max-w-md mx-auto">Click the heart icon on any auction lot to monitor its bidding activity and closing countdown.</p>
+            <a href="/auctions" class="inline-block bg-obsidian text-ivory px-7 py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">Browse Live Auctions</a>
+        </div>
+    <% } else { %>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <% for (const $lot of Object.values($watchedArtworks || [])) { %>
+                <% __output += __renderPartial("partials/artwork-card", { lot: typeof $lot !== "undefined" ? $lot : null, watchedIds: typeof $watchedIds !== "undefined" ? $watchedIds : undefined }); %>
+            <% } %>
+        </div>
+    <% } %>
+</div>

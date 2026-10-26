@@ -1,0 +1,19 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-8 py-24 text-center space-y-6">
+    <span class="inline-block bg-bronze text-white text-[10px] uppercase tracking-widest px-3 py-1 font-semibold">
+        Awaiting Curatorial Approval
+    </span>
+    <h1 class="font-serif text-4xl sm:text-5xl text-obsidian font-normal">
+        Artist Dossier Under Review
+    </h1>
+    <p class="text-sm text-charcoal/80 leading-relaxed max-w-xl mx-auto">
+        The artist profile for <strong><?= e($artist['display_name'] ?? 'Registered Artist') ?></strong> has been registered with ArtAlly and is currently awaiting formal approval by the Chief Curator before public portfolio display.
+    </p>
+    <div class="pt-4 flex justify-center gap-4">
+        <a href="/artists" class="bg-obsidian text-ivory px-7 py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">
+            Browse Approved Artists
+        </a>
+        <a href="/auctions" class="border border-obsidian text-obsidian px-7 py-3.5 text-xs uppercase tracking-widest hover:bg-obsidian hover:text-ivory transition">
+            Explore Live Auctions
+        </a>
+    </div>
+</div>

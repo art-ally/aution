@@ -1,0 +1,188 @@
+{
+    "bids": [],
+    "_meta": {
+        "sequences": {
+            "bids": 0,
+            "roles": 0,
+            "users": 1,
+            "orders": 0,
+            "reports": 0,
+            "artworks": 0,
+            "auctions": 0,
+            "payments": 0,
+            "audit_logs": 0,
+            "categories": 10,
+            "watchlists": 0,
+            "commissions": 0,
+            "order_items": 0,
+            "notifications": 0,
+            "artwork_images": 0,
+            "buyer_profiles": 0,
+            "seller_payouts": 0,
+            "artist_profiles": 0,
+            "followed_artists": 0,
+            "artwork_documents": 0,
+            "platform_settings": 1,
+            "editorial_articles": 0,
+            "artwork_submissions": 0,
+            "email_verifications": 0,
+            "password_reset_tokens": 0,
+            "newsletter_subscribers": 0,
+            "authentication_invoices": 0
+        }
+    },
+    "roles": [],
+    "users": [
+        {
+            "id": 1,
+            "name": "Chief Administrator",
+            "role": "admin",
+            "email": "S-cakar@arcor.de",
+            "roles": [
+                "admin",
+                "buyer",
+                "artist"
+            ],
+            "status": "active",
+            "country": "Switzerland",
+            "password": "$2a$10$U1IS6FrcbQa5JV4n8O2DBefa5DiGFt2ggRNg8OFCzaijYzf4OYTpW",
+            "is_seeded": false,
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-26 20:18:39",
+            "bidding_approved": true,
+            "email_verified_at": "2026-07-24 15:10:33"
+        }
+    ],
+    "orders": [],
+    "reports": [],
+    "artworks": [],
+    "auctions": [],
+    "payments": [],
+    "audit_logs": [],
+    "categories": [
+        {
+            "id": 1,
+            "name": "Contemporary Art",
+            "slug": "contemporary-art",
+            "image": "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=1000&q=80",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-22 15:10:33",
+            "description": "Definitive paintings, installations, and mixed-media works created by leading living practitioners."
+        },
+        {
+            "id": 2,
+            "name": "Abstract Art",
+            "slug": "abstract-art",
+            "image": "https://images.unsplash.com/photo-1541961017774-22349e4a1262?auto=format&fit=crop&w=1000&q=80",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-22 15:10:33",
+            "description": "Chromatic fields, architectural minimalism, and expressive non-figurative compositions."
+        },
+        {
+            "id": 3,
+            "name": "Modern Art",
+            "slug": "modern-art",
+            "image": "https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?auto=format&fit=crop&w=1000&q=80",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-22 15:10:33",
+            "description": "Masterworks influenced by 20th-century avant-garde movements and formal abstraction."
+        },
+        {
+            "id": 4,
+            "name": "Photography",
+            "slug": "photography",
+            "image": "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=1000&q=80",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-22 15:10:33",
+            "description": "Archival silver gelatin prints, platinum-palladium editions, and large-format fine art photography."
+        },
+        {
+            "id": 5,
+            "name": "Sculpture",
+            "slug": "sculpture",
+            "image": "https://images.unsplash.com/photo-1544967082-d9d25d867d66?auto=format&fit=crop&w=1000&q=80",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-22 15:10:33",
+            "description": "Lost-wax cast bronzes, carved Carrara marble, and architectural steel forms."
+        },
+        {
+            "id": 6,
+            "name": "Paintings",
+            "slug": "paintings",
+            "image": "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=1000&q=80",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-22 15:10:33",
+            "description": "Oil on Belgian linen, encaustic, and pigment works of museum provenance."
+        },
+        {
+            "id": 7,
+            "name": "Works on Paper",
+            "slug": "works-on-paper",
+            "image": "https://images.unsplash.com/photo-1582555172866-f73bb12a2ab3?auto=format&fit=crop&w=1000&q=80",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-22 15:10:33",
+            "description": "Intimate charcoal studies, gouache, ink drawings, and unique monotypes on archival rag paper."
+        },
+        {
+            "id": 8,
+            "name": "Emerging Artists",
+            "slug": "emerging-artists",
+            "image": "https://images.unsplash.com/photo-1561214115-f2f134cc4912?auto=format&fit=crop&w=1000&q=80",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-22 15:10:33",
+            "description": "Curated discoveries from rising studio talent selected by the ArtAlly Curatorial Board."
+        },
+        {
+            "id": 9,
+            "name": "Limited Editions",
+            "slug": "limited-editions",
+            "image": "https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=1000&q=80",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-22 15:10:33",
+            "description": "Numbered, artist-signed editions and foundry-stamped sculptural multiples."
+        },
+        {
+            "id": 10,
+            "name": "Mixed Media",
+            "slug": "mixed-media",
+            "image": "https://images.unsplash.com/photo-1549887534-1541e9326642?auto=format&fit=crop&w=1000&q=80",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-22 15:10:33",
+            "description": "Interdisciplinary works combining gold leaf, raw textiles, mineral pigments, and found matter."
+        }
+    ],
+    "watchlists": [],
+    "commissions": [],
+    "order_items": [],
+    "notifications": [],
+    "artwork_images": [],
+    "buyer_profiles": [],
+    "seller_payouts": [],
+    "artist_profiles": [],
+    "followed_artists": [],
+    "artwork_documents": [],
+    "platform_settings": [
+        {
+            "id": 1,
+            "tagline": "Art Worth Discovering. Stories Worth Collecting.",
+            "brand_name": "ArtAlly",
+            "created_at": "2026-10-22 15:10:33",
+            "updated_at": "2026-10-26 19:43:46",
+            "headquarters": "Geneva · New York · London · Paris",
+            "contact_email": "concierge@ateliernoir.art",
+            "default_currency": "USD",
+            "anti_sniping_enabled": true,
+            "buyer_premium_percent": 20,
+            "commission_rate_percent": 15,
+            "anti_sniping_window_seconds": 300,
+            "anti_sniping_extension_seconds": 300,
+            "require_email_verification_for_bidding": true
+        }
+    ],
+    "editorial_articles": [],
+    "artwork_submissions": [],
+    "email_verifications": [],
+    "password_reset_tokens": [],
+    "newsletter_subscribers": [],
+    "authentication_invoices": []
+}

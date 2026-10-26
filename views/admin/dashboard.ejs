@@ -1,0 +1,1178 @@
+<div class="max-w-[1440px] mx-auto px-4 sm:px-8 py-12 space-y-14">
+    <!-- Top Executive Header -->
+    <div class="border-b border-hairline pb-8 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        <div>
+            <span class="bg-obsidian text-bronzeLight text-[10px] uppercase tracking-widest px-3 py-1 font-semibold">Private Executive Backend (Direct Link Access Only)</span>
+            <h1 class="font-serif text-4xl sm:text-5xl text-obsidian font-normal mt-2">ArtAlly Administration Backend</h1>
+            <p class="text-xs text-stone mt-1">Signed in as <%- e($admin?.['name']) %> (<%- e($admin?.['email']) %>) · Real Registrations, Artist Profile Approval &amp; Live Bid / Sold Controls</p>
+        </div>
+        <div class="flex flex-wrap gap-2.5 text-xs uppercase tracking-widest">
+            <a href="#invoice-generator" class="px-4 py-2.5 bg-bronze text-white hover:bg-obsidian transition font-semibold">📄 Auth Invoice Generator (<%- count($authInvoices || []) %>)</a>
+            <a href="#artists" class="px-4 py-2.5 bg-obsidian text-ivory hover:bg-bronze transition">Real Artists &amp; Uploads (<%- $stats?.['total_artists'] %>)</a>
+            <a href="#submissions" class="px-4 py-2.5 border border-obsidian hover:bg-obsidian hover:text-ivory transition">Submissions (<%- $stats?.['pending_submissions'] %>)</a>
+            <a href="#auctions" class="px-4 py-2.5 border border-obsidian hover:bg-obsidian hover:text-ivory transition">Live Bid &amp; Sold Control (<%- $stats?.['active_auctions'] %>)</a>
+            <a href="#payouts" class="px-4 py-2.5 border border-obsidian hover:bg-obsidian hover:text-ivory transition">Payouts</a>
+            <a href="#settings" class="px-4 py-2.5 border border-obsidian hover:bg-obsidian hover:text-ivory transition">Settings &amp; Users</a>
+            <a href="#admin-profile" class="px-4 py-2.5 border border-red-800 text-red-800 hover:bg-red-800 hover:text-white transition">Admin Profile &amp; Delete</a>
+            <form action="/admin/database/clear-all" method="POST" class="inline" onsubmit="return confirm('DELETE ALL BACKEND & DEMO DATA?\n\nThis will permanently wipe all demo details, artworks, submissions, artists, auctions, bids, orders, payouts, and invoices from both the backend and Supabase PostgreSQL so you can start completely fresh. Only your Administrator login will be kept. Proceed?');">
+                <%- csrf_field() %>
+                <button type="submit" class="px-4 py-2.5 bg-red-800 text-white hover:bg-obsidian transition font-semibold">
+                    🗑 Delete All Backend Data
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Supabase PostgreSQL Connection & One-Click Fresh Reset Banner -->
+    <div class="bg-[#181615] text-ivory border border-bronze p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-2.5">
+                <span class="bg-[#1A2E22] border border-bronze text-bronzeLight text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                    ● Connected: Supabase PostgreSQL (db.xrncirrbxzzouwbluyso.supabase.co:5432)
+                </span>
+                <span class="text-[11px] text-stone font-mono">Zero Demo Data Mode Active</span>
+            </div>
+            <p class="text-xs text-ivory/80">
+                Use the <strong>Delete All Backend Data (Fresh Start)</strong> button at any time to clear all backend records, test uploads, and any demo details across the platform and Supabase database.
+            </p>
+        </div>
+        <form action="/admin/database/clear-all" method="POST" class="self-start lg:self-center whitespace-nowrap" onsubmit="return confirm('DELETE ALL BACKEND & DEMO DATA?\n\nThis will permanently wipe all demo details, artworks, submissions, artists, auctions, bids, orders, payouts, and invoices from both the backend and Supabase PostgreSQL so you can start completely fresh. Only your Administrator login will be kept. Proceed?');">
+            <%- csrf_field() %>
+            <button type="submit" class="px-5 py-3 bg-red-800 text-white text-xs uppercase tracking-widest font-semibold hover:bg-red-700 transition border border-red-500">
+                🗑 Delete All Backend &amp; Demo Data (Fresh Start)
+            </button>
+        </form>
+    </div>
+
+    <!-- Executive KPI Grid (Real Registrations Only) -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
+        <div class="bg-white border border-hairline p-5">
+            <p class="text-[10px] uppercase tracking-widest text-stone">Real Accounts</p>
+            <p class="font-serif text-3xl font-semibold text-obsidian mt-1"><%- $stats?.['total_users'] %></p>
+        </div>
+        <div class="bg-white border border-hairline p-5">
+            <p class="text-[10px] uppercase tracking-widest text-stone">Registered Artists</p>
+            <p class="font-serif text-3xl font-semibold text-obsidian mt-1"><%- $stats?.['total_artists'] %></p>
+        </div>
+        <div class="bg-white border border-hairline p-5">
+            <p class="text-[10px] uppercase tracking-widest text-stone">Pending Uploads</p>
+            <p class="font-serif text-3xl font-semibold text-bronze mt-1"><%- $stats?.['pending_submissions'] %></p>
+        </div>
+        <div class="bg-white border border-hairline p-5">
+            <p class="text-[10px] uppercase tracking-widest text-stone">Live Auctions</p>
+            <p class="font-serif text-3xl font-semibold text-obsidian mt-1"><%- $stats?.['active_auctions'] %></p>
+        </div>
+        <div class="bg-white border border-hairline p-5">
+            <p class="text-[10px] uppercase tracking-widest text-stone">Real Bids</p>
+            <p class="font-serif text-3xl font-semibold text-obsidian mt-1"><%- $stats?.['total_bids'] %></p>
+        </div>
+        <div class="bg-white border border-hairline p-5">
+            <p class="text-[10px] uppercase tracking-widest text-stone">Hammer GMV</p>
+            <p class="font-serif text-2xl font-semibold text-obsidian mt-1"><%- format_money($stats?.['gross_merchandise_value']) %></p>
+        </div>
+        <div class="bg-white border border-hairline p-5">
+            <p class="text-[10px] uppercase tracking-widest text-stone">House Revenue</p>
+            <p class="font-serif text-2xl font-semibold text-bronze mt-1"><%- format_money($stats?.['platform_revenue']) %></p>
+        </div>
+        <div class="bg-white border border-hairline p-5">
+            <p class="text-[10px] uppercase tracking-widest text-stone">Pending Payouts</p>
+            <p class="font-serif text-2xl font-semibold text-obsidian mt-1"><%- format_money($stats?.['pending_payout_total']) %></p>
+        </div>
+    </div>
+
+    <!-- SECTION 0: Curatorial & AI-Powered Authentication Payment Invoice Generator -->
+    <section id="invoice-generator" class="bg-white border-2 border-bronze p-8 space-y-8 shadow-sm">
+        <div class="border-b border-hairline pb-5 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+            <div>
+                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Curatorial Connoisseurship &amp; AI Forensic Vetting Billing</p>
+                <h2 class="font-serif text-3xl text-obsidian mt-1">Curatorial &amp; AI-Powered Authentication Invoice Generator</h2>
+            </div>
+            <p class="text-xs text-stone max-w-xl">
+                Enter the receiving account details to be paid to, the artist’s name and details, the artwork being verified, and the authentication fee. Clicking <strong>Generate &amp; Print Invoice</strong> immediately opens the printable invoice and publishes a downloadable copy to the Artist’s Dashboard &amp; Artist Page.
+            </p>
+        </div>
+
+        <form action="/admin/invoices/generate" method="POST" class="space-y-8">
+            <%- csrf_field() %>
+
+            <!-- Optional Auto-Fill Helper from Registered Artists & Artworks -->
+            <div class="bg-ivory border border-hairline p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-bronze font-semibold mb-1">
+                        Quick-Fill from Registered Artist (Optional — or type freely below)
+                    </label>
+                    <select id="quick_select_artist" name="artist_id" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian" onchange="autoFillInvoiceArtist(this)">
+                        <option value="0">— Type Artist Details Manually or Select Registered Artist —</option>
+                        <% for (const $apItem of Object.values($allArtistsList || [])) { %>
+                            <% var $apUser = $apItem?.['user'] ?? {}; %>
+                            <option value="<%- Number($apItem?.['user_id'] || 0) %>"
+                                data-name="<%- e($apItem?.['display_name'] || $apUser?.['name'] || '') %>"
+                                data-email="<%- e($apUser?.['email'] || '') %>"
+                                data-details="<%- e(($apItem?.['discipline'] ? $apItem['discipline'] + ' · ' : '') + ($apItem?.['city'] ? $apItem['city'] + ', ' : '') + ($apItem?.['country'] || '')) %>">
+                                <%- e($apItem?.['display_name'] || $apUser?.['name']) %> (<%- e($apUser?.['email'] || 'No Email') %>)
+                            </option>
+                        <% } %>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-bronze font-semibold mb-1">
+                        Quick-Fill from Uploaded Artwork (Optional — or type freely below)
+                    </label>
+                    <select id="quick_select_artwork" name="artwork_id" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian" onchange="autoFillInvoiceArtwork(this)">
+                        <option value="0">— Type Artwork Details Manually or Select Uploaded Work —</option>
+                        <% for (const $artItem of Object.values($allArtworksList || [])) { %>
+                            <% var $artSub = $artItem?.['submission'] ?? {};
+                               var $artUser = $artItem?.['artist_user'] ?? {}; %>
+                            <option value="<%- Number($artItem?.['id'] || 0) %>"
+                                data-artist-id="<%- Number($artItem?.['artist_id'] || 0) %>"
+                                data-artist-name="<%- e($artUser?.['name'] || '') %>"
+                                data-artist-email="<%- e($artUser?.['email'] || '') %>"
+                                data-title="<%- e($artItem?.['title'] || '') %>"
+                                data-ref="<%- e($artSub?.['reference_code'] || '') %>"
+                                data-details="<%- e(($artItem?.['medium'] || '') + ($artItem?.['dimensions'] ? ' · ' + $artItem['dimensions'] : '') + ($artItem?.['year_created'] ? ' (' + $artItem['year_created'] + ')' : '')) %>">
+                                "<%- e($artItem?.['title']) %>" — by <%- e($artUser?.['name'] || 'Artist #' + $artItem?.['artist_id']) %>
+                            </option>
+                        <% } %>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Column 1: Artist & Artwork Being Verified -->
+                <div class="border border-hairline p-6 bg-ivory space-y-4">
+                    <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold border-b border-hairline pb-2">
+                        1. Artist &amp; Artwork Being Verified
+                    </p>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Artist Full Name *</label>
+                        <input type="text" id="inv_artist_name" name="artist_name" required placeholder="e.g., Elena Rostova" class="w-full border border-hairline bg-white px-3 py-2 text-sm text-obsidian">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Artist Email Address</label>
+                        <input type="email" id="inv_artist_email" name="artist_email" placeholder="artist@studio.com" class="w-full border border-hairline bg-white px-3 py-2 text-sm text-obsidian">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Artist Details (Studio / Country / ID / Notes)</label>
+                        <textarea id="inv_artist_details" name="artist_details" rows="2" placeholder="Studio address, country, phone, or artist registration reference..." class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Artwork Title Being Verified *</label>
+                        <input type="text" id="inv_artwork_title" name="artwork_title" required placeholder="e.g., Nocturne in Obsidian No. 4" class="w-full border border-hairline bg-white px-3 py-2 text-sm text-obsidian">
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Reference / Lot Code</label>
+                            <input type="text" id="inv_reference_code" name="reference_code" placeholder="e.g., AN-2026-1008" class="w-full border border-hairline bg-white px-3 py-2 text-xs font-mono text-obsidian">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Medium &amp; Dimensions</label>
+                            <input type="text" id="inv_artwork_details" name="artwork_details" placeholder="Oil on Linen · 120 × 90 cm" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Column 2: Authentication Service & Fee To Be Paid -->
+                <div class="border border-hairline p-6 bg-ivory space-y-4">
+                    <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold border-b border-hairline pb-2">
+                        2. Authentication Service &amp; Fee To Be Paid
+                    </p>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Authentication &amp; Evaluation Service Tier</label>
+                        <select name="service_type" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
+                            <option value="Independent Curatorial Connoisseurship & AI-Powered Authentication Evaluation">Independent Curatorial Connoisseurship &amp; AI-Powered Authentication Evaluation</option>
+                            <option value="AI-Powered Forensic Provenance & Valuation Certification">AI-Powered Forensic Provenance &amp; Valuation Certification</option>
+                            <option value="Independent Senior Connoisseurship & Archival Dossier Verification">Independent Senior Connoisseurship &amp; Archival Dossier Verification</option>
+                            <option value="Comprehensive Curatorial Vetting, AI Authentication & 72-Hour Saleroom Clearance">Comprehensive Curatorial Vetting, AI Authentication &amp; 72-Hour Saleroom Clearance</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Fee To Be Paid *</label>
+                            <input type="number" step="0.01" min="1" name="fee_amount" required placeholder="350.00" class="w-full border border-bronze bg-white px-3 py-2 text-base font-semibold text-obsidian">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Currency</label>
+                            <select name="currency" class="w-full border border-hairline bg-white px-3 py-2 text-sm text-obsidian">
+                                <option value="USD">USD ($)</option>
+                                <option value="EUR">EUR (€)</option>
+                                <option value="GBP">GBP (£)</option>
+                                <option value="CHF">CHF (Fr.)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Payment Due Date</label>
+                            <input type="date" name="due_date" value="<%- gmdate('Y-m-d', strtotime('+3 days')) %>" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Payment Status</label>
+                            <select name="status" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
+                                <option value="unpaid">Unpaid — Awaiting Remittance</option>
+                                <option value="paid">Paid &amp; Verified</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="bg-white border border-hairline p-3.5 text-[11px] text-stone leading-relaxed">
+                        <strong class="text-obsidian block mb-1">Automatic Artist Delivery &amp; Printout:</strong>
+                        Generating this invoice will immediately open the official printable invoice view (<code class="text-obsidian">window.print()</code>) and attach a downloadable copy on the Artist’s Studio Dashboard and Artist Profile Page.
+                    </div>
+                </div>
+
+                <!-- Column 3: Payment Methods (Bank Account & Cryptocurrency Details) -->
+                <div class="border border-bronze p-6 bg-[#181615] text-ivory space-y-4">
+                    <div class="flex items-center justify-between border-b border-white/15 pb-2 gap-2">
+                        <p class="text-[11px] uppercase tracking-widest text-bronzeLight font-semibold">
+                            3. Payment Methods (Bank &amp; Crypto)
+                        </p>
+                        <select id="inv_payment_method" name="payment_method" onchange="toggleInvoicePaymentMethod(this.value)" class="border border-bronze bg-obsidian text-bronzeLight px-2 py-1 text-[10px] uppercase tracking-widest font-semibold">
+                            <option value="bank_and_crypto">Bank + Crypto (Both)</option>
+                            <option value="bank">Bank Transfer Only</option>
+                            <option value="crypto">Cryptocurrency Only</option>
+                        </select>
+                    </div>
+
+                    <!-- Bank Account Details Block -->
+                    <div id="inv_bank_block" class="space-y-3 border border-white/15 bg-white/5 p-3.5">
+                        <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
+                            🏛 Option A: Bank Account Details To Be Paid To
+                        </p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Beneficiary / Account Holder</label>
+                                <input type="text" name="payment_account_name" placeholder="e.g., ArtAlly Escrow Treasury" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                            </div>
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Bank / Institution Name</label>
+                                <input type="text" name="payment_bank_name" placeholder="e.g., Lombard Odier / Chase" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Bank Account No. / IBAN</label>
+                                <input type="text" name="payment_account_number" placeholder="Account No. or IBAN" class="w-full border border-bronze bg-white/10 px-2.5 py-1.5 text-xs font-mono text-bronzeLight placeholder-white/40">
+                            </div>
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Routing / SWIFT / BIC</label>
+                                <input type="text" name="payment_routing_details" placeholder="SWIFT / Routing Code" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs font-mono text-white placeholder-white/40">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cryptocurrency Payment Details Block -->
+                    <div id="inv_crypto_block" class="space-y-3 border border-bronze/60 bg-bronze/10 p-3.5">
+                        <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
+                            ₿ Option B: Cryptocurrency Payment Details
+                        </p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Cryptocurrency / Coin</label>
+                                <input type="text" name="crypto_currency" list="crypto_coins_list" placeholder="e.g., USDT / BTC / ETH / USDC" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                                <datalist id="crypto_coins_list">
+                                    <option value="USDT (Tether)">
+                                    <option value="USDC (USD Coin)">
+                                    <option value="BTC (Bitcoin)">
+                                    <option value="ETH (Ethereum)">
+                                    <option value="SOL (Solana)">
+                                </datalist>
+                            </div>
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Blockchain Network</label>
+                                <input type="text" name="crypto_network" list="crypto_networks_list" placeholder="e.g., ERC-20 / TRC-20 / BTC" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                                <datalist id="crypto_networks_list">
+                                    <option value="ERC-20 (Ethereum)">
+                                    <option value="TRC-20 (Tron)">
+                                    <option value="Bitcoin Mainnet">
+                                    <option value="BEP-20 (BNB Smart Chain)">
+                                    <option value="Solana (SPL)">
+                                    <option value="Polygon (MATIC)">
+                                </datalist>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Receiving Crypto Wallet Address</label>
+                            <input type="text" name="crypto_wallet_address" placeholder="0x... / T... / bc1q... (Paste Wallet Address)" class="w-full border border-bronze bg-white/10 px-2.5 py-1.5 text-xs font-mono text-bronzeLight placeholder-white/40">
+                        </div>
+                        <div>
+                            <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Memo / Destination Tag / Network Note (Optional)</label>
+                            <input type="text" name="crypto_memo" placeholder="Optional Memo / Tag or 'Send only on specified network'" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs font-mono text-white placeholder-white/40">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Payment Instructions / Reference Notes</label>
+                        <textarea name="payment_instructions" rows="2" placeholder="Please quote Invoice Number in bank wire reference or provide transaction hash (TXID) upon crypto transfer." class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-4 pt-2">
+                <p class="text-xs text-stone">
+                    * Once generated, the invoice opens in print mode and is automatically placed on the Artist’s page with a <strong>Download Invoice Copy</strong> button.
+                </p>
+                <button type="submit" class="bg-bronze text-white px-8 py-3.5 text-xs uppercase tracking-widest font-semibold hover:bg-obsidian transition shadow-sm">
+                    🖨 Generate &amp; Print Authentication Invoice →
+                </button>
+            </div>
+        </form>
+
+        <!-- Generated Authentication Invoices Ledger -->
+        <div class="border-t border-hairline pt-6 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="font-serif text-2xl text-obsidian">Issued Curatorial &amp; AI Authentication Invoices (<%- count($authInvoices || []) %>)</h3>
+            </div>
+
+            <% if (empty($authInvoices)) { %>
+                <p class="text-xs text-stone italic">No authentication invoices have been generated yet. Fill out the form above to generate and print your first invoice.</p>
+            <% } else { %>
+                <div class="overflow-x-auto border border-hairline">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-obsidian text-ivory uppercase tracking-widest text-[10px]">
+                                <th class="py-3 px-4">Invoice No.</th>
+                                <th class="py-3 px-4">Artist &amp; Details</th>
+                                <th class="py-3 px-4">Artwork Verified</th>
+                                <th class="py-3 px-4">Receiving Account</th>
+                                <th class="py-3 px-4">Fee</th>
+                                <th class="py-3 px-4">Status</th>
+                                <th class="py-3 px-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-hairline">
+                            <% for (const $invRow of Object.values($authInvoices || [])) { %>
+                                <tr class="hover:bg-ivory/60">
+                                    <td class="py-3.5 px-4 font-mono font-semibold text-obsidian">
+                                        <%- e($invRow?.['invoice_number']) %>
+                                        <div class="text-[10px] text-stone font-sans">Issued: <%- e(substr($invRow?.['created_at'] ?? '', 0, 10)) %></div>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <div class="font-semibold text-obsidian"><%- e($invRow?.['artist_name']) %></div>
+                                        <% if (!empty($invRow?.['artist_email'])) { %>
+                                            <div class="text-[11px] text-stone"><%- e($invRow?.['artist_email']) %></div>
+                                        <% } %>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <div class="font-serif italic text-sm text-obsidian">"<%- e($invRow?.['artwork_title']) %>"</div>
+                                        <div class="text-[10px] text-bronze"><%- e($invRow?.['service_type']) %></div>
+                                    </td>
+                                    <td class="py-3.5 px-4 font-mono text-[11px] space-y-1">
+                                        <% if (!empty($invRow?.['payment_account_number']) || !empty($invRow?.['payment_bank_name'])) { %>
+                                            <div>
+                                                <span class="text-[9px] uppercase tracking-widest bg-obsidian text-ivory px-1.5 py-0.5 mr-1">Bank</span>
+                                                <strong class="text-obsidian"><%- e($invRow?.['payment_bank_name']) %></strong>
+                                                <div class="text-charcoal"><%- e($invRow?.['payment_account_name']) %> · <%- e($invRow?.['payment_account_number']) %></div>
+                                            </div>
+                                        <% } %>
+                                        <% if (!empty($invRow?.['crypto_wallet_address']) || !empty($invRow?.['crypto_currency'])) { %>
+                                            <div>
+                                                <span class="text-[9px] uppercase tracking-widest bg-bronze text-white px-1.5 py-0.5 mr-1">Crypto</span>
+                                                <strong class="text-obsidian"><%- e($invRow?.['crypto_currency'] || 'Crypto') %></strong>
+                                                <% if (!empty($invRow?.['crypto_network'])) { %>
+                                                    <span class="text-stone">(<%- e($invRow?.['crypto_network']) %>)</span>
+                                                <% } %>
+                                                <div class="text-charcoal break-all"><%- e($invRow?.['crypto_wallet_address']) %></div>
+                                            </div>
+                                        <% } %>
+                                    </td>
+                                    <td class="py-3.5 px-4 font-mono font-semibold text-obsidian text-sm">
+                                        <%- format_money_exact(Number($invRow?.['fee_amount'] ?? 0), $invRow?.['currency'] ?? 'USD') %>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <% if (($invRow?.['status'] ?? 'unpaid') === 'paid') { %>
+                                            <span class="bg-[#1A2E22] text-ivory text-[10px] uppercase tracking-widest px-2.5 py-1 font-semibold">✓ Paid</span>
+                                        <% } else { %>
+                                            <span class="bg-bronze/20 text-bronze border border-bronze text-[10px] uppercase tracking-widest px-2.5 py-1 font-semibold">Unpaid</span>
+                                        <% } %>
+                                    </td>
+                                    <td class="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                                        <a href="/invoices/<%- Number($invRow?.['id']) %>?print=1" target="_blank" class="inline-block px-3 py-1.5 bg-obsidian text-ivory text-[10px] uppercase tracking-widest hover:bg-bronze transition">
+                                            🖨 Print / View
+                                        </a>
+                                        <a href="/invoices/<%- Number($invRow?.['id']) %>/download" class="inline-block px-3 py-1.5 border border-obsidian text-obsidian text-[10px] uppercase tracking-widest hover:bg-obsidian hover:text-ivory transition">
+                                            ⬇ Download
+                                        </a>
+                                        <form action="/admin/invoices/status" method="POST" class="inline">
+                                            <%- csrf_field() %>
+                                            <input type="hidden" name="invoice_id" value="<%- Number($invRow?.['id']) %>">
+                                            <button type="submit" class="px-2.5 py-1.5 border border-bronze text-bronze text-[10px] uppercase tracking-widest hover:bg-bronze hover:text-white transition">
+                                                <%- ($invRow?.['status'] ?? 'unpaid') === 'paid' ? 'Mark Unpaid' : 'Mark Paid' %>
+                                            </button>
+                                        </form>
+                                        <form action="/admin/invoices/delete" method="POST" class="inline" onsubmit="return confirm('Delete this authentication invoice?');">
+                                            <%- csrf_field() %>
+                                            <input type="hidden" name="invoice_id" value="<%- Number($invRow?.['id']) %>">
+                                            <button type="submit" class="px-2.5 py-1.5 border border-red-800 text-red-800 text-[10px] uppercase tracking-widest hover:bg-red-800 hover:text-white transition">
+                                                ✕
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } %>
+        </div>
+    </section>
+
+    <script>
+    function toggleInvoicePaymentMethod(mode) {
+        var bankBlock = document.getElementById('inv_bank_block');
+        var cryptoBlock = document.getElementById('inv_crypto_block');
+        if (!bankBlock || !cryptoBlock) return;
+        bankBlock.style.display = (mode === 'crypto') ? 'none' : 'block';
+        cryptoBlock.style.display = (mode === 'bank') ? 'none' : 'block';
+    }
+    function autoFillInvoiceArtist(sel) {
+        var opt = sel.options[sel.selectedIndex];
+        if (!opt || opt.value === '0') return;
+        var nameEl = document.getElementById('inv_artist_name');
+        var emailEl = document.getElementById('inv_artist_email');
+        var detailsEl = document.getElementById('inv_artist_details');
+        if (nameEl && opt.getAttribute('data-name')) nameEl.value = opt.getAttribute('data-name');
+        if (emailEl && opt.getAttribute('data-email')) emailEl.value = opt.getAttribute('data-email');
+        if (detailsEl && opt.getAttribute('data-details')) detailsEl.value = opt.getAttribute('data-details');
+    }
+    function autoFillInvoiceArtwork(sel) {
+        var opt = sel.options[sel.selectedIndex];
+        if (!opt || opt.value === '0') return;
+        var titleEl = document.getElementById('inv_artwork_title');
+        var refEl = document.getElementById('inv_reference_code');
+        var detailsEl = document.getElementById('inv_artwork_details');
+        var nameEl = document.getElementById('inv_artist_name');
+        var emailEl = document.getElementById('inv_artist_email');
+        var artistSelect = document.getElementById('quick_select_artist');
+        if (titleEl && opt.getAttribute('data-title')) titleEl.value = opt.getAttribute('data-title');
+        if (refEl && opt.getAttribute('data-ref')) refEl.value = opt.getAttribute('data-ref');
+        if (detailsEl && opt.getAttribute('data-details')) detailsEl.value = opt.getAttribute('data-details');
+        if (nameEl && !nameEl.value && opt.getAttribute('data-artist-name')) nameEl.value = opt.getAttribute('data-artist-name');
+        if (emailEl && !emailEl.value && opt.getAttribute('data-artist-email')) emailEl.value = opt.getAttribute('data-artist-email');
+        if (artistSelect && opt.getAttribute('data-artist-id')) {
+            artistSelect.value = opt.getAttribute('data-artist-id');
+        }
+    }
+    </script>
+
+    <!-- SECTION 1: Real Registered Artists, Public Profile Approval Gate & All Uploaded Artworks -->
+    <section id="artists" class="bg-white border border-hairline p-8 space-y-8">
+        <div class="border-b border-hairline pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Real Artist Registrations &amp; Profile Approval Gate</p>
+                <h2 class="font-serif text-3xl text-obsidian">Registered Artists, Uploaded Images &amp; Price/Auction Controls</h2>
+            </div>
+            <p class="text-xs text-stone max-w-md">
+                Only real registered artists appear here (all dummy/seeded records are excluded). New artists show <strong>Awaiting Approval</strong> on the public Artists page until you click <strong>Approve Artist Profile</strong> below.
+            </p>
+        </div>
+
+        <% if (empty($artistProfiles)) { %>
+            <div class="bg-ivory border border-hairline p-12 text-center space-y-3">
+                <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold">Zero Dummy Data Policy Active</p>
+                <h3 class="font-serif text-2xl text-obsidian">No Real Artists Have Registered Yet</h3>
+                <p class="text-xs text-stone max-w-lg mx-auto">
+                    Dummy/seeded artists are hidden from this backend. Register a new artist account at <a href="/register?role=artist" class="underline text-obsidian font-semibold">/register?role=artist</a> to see their registration info, approve their public profile, and control their uploaded works here.
+                </p>
+            </div>
+        <% } else { %>
+            <div class="space-y-10">
+                <% for (const $ap of Object.values($artistProfiles || [])) { %>
+                    <% var $u = $ap?.['user'] ?? [];
+                    var $artistWorks = $ap?.['artworks'] ?? [];
+                    var $isProfileApproved = ($ap?.['approval_status'] ?? 'pending') === 'approved'; %>
+                    <div class="border border-hairline bg-ivory p-6 sm:p-8 space-y-6">
+                        <!-- Artist Registration & Profile Approval Header -->
+                        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b border-hairline pb-6">
+                            <div class="flex flex-col sm:flex-row sm:items-center gap-5">
+                                <img src="<%- e($ap?.['profile_photo']) %>" alt="<%- e($ap?.['display_name']) %>" class="w-20 h-20 object-cover border border-hairline bg-white">
+                                <div class="space-y-1.5">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="bg-obsidian text-ivory text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                                            Artist ID #<%- Number($ap?.['user_id']) %>
+                                        </span>
+                                        <% if ($isProfileApproved) { %>
+                                            <span class="bg-[#1A2E22] text-ivory text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                                                ✓ Public Profile Approved &amp; Visible
+                                            </span>
+                                        <% } else { %>
+                                            <span class="bg-bronze text-white text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                                                ◷ Awaiting Approval (Hidden on Public Artists Page)
+                                            </span>
+                                        <% } %>
+                                        <span class="text-[11px] text-stone">
+                                            · Registered: <%- e(gmdate('d M Y H:i', strtotime($u?.['created_at'] ?? 'now'))) %> UTC
+                                        </span>
+                                    </div>
+                                    <h3 class="font-serif text-3xl text-obsidian"><%- e($ap?.['display_name']) %></h3>
+                                    <p class="text-xs text-charcoal">
+                                        <strong>Email:</strong> <%- e($u?.['email'] ?? '') %> ·
+                                        <strong>Discipline:</strong> <%- e($ap?.['discipline']) %> ·
+                                        <strong>Location:</strong> <%- e(($ap?.['city'] ? $ap?.['city'] + ', ' : '') + ($ap?.['country'] ?? '')) %>
+                                    </p>
+                                    <p class="text-xs text-stone max-w-3xl"><%- e($ap?.['biography']) %></p>
+                                </div>
+                            </div>
+
+                            <!-- Approve / Revoke / Delete Public Artist Profile Buttons -->
+                            <div class="flex flex-wrap items-center gap-2 self-start lg:self-center">
+                                <form action="/admin/artists/approve" method="POST" class="inline">
+                                    <%- csrf_field() %>
+                                    <input type="hidden" name="artist_profile_id" value="<%- Number($ap?.['id']) %>">
+                                    <% if (!$isProfileApproved) { %>
+                                        <input type="hidden" name="decision" value="approved">
+                                        <button type="submit" class="bg-[#1A2E22] text-ivory px-5 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                                            ✓ Approve Artist Profile for Public Display
+                                        </button>
+                                    <% } else { %>
+                                        <input type="hidden" name="decision" value="pending">
+                                        <button type="submit" class="border border-bronze text-bronze bg-white px-4 py-2.5 text-[11px] uppercase tracking-widest hover:bg-bronze hover:text-white transition">
+                                            Set Profile to Awaiting Approval
+                                        </button>
+                                    <% } %>
+                                </form>
+
+                                <a href="/artists/<%- e($ap?.['slug']) %>" target="_blank" class="px-4 py-2.5 bg-white border border-obsidian text-[11px] uppercase tracking-widest hover:bg-obsidian hover:text-ivory transition">
+                                    Preview Profile Page →
+                                </a>
+
+                                <form action="/admin/users/delete" method="POST" class="inline" onsubmit="return confirm('Permanently delete this artist profile and all of their uploaded works?');">
+                                    <%- csrf_field() %>
+                                    <input type="hidden" name="user_id" value="<%- Number($ap?.['user_id']) %>">
+                                    <button type="submit" class="px-3.5 py-2.5 bg-white border border-red-800 text-red-800 text-[11px] uppercase tracking-widest hover:bg-red-800 hover:text-white transition">
+                                        Delete Artist
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Artist's Uploaded Artworks, Uploaded Images & Master Admin Control Panel -->
+                        <div class="space-y-4">
+                            <h4 class="text-xs uppercase tracking-widest font-semibold text-obsidian">
+                                Uploaded Artworks by <%- e($ap?.['display_name']) %> (<%- count($artistWorks) %> Works)
+                            </h4>
+
+                            <% if (empty($artistWorks)) { %>
+                                <p class="text-xs text-stone bg-white p-4 border border-hairline">This artist has not uploaded any artworks yet.</p>
+                            <% } else { %>
+                                <div class="space-y-4">
+                                    <% for (const $work of Object.values($artistWorks || [])) { %>
+                                        <% var $sub = $work?.['submission'] ?? [];
+                                        var $auc = $work?.['auction'] ?? null;
+                                        var $workImages = $work?.['images'] ?? [];
+                                        var $aucState = $auc?.['status'] ?? 'unscheduled';
+                                        var $expectedPrice = Number(($sub?.['artist_expected_price'] ?? $work?.['artist_expected_price'] ?? $work?.['estimate_high'] ?? $work?.['reserve_price'] ?? 0));
+                                        var $agreedPrice = Number(($work?.['agreed_price'] ?? $sub?.['agreed_price'] ?? $auc?.['agreed_price'] ?? $work?.['reserve_price'] ?? $expectedPrice));
+                                        var $startingBid = Number(($auc?.['starting_bid'] ?? $work?.['starting_bid'] ?? 1000));
+                                        var $currentBid = Number(($auc?.['current_bid'] ?? $startingBid));
+                                        var $reservePrice = Number(($auc?.['reserve_price'] ?? $work?.['reserve_price'] ?? $agreedPrice));
+                                        var $priceAgreementStatus = $work?.['price_agreement_status'] ?? $sub?.['price_agreement_status'] ?? 'pending';
+                                        var $negotiationMessages = $sub?.['negotiation_messages'] ?? []; %>
+                                        <div class="bg-white border border-hairline p-5 grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                                            <!-- Uploaded Images & Artwork Details -->
+                                            <div class="xl:col-span-4 space-y-3">
+                                                <div class="flex items-start space-x-4">
+                                                    <a href="<%- e($work?.['primary_image']) %>" target="_blank" class="block w-24 h-28 bg-alabaster border border-hairline overflow-hidden flex-shrink-0">
+                                                        <img src="<%- e($work?.['primary_image']) %>" alt="" class="w-full h-full object-cover">
+                                                    </a>
+                                                    <div class="space-y-1 text-xs">
+                                                        <div class="flex flex-wrap items-center gap-1.5">
+                                                            <span class="font-mono text-[10px] font-semibold text-bronze"><%- e($sub?.['reference_code'] ?? ('LOT-' + $work?.['id'])) %></span>
+                                                            <span class="px-2 py-0.5 text-[9px] uppercase tracking-widest font-semibold <%- $aucState === 'active' ? 'bg-[#1A2E22] text-ivory' : ($aucState === 'closed_sold' ? 'bg-obsidian text-bronzeLight' : 'bg-alabaster text-charcoal border border-hairline') %>">
+                                                                <%- $aucState === 'closed_sold' ? 'SOLD' : e(strtoupper(str_replace('_', ' ', $aucState))) %>
+                                                            </span>
+                                                            <span class="px-2 py-0.5 text-[9px] uppercase tracking-widest font-semibold <%- $priceAgreementStatus === 'accepted_by_artist' ? 'bg-[#1A2E22] text-ivory' : ($priceAgreementStatus === 'counter_proposed_by_artist' ? 'bg-bronze text-white' : 'bg-ivory text-stone border border-hairline') %>">
+                                                                <%- $priceAgreementStatus === 'accepted_by_artist' ? '✓ Price Accepted by Artist' : ($priceAgreementStatus === 'counter_proposed_by_artist' ? '⇄ Counter-Offer by Artist' : 'Price Pending') %>
+                                                            </span>
+                                                        </div>
+                                                        <h5 class="font-serif text-xl text-obsidian">
+                                                            <a href="/artworks/<%- e($work?.['slug']) %>" target="_blank" class="hover:text-bronze"><%- e($work?.['title']) %></a>
+                                                        </h5>
+                                                        <p class="text-[11px] text-stone"><%- e($work?.['medium']) %> · <%- e($work?.['dimensions']) %></p>
+                                                        <p class="text-[11px] text-charcoal">
+                                                            <span class="text-stone">Artist Expected Price:</span>
+                                                            <strong class="text-obsidian"><%- format_money($expectedPrice) %></strong>
+                                                        </p>
+                                                        <div class="flex flex-wrap items-center gap-2 pt-1">
+                                                            <% if ($aucState === 'closed_sold' || ($work?.['status'] ?? '') === 'sold') { %>
+                                                                <a href="/certificates/<%- Number($work?.['id']) %>" target="_blank" class="inline-block bg-obsidian text-bronzeLight px-2.5 py-1 text-[9px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition">
+                                                                    ★ Official Certificate &amp; Invoice →
+                                                                </a>
+                                                            <% } %>
+                                                            <form action="/admin/artworks/delete" method="POST" class="inline" onsubmit="return confirm('Permanently delete this uploaded artwork and its auction lot?');">
+                                                                <%- csrf_field() %>
+                                                                <input type="hidden" name="artwork_id" value="<%- Number($work?.['id']) %>">
+                                                                <button type="submit" class="px-2.5 py-1 border border-red-800 text-red-800 text-[9px] uppercase tracking-widest hover:bg-red-800 hover:text-white transition">
+                                                                    Delete Upload
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <% if (count($workImages) > 1) { %>
+                                                    <div class="flex items-center gap-2 pt-1 overflow-x-auto">
+                                                        <span class="text-[10px] uppercase tracking-wider text-stone">All Uploaded Photos:</span>
+                                                        <% for (const $wImg of Object.values($workImages || [])) { %>
+                                                            <a href="<%- e($wImg?.['image_url']) %>" target="_blank" class="w-10 h-10 border border-hairline overflow-hidden flex-shrink-0">
+                                                                <img src="<%- e($wImg?.['image_url']) %>" alt="" class="w-full h-full object-cover">
+                                                            </a>
+                                                        <% } %>
+                                                    </div>
+                                                <% } %>
+
+                                                <% if (!empty($negotiationMessages)) { %>
+                                                    <div class="bg-ivory border border-hairline p-2.5 space-y-1.5 text-[11px] max-h-28 overflow-y-auto">
+                                                        <p class="text-[9px] uppercase tracking-widest text-bronze font-semibold">Artist ↔ Admin Negotiation Log</p>
+                                                        <% for (const $nm of Object.values(array_slice($negotiationMessages, -3) || [])) { %>
+                                                            <p class="text-charcoal">
+                                                                <strong class="text-obsidian"><%- e($nm?.['sender_name'] ?? $nm?.['sender'] ?? 'Artist') %>:</strong>
+                                                                <%- e($nm?.['text'] ?? $nm?.['message'] ?? '') %>
+                                                            </p>
+                                                        <% } %>
+                                                    </div>
+                                                <% } %>
+                                            </div>
+
+                                            <!-- Master Admin Form: Control Bid Price, Agreed Price, Reserve & Auction Started / Ended / SOLD State -->
+                                            <div class="xl:col-span-8 border-t xl:border-t-0 xl:border-l border-hairline pt-4 xl:pt-0 xl:pl-6">
+                                                <form action="/admin/artworks/control" method="POST" class="space-y-3 text-xs">
+                                                    <%- csrf_field() %>
+                                                    <input type="hidden" name="artwork_id" value="<%- Number($work?.['id']) %>">
+
+                                                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                                                        <div>
+                                                            <label class="block text-[10px] uppercase tracking-widest text-bronze font-semibold mb-1">Agreed Price ($)</label>
+                                                            <input type="number" step="50" name="agreed_price" value="<%- $agreedPrice %>" class="w-full bg-ivory border border-bronze px-2.5 py-2 font-semibold text-obsidian">
+                                                        </div>
+
+                                                        <div>
+                                                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Starting Bid ($)</label>
+                                                            <input type="number" step="50" name="starting_bid" value="<%- $startingBid %>" class="w-full bg-ivory border border-hairline px-2.5 py-2 font-semibold">
+                                                        </div>
+
+                                                        <div class="bg-[#FDFBF7] border border-bronze p-1.5 -m-1.5">
+                                                            <label class="block text-[10px] uppercase tracking-widest text-bronze font-bold mb-1">🔔 Bid Update Price ($)</label>
+                                                            <input type="number" step="50" name="current_bid" value="<%- $currentBid %>" class="w-full bg-white border-2 border-obsidian px-2.5 py-1.5 font-serif text-base font-bold text-obsidian">
+                                                        </div>
+
+                                                        <div>
+                                                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Reserve ($)</label>
+                                                            <input type="number" step="50" name="reserve_price" value="<%- $reservePrice %>" class="w-full bg-ivory border border-hairline px-2.5 py-2">
+                                                        </div>
+
+                                                        <div>
+                                                            <label class="block text-[10px] uppercase tracking-widest text-obsidian font-semibold mb-1">Status Changer</label>
+                                                            <select name="auction_state" class="w-full bg-ivory border border-obsidian px-2 py-2 font-semibold text-xs">
+                                                                <option value="unscheduled" <%- $aucState === 'unscheduled' ? 'selected' : '' %>>Pending Review</option>
+                                                                <option value="upcoming" <%- $aucState === 'upcoming' ? 'selected' : '' %>>Upcoming (Not Started)</option>
+                                                                <option value="active" <%- $aucState === 'active' ? 'selected' : '' %>>● Auction Started (Live)</option>
+                                                                <option value="closed_sold" <%- $aucState === 'closed_sold' ? 'selected' : '' %>>✓ SOLD (Auction Ended)</option>
+                                                                <option value="closed_unsold" <%- $aucState === 'closed_unsold' ? 'selected' : '' %>>✕ Ended — Unsold</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2">
+                                                        <input type="text" name="admin_feedback" value="<%- e($sub?.['admin_feedback'] ?? '') %>" placeholder="Note to artist regarding bid alert, agreed price & schedule..." class="flex-1 bg-ivory border border-hairline px-3 py-2 text-xs">
+                                                        <button type="submit" name="bid_action" value="update_bid_alert" class="bg-bronze text-white px-4 py-2.5 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronzeDark transition whitespace-nowrap">
+                                                            🔔 Update Bid Price &amp; Alert Artist
+                                                        </button>
+                                                        <button type="submit" name="bid_action" value="standard" class="bg-obsidian text-ivory px-4 py-2.5 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition whitespace-nowrap">
+                                                            Save All &amp; Status
+                                                        </button>
+                                                    </div>
+
+                                                    <!-- Auction & Audit Desk Two-Way Thread (Artist ↔ Backend Response) -->
+                                                    <div class="bg-ivory border border-bronze/50 p-3.5 mt-3 space-y-2.5">
+                                                        <div class="flex items-center justify-between border-b border-hairline pb-1.5">
+                                                            <span class="text-[10px] uppercase tracking-widest font-bold text-bronze">
+                                                                💬 Auction &amp; Audit Desk Thread (Artist ↔ Backend)
+                                                            </span>
+                                                            <span class="text-[10px] text-stone">
+                                                                <%- count($negotiationMessages) %> message(s)
+                                                            </span>
+                                                        </div>
+
+                                                        <% if (empty($negotiationMessages)) { %>
+                                                            <p class="text-[11px] text-stone italic">No messages in the Auction &amp; Audit Desk thread yet. You can send a message or valuation response to the artist below.</p>
+                                                        <% } else { %>
+                                                            <div class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                                                                <% for (const $nm of Object.values($negotiationMessages || [])) { %>
+                                                                    <% var $fromArtist = ($nm?.['sender'] ?? '') === 'artist'; %>
+                                                                    <div class="p-2 text-[11px] border <%- $fromArtist ? 'bg-white border-obsidian/40' : 'bg-[#FDFBF7] border-bronze/40' %>">
+                                                                        <div class="flex items-center justify-between">
+                                                                            <strong class="<%- $fromArtist ? 'text-obsidian' : 'text-bronze' %>">
+                                                                                <%- $fromArtist ? '👤 Artist (' + e($nm?.['sender_name'] ?? 'Artist') + ')' : '🏛 ' + e($nm?.['sender_name'] ?? 'Auction & Audit Desk') %>:
+                                                                            </strong>
+                                                                            <span class="text-[9px] text-stone"><%- e($nm?.['created_at'] ?? '') %> UTC</span>
+                                                                        </div>
+                                                                        <p class="text-charcoal mt-0.5"><%- e($nm?.['text'] ?? $nm?.['message'] ?? '') %></p>
+                                                                    </div>
+                                                                <% } %>
+                                                            </div>
+                                                        <% } %>
+
+                                                        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                                                            <input
+                                                                type="text"
+                                                                name="desk_reply"
+                                                                placeholder="Type a direct response from the Backend to the Artist's Auction & Audit Desk..."
+                                                                class="flex-1 bg-white border border-obsidian px-3 py-2 text-xs"
+                                                            >
+                                                            <button
+                                                                type="submit"
+                                                                name="bid_action"
+                                                                value="send_desk_reply"
+                                                                class="bg-[#1A2E22] text-ivory px-4 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition whitespace-nowrap"
+                                                            >
+                                                                💬 Send Desk Reply to Artist
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    <% } %>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        <% } %>
+    </section>
+
+    <!-- SECTION 2: Live Bid Price Increaser & Instant Status Changer to SOLD -->
+    <section id="auctions" class="bg-white border border-hairline p-8 space-y-6">
+        <div class="border-b border-hairline pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Live Bidding &amp; Sold Status Controller</p>
+                <h2 class="font-serif text-3xl text-obsidian">Increase Live Bid Prices &amp; Change Status to SOLD</h2>
+            </div>
+            <span class="text-xs text-stone">Increase the live bid price by one increment (+1 Step), set any custom bid amount, or change status directly to <strong>SOLD</strong>.</span>
+        </div>
+
+        <% if (empty($auctions)) { %>
+            <p class="text-xs text-stone py-6">No real artist auctions have been started yet. Approve an artist's uploaded work above to launch its live auction.</p>
+        <% } else { %>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="border-b border-hairline text-[10px] uppercase tracking-widest text-stone">
+                            <th class="py-3 pr-4">Lot &amp; Artwork</th>
+                            <th class="py-3 pr-4">Artist</th>
+                            <th class="py-3 pr-4">Agreed Price</th>
+                            <th class="py-3 pr-4">Current Live Bid</th>
+                            <th class="py-3 pr-4">Current Status</th>
+                            <th class="py-3 text-right">Increase Live Bid / Change Status to SOLD</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-hairline">
+                        <% for (const $auc of Object.values($auctions || [])) { %>
+                            <% var $curBid = Number(($auc?.['current_bid'] ?? 0));
+                            var $nextStep = $curBid + calculate_bid_increment($curBid); %>
+                            <tr>
+                                <td class="py-4 pr-4">
+                                    <span class="font-mono text-[10px] font-semibold text-bronze block"><%- e($auc?.['lot_number']) %></span>
+                                    <a href="/artworks/<%- e($auc?.['artwork']?.['slug'] ?? '') %>" target="_blank" class="font-serif text-lg text-obsidian hover:text-bronze">
+                                        <%- e($auc?.['artwork']?.['title'] ?? '') %>
+                                    </a>
+                                </td>
+                                <td class="py-4 pr-4"><%- e($auc?.['artist']?.['name'] ?? '') %></td>
+                                <td class="py-4 pr-4 font-semibold text-bronze"><%- format_money($auc?.['agreed_price'] ?? $auc?.['reserve_price'] ?? 0) %></td>
+                                <td class="py-4 pr-4">
+                                    <span class="font-serif text-2xl font-semibold text-obsidian"><%- format_money($curBid) %></span>
+                                    <span class="block text-[10px] text-stone"><%- Number($auc?.['bid_count']) %> bids</span>
+                                </td>
+                                <td class="py-4 pr-4">
+                                    <span class="px-2.5 py-1 text-[10px] uppercase tracking-widest font-semibold <%- $auc?.['status'] === 'closed_sold' ? 'bg-obsidian text-bronzeLight' : ($auc?.['status'] === 'active' ? 'bg-[#1A2E22] text-ivory' : 'bg-alabaster text-charcoal border border-hairline') %>">
+                                        <%- $auc?.['status'] === 'closed_sold' ? '✓ SOLD' : e(strtoupper($auc?.['status'])) %>
+                                    </span>
+                                </td>
+                                <td class="py-4 text-right">
+                                    <form action="/admin/auctions/live-control" method="POST" class="flex flex-wrap items-center justify-end gap-2">
+                                        <%- csrf_field() %>
+                                        <input type="hidden" name="auction_id" value="<%- Number($auc?.['id']) %>">
+
+                                        <button type="submit" name="action_type" value="increase_bid" class="bg-ivory border border-obsidian text-obsidian px-3 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-obsidian hover:text-ivory transition" title="Increase by next increment">
+                                            + Increase Bid to <%- format_money($nextStep) %>
+                                        </button>
+
+                                        <input type="number" step="50" name="custom_bid_amount" value="<%- $curBid %>" class="w-28 bg-ivory border border-hairline px-2.5 py-2 text-xs font-semibold">
+
+                                        <button type="submit" name="action_type" value="set_custom_bid" class="bg-obsidian text-ivory px-3 py-2 text-[10px] uppercase tracking-widest hover:bg-bronze transition">
+                                            Set Bid
+                                        </button>
+
+                                        <% if ($auc?.['status'] !== 'closed_sold') { %>
+                                            <button type="submit" name="action_type" value="mark_sold" class="bg-[#1A2E22] text-ivory px-4 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                                                ✓ Change Status to SOLD
+                                            </button>
+                                        <% } else { %>
+                                            <button type="submit" name="action_type" value="mark_active" class="border border-hairline bg-alabaster text-charcoal px-3 py-2 text-[10px] uppercase tracking-widest hover:border-obsidian transition">
+                                                Reopen Live
+                                            </button>
+                                        <% } %>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        <% } %>
+    </section>
+
+    <!-- SECTION 3: Curatorial Artwork Review & Approval Queue (Real Submissions Only) -->
+    <section id="submissions" class="bg-white border border-hairline p-8 space-y-6">
+        <div class="border-b border-hairline pb-4 flex items-center justify-between">
+            <div>
+                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Specialist Review Queue</p>
+                <h2 class="font-serif text-3xl text-obsidian">Real Artwork Consignment Submissions</h2>
+            </div>
+            <span class="text-xs text-stone">Set the Agreed Price &amp; Controlled Starting Bid when approving any artist upload.</span>
+        </div>
+
+        <% if (empty($submissions)) { %>
+            <p class="text-xs text-stone py-6">No real artwork submissions are currently in the queue.</p>
+        <% } else { %>
+            <div class="divide-y divide-hairline">
+                <% for (const $sub of Object.values($submissions || [])) { %>
+                    <% var $art = $sub?.['artwork'] ?? [];
+                    var $artist = $sub?.['artist'] ?? [];
+                    var $expectedPrice = Number(($sub?.['artist_expected_price'] ?? $art?.['artist_expected_price'] ?? $art?.['estimate_high'] ?? $sub?.['reserve_price'] ?? 0));
+                    var $agreedPrice = Number(($sub?.['agreed_price'] ?? $art?.['agreed_price'] ?? $expectedPrice)); %>
+                    <div class="py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                        <div class="lg:col-span-2 aspect-[4/3] bg-alabaster overflow-hidden border border-hairline">
+                            <img src="<%- e($art?.['primary_image'] ?? '') %>" alt="" class="w-full h-full object-cover">
+                        </div>
+
+                        <div class="lg:col-span-5 space-y-1.5 text-xs">
+                            <div class="flex items-center space-x-2">
+                                <span class="font-mono font-semibold text-bronze"><%- e($sub?.['reference_code']) %></span>
+                                <span class="px-2 py-0.5 text-[10px] uppercase tracking-widest bg-alabaster border border-hairline font-semibold">
+                                    <%- e(strtoupper($sub?.['status'])) %>
+                                </span>
+                            </div>
+                            <h3 class="font-serif text-2xl text-obsidian"><%- e($art?.['title'] ?? 'Untitled') %></h3>
+                            <p class="text-charcoal font-medium">Artist: <%- e($artist?.['name'] ?? 'Artist') %> (<%- e($artist?.['email'] ?? '') %>)</p>
+                            <p class="text-stone"><%- e($art?.['medium'] ?? '') %> · <%- e($art?.['dimensions'] ?? '') %></p>
+                            <div class="grid grid-cols-3 gap-2 bg-ivory border border-hairline p-2.5 mt-2">
+                                <div>
+                                    <span class="block text-[9px] uppercase text-stone">Artist Expected</span>
+                                    <strong class="text-obsidian"><%- format_money($expectedPrice) %></strong>
+                                </div>
+                                <div>
+                                    <span class="block text-[9px] uppercase text-stone">Suggested Start</span>
+                                    <strong class="text-obsidian"><%- format_money($sub?.['suggested_starting_bid'] ?? 0) %></strong>
+                                </div>
+                                <div>
+                                    <span class="block text-[9px] uppercase text-stone">Agreed Price</span>
+                                    <strong class="text-bronze"><%- format_money($agreedPrice) %></strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lg:col-span-5 bg-ivory border border-hairline p-5">
+                            <form action="/admin/submissions/review" method="POST" class="space-y-3 text-xs">
+                                <%- csrf_field() %>
+                                <input type="hidden" name="submission_id" value="<%- Number($sub?.['id']) %>">
+
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div>
+                                        <label class="block text-[10px] uppercase tracking-widest text-bronze font-semibold mb-1">Agreed Price ($)</label>
+                                        <input type="number" step="50" name="agreed_price" value="<%- $agreedPrice %>" class="w-full bg-white border border-bronze px-2.5 py-1.5 text-xs font-semibold">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Starting Bid ($)</label>
+                                        <input type="number" step="50" name="starting_bid" value="<%- Number(($sub?.['suggested_starting_bid'] ?? 1000)) %>" class="w-full bg-white border border-hairline px-2.5 py-1.5 text-xs font-semibold">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Reserve ($)</label>
+                                        <input type="number" step="50" name="reserve_price" value="<%- Number(($sub?.['reserve_price'] ?? $agreedPrice)) %>" class="w-full bg-white border border-hairline px-2.5 py-1.5 text-xs">
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Assign Sale Title</label>
+                                        <input type="text" name="auction_title" value="Evening Sale: Contemporary Curated" class="w-full bg-white border border-hairline px-2.5 py-1.5 text-xs">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Lot #</label>
+                                            <input type="text" name="lot_number" value="LOT 0<%- Number($sub?.['id']) %>" class="w-full bg-white border border-hairline px-2.5 py-1.5 text-xs">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Days</label>
+                                            <input type="number" name="duration_days" value="<%- Number(($sub?.['preferred_duration_days'] ?? 7)) %>" class="w-full bg-white border border-hairline px-2.5 py-1.5 text-xs">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Curatorial Feedback to Artist</label>
+                                    <input type="text" name="admin_feedback" value="<%- e($sub?.['admin_feedback'] ?? '') %>" placeholder="Specialist feedback or agreed price note..." class="w-full bg-white border border-hairline px-3 py-2 text-xs">
+                                </div>
+
+                                <div class="flex flex-wrap gap-2 pt-1">
+                                    <button type="submit" name="decision" value="approve_publish" class="bg-[#1A2E22] text-ivory px-4 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                                        ✓ Approve, Set Price &amp; Start Auction
+                                    </button>
+                                    <button type="submit" name="decision" value="request_changes" class="border border-obsidian px-3.5 py-2 text-[10px] uppercase tracking-widest hover:bg-obsidian hover:text-ivory transition">
+                                        Propose Price / Changes
+                                    </button>
+                                    <button type="submit" name="decision" value="reject" class="border border-red-800 text-red-800 px-3.5 py-2 text-[10px] uppercase tracking-widest hover:bg-red-800 hover:text-white transition">
+                                        Reject
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        <% } %>
+    </section>
+
+    <!-- SECTION 4: Orders, Commissions & Seller Payout Approvals -->
+    <section id="payouts" class="bg-white border border-hairline p-8 space-y-6">
+        <div class="border-b border-hairline pb-4">
+            <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Financial Operations</p>
+            <h2 class="font-serif text-3xl text-obsidian">Real Seller Commissions &amp; Artist Payout Release</h2>
+        </div>
+
+        <% if (empty($payouts)) { %>
+            <p class="text-xs text-stone py-4">No real artist payouts are pending yet.</p>
+        <% } else { %>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="border-b border-hairline text-[10px] uppercase tracking-widest text-stone">
+                            <th class="py-3 pr-4">Reference</th>
+                            <th class="py-3 pr-4">Artist</th>
+                            <th class="py-3 pr-4">Gross Hammer</th>
+                            <th class="py-3 pr-4">House Commission</th>
+                            <th class="py-3 pr-4">Net Artist Payout</th>
+                            <th class="py-3 pr-4">Status</th>
+                            <th class="py-3 text-right">Authorization</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-hairline">
+                        <% for (const $po of Object.values($payouts || [])) { %>
+                            <tr>
+                                <td class="py-4 pr-4 font-mono font-semibold"><%- e($po?.['payout_reference']) %></td>
+                                <td class="py-4 pr-4"><%- e($po?.['artist']?.['name'] ?? 'Artist') %></td>
+                                <td class="py-4 pr-4"><%- format_money_exact($po?.['gross_sale_amount']) %></td>
+                                <td class="py-4 pr-4 text-stone"><%- format_money_exact($po?.['commission_deducted']) %></td>
+                                <td class="py-4 pr-4 font-serif text-lg font-semibold text-bronze"><%- format_money_exact($po?.['net_payout_amount']) %></td>
+                                <td class="py-4 pr-4">
+                                    <span class="px-2 py-0.5 text-[10px] uppercase tracking-widest font-semibold <%- ($po?.['status'] ?? '') === 'completed' ? 'bg-[#1A2E22] text-ivory' : 'bg-alabaster text-obsidian border border-hairline' %>">
+                                        <%- e(strtoupper($po?.['status'])) %>
+                                    </span>
+                                </td>
+                                <td class="py-4 text-right">
+                                    <% if (($po?.['status'] ?? '') !== 'completed') { %>
+                                        <form action="/admin/payouts/approve" method="POST" class="inline">
+                                            <%- csrf_field() %>
+                                            <input type="hidden" name="payout_id" value="<%- Number($po?.['id']) %>">
+                                            <button type="submit" class="bg-bronze text-white px-4 py-2 text-[10px] uppercase tracking-widest hover:bg-bronzeDark transition">
+                                                Authorize Wire Payout
+                                            </button>
+                                        </form>
+                                    <% } else { %>
+                                        <span class="text-stone text-[11px]">Disbursed <%- e($po?.['paid_at'] ?? '') %></span>
+                                    <% } %>
+                                </td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        <% } %>
+    </section>
+
+    <!-- SECTION 5: Platform Settings, Categories & Real User Management -->
+    <div id="settings" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <!-- Platform Settings -->
+        <div class="lg:col-span-6 bg-white border border-hairline p-8 space-y-5">
+            <h2 class="font-serif text-2xl text-obsidian border-b border-hairline pb-3">Institutional Settings &amp; Commission Policy</h2>
+            <form action="/admin/settings" method="POST" class="space-y-4 text-xs">
+                <%- csrf_field() %>
+                <div>
+                    <label class="block uppercase tracking-widest text-stone mb-1">Brand Title</label>
+                    <input type="text" name="brand_name" value="<%- e($settings?.['brand_name'] ?? 'ArtAlly') %>" class="w-full bg-ivory border border-hairline px-3.5 py-2.5">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block uppercase tracking-widest text-stone mb-1">Seller Commission (%)</label>
+                        <input type="number" step="0.5" name="commission_rate_percent" value="<%- Number(($settings?.['commission_rate_percent'] ?? 15.0)) %>" class="w-full bg-ivory border border-hairline px-3.5 py-2.5">
+                    </div>
+                    <div>
+                        <label class="block uppercase tracking-widest text-stone mb-1">Buyer’s Premium (%)</label>
+                        <input type="number" step="0.5" name="buyer_premium_percent" value="<%- Number(($settings?.['buyer_premium_percent'] ?? 20.0)) %>" class="w-full bg-ivory border border-hairline px-3.5 py-2.5">
+                    </div>
+                </div>
+                <div class="bg-ivory border border-bronze p-3.5 space-y-1.5">
+                    <label class="block text-[10px] uppercase tracking-widest text-bronze font-semibold">🔒 Buyer Path Registration Verification Code</label>
+                    <input type="text" name="buyer_verification_code" value="<%- e($settings?.['buyer_verification_code'] ?? 'NOIR-BUYER-2026') %>" required class="w-full bg-white border border-obsidian px-3.5 py-2 font-mono font-bold text-obsidian">
+                    <p class="text-[11px] text-stone">Artists register freely on <code>/register</code>. Buyers must enter this Verification Code to access the Collector/Buyer registration path.</p>
+                </div>
+                <label class="flex items-center space-x-2 pt-2">
+                    <input type="checkbox" name="anti_sniping_enabled" value="1" <%- !empty($settings?.['anti_sniping_enabled']) ? 'checked' : '' %> class="accent-obsidian">
+                    <span>Enable 5-Minute Anti-Sniping Automatic Auction Extension</span>
+                </label>
+                <button type="submit" class="bg-obsidian text-ivory px-6 py-3 text-xs uppercase tracking-widest hover:bg-bronze transition">
+                    Save Institutional Configuration
+                </button>
+            </form>
+
+            <!-- Create Department Category -->
+            <div id="categories" class="pt-6 border-t border-hairline">
+                <h3 class="font-serif text-xl text-obsidian mb-3">Add Curatorial Department Category (Current: <%- count($categories) %>)</h3>
+                <form action="/admin/categories" method="POST" class="flex flex-col sm:flex-row gap-2 text-xs">
+                    <%- csrf_field() %>
+                    <input type="text" name="name" required placeholder="Department Name..." class="flex-1 bg-ivory border border-hairline px-3 py-2.5">
+                    <input type="text" name="description" required placeholder="Short curatorial description..." class="flex-1 bg-ivory border border-hairline px-3 py-2.5">
+                    <button type="submit" class="bg-obsidian text-ivory px-5 py-2.5 uppercase tracking-widest text-[10px]">Add</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Real Registered User Directory -->
+        <div id="users" class="lg:col-span-6 bg-white border border-hairline p-8 space-y-5">
+            <h2 class="font-serif text-2xl text-obsidian border-b border-hairline pb-3">Real Registered Accounts &amp; Access Control</h2>
+            <div class="divide-y divide-hairline max-h-96 overflow-y-auto text-xs">
+                <% for (const $u of Object.values($users || [])) { %>
+                    <div class="py-3 flex items-center justify-between">
+                        <div>
+                            <p class="font-semibold text-obsidian"><%- e($u?.['name']) %> <span class="text-bronze uppercase text-[10px] ml-1">[<%- e($u?.['role']) %>]</span></p>
+                            <p class="text-stone text-[11px]"><%- e($u?.['email']) %> · <%- e($u?.['country'] ?? '') %></p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="px-2 py-0.5 text-[10px] uppercase <%- ($u?.['status'] ?? 'active') === 'active' ? 'bg-ivory text-obsidian border border-hairline' : 'bg-red-100 text-red-800' %>">
+                                <%- e($u?.['status'] ?? 'active') %>
+                            </span>
+                            <% if (Number($u?.['id']) !== Number($admin?.['id'])) { %>
+                                <form action="/admin/users/toggle-status" method="POST">
+                                    <%- csrf_field() %>
+                                    <input type="hidden" name="user_id" value="<%- Number($u?.['id']) %>">
+                                    <button type="submit" class="text-[10px] uppercase tracking-wider underline text-stone hover:text-obsidian">
+                                        <%- ($u?.['status'] ?? 'active') === 'active' ? 'Suspend' : 'Activate' %>
+                                    </button>
+                                </form>
+                                <form action="/admin/users/delete" method="POST" onsubmit="return confirm('Permanently delete this user account and all associated artist/artwork records?');">
+                                    <%- csrf_field() %>
+                                    <input type="hidden" name="user_id" value="<%- Number($u?.['id']) %>">
+                                    <button type="submit" class="text-[10px] uppercase tracking-wider underline text-red-800 hover:text-obsidian ml-2">
+                                        Delete
+                                    </button>
+                                </form>
+                            <% } %>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 6: Administrator Profile Management & Option to Delete Admin Profile -->
+    <section id="admin-profile" class="bg-white border border-hairline p-8 space-y-6">
+        <div class="border-b border-hairline pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Executive Credential Governance</p>
+                <h2 class="font-serif text-3xl text-obsidian">Administrator Profile, New Admin Creation &amp; Delete Admin Option</h2>
+            </div>
+            <span class="text-xs text-stone">Update your admin credentials, add another administrator, or permanently delete your admin profile.</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs">
+            <!-- 1. Update Current Admin Profile -->
+            <div class="bg-ivory border border-hairline p-6 space-y-4">
+                <h3 class="font-serif text-xl text-obsidian border-b border-hairline pb-2">Update Current Admin Profile</h3>
+                <form action="/admin/profile/manage" method="POST" class="space-y-3">
+                    <%- csrf_field() %>
+                    <input type="hidden" name="action_type" value="update_profile">
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Admin Display Name</label>
+                        <input type="text" name="name" required value="<%- e($admin?.['name']) %>" class="w-full bg-white border border-hairline px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Admin Email Address</label>
+                        <input type="email" name="email" required value="<%- e($admin?.['email']) %>" class="w-full bg-white border border-hairline px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">New Password (Optional — min 8 chars)</label>
+                        <input type="password" name="new_password" placeholder="Leave blank to keep current password" class="w-full bg-white border border-hairline px-3 py-2">
+                    </div>
+                    <button type="submit" class="w-full bg-obsidian text-ivory py-2.5 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                        Save Admin Profile Changes
+                    </button>
+                </form>
+            </div>
+
+            <!-- 2. Create Additional Admin Account -->
+            <div class="bg-ivory border border-hairline p-6 space-y-4">
+                <h3 class="font-serif text-xl text-obsidian border-b border-hairline pb-2">Create Additional Admin Profile</h3>
+                <form action="/admin/profile/manage" method="POST" class="space-y-3">
+                    <%- csrf_field() %>
+                    <input type="hidden" name="action_type" value="create_new_admin">
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">New Admin Full Name</label>
+                        <input type="text" name="new_admin_name" required placeholder="e.g. Executive Specialist" class="w-full bg-white border border-hairline px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">New Admin Email</label>
+                        <input type="email" name="new_admin_email" required placeholder="director@ateliernoir.art" class="w-full bg-white border border-hairline px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Password (min 8 chars)</label>
+                        <input type="password" name="new_admin_password" required minlength="8" placeholder="••••••••••••" class="w-full bg-white border border-hairline px-3 py-2">
+                    </div>
+                    <button type="submit" class="w-full border border-obsidian bg-white text-obsidian py-2.5 text-[10px] uppercase tracking-widest font-semibold hover:bg-obsidian hover:text-ivory transition">
+                        + Create Admin Profile
+                    </button>
+                </form>
+            </div>
+
+            <!-- 3. Delete Current Admin Profile -->
+            <div class="bg-[#FDF8F8] border border-red-800/40 p-6 space-y-4">
+                <h3 class="font-serif text-xl text-red-900 border-b border-red-800/20 pb-2">Delete Admin Profile</h3>
+                <p class="text-[11px] text-charcoal leading-relaxed">
+                    Permanently delete your current administrator profile (<strong><%- e($admin?.['email']) %></strong>). If no other admin profiles remain, visiting <code>/admin/login</code> will let you set up a brand-new Master Admin profile immediately.
+                </p>
+                <form action="/admin/profile/manage" method="POST" class="space-y-3" onsubmit="return confirm('Are you sure you want to permanently delete your administrator profile?');">
+                    <%- csrf_field() %>
+                    <input type="hidden" name="action_type" value="delete_admin_profile">
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-red-900 font-semibold mb-1">Type DELETE to Confirm</label>
+                        <input type="text" name="confirm_delete" required placeholder="DELETE" class="w-full bg-white border border-red-800 px-3 py-2 font-mono uppercase">
+                    </div>
+                    <button type="submit" class="w-full bg-red-800 text-white py-2.5 text-[10px] uppercase tracking-widest font-semibold hover:bg-obsidian transition">
+                        ✕ Permanently Delete Admin Profile
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 7: Immutable Security & Curatorial Audit Log -->
+    <section id="audit" class="bg-white border border-hairline p-8 space-y-4">
+        <div class="border-b border-hairline pb-3 flex items-center justify-between">
+            <h2 class="font-serif text-2xl text-obsidian">Immutable Governance Audit Log</h2>
+            <span class="text-xs text-stone">Newsletter Subscribers: <%- count($subscribers) %> · Compliance Reports: <%- count($reports) %></span>
+        </div>
+        <div class="divide-y divide-hairline text-xs max-h-72 overflow-y-auto">
+            <% for (const $log of Object.values($auditLogs || [])) { %>
+                <div class="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                        <span class="font-mono text-[11px] font-semibold text-bronze">[<%- e($log?.['action']) %>]</span>
+                        <span class="text-obsidian font-medium ml-2"><%- e($log?.['details']) %></span>
+                    </div>
+                    <div class="text-[11px] text-stone">
+                        <%- e($log?.['actor_name']) %> · <%- e($log?.['created_at']) %> UTC
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </section>
+</div>

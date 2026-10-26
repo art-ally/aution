@@ -1,0 +1,43 @@
+<div class="max-w-5xl mx-auto px-4 sm:px-8 py-16">
+    <div class="border-b border-hairline pb-8 mb-10">
+        <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-2"><%- e($meta?.['subtitle']) %></p>
+        <h1 class="font-serif text-4xl sm:text-5xl text-obsidian font-normal"><%- e($meta?.['title']) %></h1>
+    </div>
+
+    <div class="bg-white border border-hairline p-8 sm:p-12 space-y-8 text-sm text-charcoal leading-relaxed">
+        <div>
+            <h2 class="font-serif text-2xl text-obsidian mb-3">1. Curatorial Governance &amp; Authenticity Standard</h2>
+            <p>
+                ArtAlly operates as a curated international auction institution. Unlike open self-publishing marketplaces, no artwork may enter a public sale without passing formal inspection by our Specialist Review Committee. Every lot requires verified artist attribution, explicit condition reporting, and signed provenance declarations.
+            </p>
+        </div>
+
+        <div class="border-t border-hairline pt-6">
+            <h2 class="font-serif text-2xl text-obsidian mb-3">2. Timed Bidding &amp; Anti-Sniping Protection</h2>
+            <p>
+                All bids are executed through an exclusive, transaction-locked server engine. Minimum bid increments follow institutional tiers:
+                $100 ($0–$999), $250 ($1,000–$4,999), $500 ($5,000–$9,999), $1,000 ($10,000–$24,999), $2,500 ($25,000–$99,999), and $5,000 ($100,000+).
+                When a qualifying bid is placed within the final 5 minutes before a lot’s scheduled close, the closing timestamp automatically extends by 5 minutes.
+            </p>
+        </div>
+
+        <div class="border-t border-hairline pt-6">
+            <h2 class="font-serif text-2xl text-obsidian mb-3">3. Reserve Prices, Buyer’s Premium &amp; Artist Payouts</h2>
+            <p>
+                Artists may establish a confidential Reserve Price at or above the starting bid. If bidding concludes below the reserve, the lot is recorded as Unsold and remains the property of the artist. On successful sales, a transparent Buyer’s Premium (<%- e(String(platform_setting('buyer_premium_percent', 20) ?? "")) %>%) is added to the hammer price on the buyer’s invoice, and the Seller Commission (<%- e(String(platform_setting('commission_rate_percent', 15) ?? "")) %>%) is deducted prior to releasing the net artist wire payout.
+            </p>
+        </div>
+
+        <div class="border-t border-hairline pt-6 flex flex-wrap items-center justify-between gap-4">
+            <div>
+                <p class="text-xs uppercase tracking-widest text-bronze font-semibold">Private Client &amp; Curatorial Concierge Desk</p>
+                <p class="text-xs text-stone mt-1">
+                    Official Contact Email: <a href="mailto:Art-Ally@consultant.com" class="text-obsidian font-semibold underline hover:text-bronze">Art-Ally@consultant.com</a> · Geneva · New York · London · Paris
+                </p>
+            </div>
+            <a href="mailto:Art-Ally@consultant.com" class="bg-obsidian text-ivory px-5 py-2.5 text-xs uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                ✉ Email Art-Ally@consultant.com
+            </a>
+        </div>
+    </div>
+</div>

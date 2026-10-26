@@ -1,0 +1,284 @@
+<style>
+@media print {
+    header, footer, .announcement-bar, .no-print { display: none !important; }
+    body { background: #ffffff !important; color: #111111 !important; }
+    .invoice-paper { border: 2px solid #181615 !important; box-shadow: none !important; margin: 0 !important; max-width: 100% !important; }
+}
+</style>
+
+<%
+var $inv = $invoice || {};
+var $currency = $inv['currency'] || 'USD';
+var $isPaid = ($inv['status'] || 'unpaid') === 'paid';
+%>
+
+<section class="section" style="padding: 3rem 0;">
+    <div class="container" style="max-width: 920px;">
+        <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; background: var(--bg-elevated); padding: 1rem 1.25rem; border: 1px solid var(--border-hairline);">
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <% if (hasRole('admin')) { %>
+                    <a href="/admin/dashboard#invoice-generator" class="btn btn-outline btn-sm">&larr; Back to Admin Invoice Generator</a>
+                <% } else { %>
+                    <a href="/artist/dashboard#authentication-invoices" class="btn btn-outline btn-sm">&larr; Back to Artist Dashboard</a>
+                <% } %>
+                <span class="caption" style="color: var(--accent-gold);">Official Curatorial &amp; AI Authentication Invoice</span>
+            </div>
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                <a href="/invoices/<%- Number($inv['id'] || 0) %>/download" class="btn btn-outline btn-sm">⬇ Download Invoice Copy</a>
+                <button onclick="window.print()" class="btn btn-gold btn-sm">🖨 Print / Save as PDF</button>
+            </div>
+        </div>
+
+        <div class="invoice-paper" style="background: #FBF9F5; color: #161514; padding: 3.5rem 3.5rem; border: 2px solid #B8965A; box-shadow: 0 24px 60px rgba(0,0,0,0.55); position: relative;">
+            <div style="border: 1px solid rgba(184, 150, 90, 0.45); padding: 2.75rem;">
+                
+                <!-- Top Header -->
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5rem; flex-wrap: wrap; border-bottom: 2px solid #161514; padding-bottom: 1.75rem; margin-bottom: 2rem;">
+                    <div>
+                        <p style="font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; color: #8C6D32; margin-bottom: 0.4rem; font-weight: 700;">
+                            ARTALLY · CURATORIAL &amp; AI AUTHENTICATION DIVISION
+                        </p>
+                        <h1 style="font-family: var(--font-serif); font-size: 2.35rem; color: #161514; font-weight: 500; letter-spacing: 0.03em; line-height: 1.1; margin-bottom: 0.4rem;">
+                            AUTHENTICATION INVOICE
+                        </h1>
+                        <p style="font-size: 0.85rem; color: #57524C;">
+                            Independent Connoisseurship &amp; AI-Powered Provenance Verification Protocol · Contact: <a href="mailto:Art-Ally@consultant.com" style="color: #8C6D32; font-weight: 600; text-decoration: underline;">Art-Ally@consultant.com</a>
+                        </p>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="display: inline-block; padding: 0.35rem 0.9rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 0.65rem; border: 1px solid <%- $isPaid ? '#2D6A4F' : '#8C6D32' %>; background: <%- $isPaid ? 'rgba(45, 106, 79, 0.12)' : 'rgba(184, 150, 90, 0.15)' %>; color: <%- $isPaid ? '#1B4332' : '#705522' %>;">
+                            <%- $isPaid ? '✓ PAID & VERIFIED' : '● UNPAID — AWAITING PAYMENT' %>
+                        </div>
+                        <p style="font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: #161514;">
+                            Invoice No: <%- e($inv['invoice_number'] ?? 'INV-AUTH-0001') %>
+                        </p>
+                        <p style="font-size: 0.8rem; color: #57524C; margin-top: 0.2rem;">
+                            Issued: <%- e(substr($inv['created_at'] ?? gmdate('Y-m-d'), 0, 10)) %>
+                        </p>
+                        <% if (!empty($inv['due_date'])) { %>
+                            <p style="font-size: 0.8rem; color: #8C2D2D; font-weight: 600; margin-top: 0.15rem;">
+                                Due Date: <%- e($inv['due_date']) %>
+                            </p>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Artist & Artwork Grid -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.75rem; margin-bottom: 2rem;">
+                    <div style="background: rgba(22, 21, 20, 0.03); border: 1px solid #DCD5C9; padding: 1.35rem;">
+                        <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.16em; color: #8C6D32; font-weight: 700; margin-bottom: 0.5rem;">
+                            Billed To (Artist &amp; Studio Details)
+                        </p>
+                        <p style="font-family: var(--font-serif); font-size: 1.35rem; font-weight: 600; color: #161514; margin-bottom: 0.25rem;">
+                            <%- e($inv['artist_name'] ?? 'Registered Artist') %>
+                        </p>
+                        <% if (!empty($inv['artist_email'])) { %>
+                            <p style="font-size: 0.84rem; color: #433F3B; margin-bottom: 0.35rem;">
+                                <strong>Email:</strong> <%- e($inv['artist_email']) %>
+                            </p>
+                        <% } %>
+                        <% if (!empty($inv['artist_details'])) { %>
+                            <div style="font-size: 0.84rem; color: #57524C; line-height: 1.55; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed #DCD5C9;">
+                                <%- nl2br(e($inv['artist_details'])) %>
+                            </div>
+                        <% } %>
+                    </div>
+
+                    <div style="background: rgba(22, 21, 20, 0.03); border: 1px solid #DCD5C9; padding: 1.35rem;">
+                        <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.16em; color: #8C6D32; font-weight: 700; margin-bottom: 0.5rem;">
+                            Masterpiece Subject to Verification
+                        </p>
+                        <p style="font-family: var(--font-serif); font-size: 1.35rem; font-weight: 600; color: #161514; font-style: italic; margin-bottom: 0.25rem;">
+                            &ldquo;<%- e($inv['artwork_title'] ?? 'Submitted Masterpiece') %>&rdquo;
+                        </p>
+                        <p style="font-size: 0.82rem; color: #8C6D32; font-weight: 600; margin-bottom: 0.35rem;">
+                            <%- e($inv['service_type'] ?? 'Curatorial Connoisseurship & AI-Powered Authentication') %>
+                        </p>
+                        <% if (!empty($inv['artwork_details'])) { %>
+                            <div style="font-size: 0.84rem; color: #57524C; line-height: 1.55; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed #DCD5C9;">
+                                <%- nl2br(e($inv['artwork_details'])) %>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Itemized Fee Table -->
+                <div style="margin-bottom: 2rem;">
+                    <table style="width: 100%; border-collapse: collapse; border: 1px solid #161514;">
+                        <thead>
+                            <tr style="background: #161514; color: #FBF9F5;">
+                                <th style="text-align: left; padding: 0.85rem 1.1rem; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.14em;">Verification &amp; Evaluation Description</th>
+                                <th style="text-align: left; padding: 0.85rem 1.1rem; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.14em;">Artwork Reference</th>
+                                <th style="text-align: right; padding: 0.85rem 1.1rem; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.14em;">Fee Amount (<%- e($currency) %>)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid #DCD5C9;">
+                                <td style="padding: 1.25rem 1.1rem; vertical-align: top;">
+                                    <p style="font-weight: 700; color: #161514; font-size: 0.95rem; margin-bottom: 0.35rem;">
+                                        <%- e($inv['service_type'] ?? 'Curatorial & AI-Powered Authentication & Valuation') %>
+                                    </p>
+                                    <p style="font-size: 0.82rem; color: #57524C; line-height: 1.55;">
+                                        Mandatory pre-auction authentication and evaluation through ArtAlly’s independent connoisseurship experts and AI-powered forensic authentication suite. Includes originality verification, provenance registration, valuation assessment, and clearance for the 72-hour pre-bidding schedule.
+                                    </p>
+                                </td>
+                                <td style="padding: 1.25rem 1.1rem; vertical-align: top; font-size: 0.88rem; color: #161514;">
+                                    <strong><%- e($inv['artwork_title'] ?? 'Submitted Work') %></strong>
+                                    <% if (!empty($inv['reference_code'])) { %>
+                                        <br><span style="font-family: var(--font-mono); font-size: 0.78rem; color: #6E6A63;">Ref: <%- e($inv['reference_code']) %></span>
+                                    <% } %>
+                                </td>
+                                <td style="padding: 1.25rem 1.1rem; vertical-align: top; text-align: right; font-family: var(--font-mono); font-size: 1.1rem; font-weight: 700; color: #161514;">
+                                    <%- format_money_exact(Number($inv['fee_amount'] ?? 0), $currency) %>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr style="background: rgba(184, 150, 90, 0.14);">
+                                <td colspan="2" style="padding: 1rem 1.1rem; text-align: right; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #161514;">
+                                    Total Authentication Fee To Be Paid
+                                </td>
+                                <td style="padding: 1rem 1.1rem; text-align: right; font-family: var(--font-serif); font-size: 1.55rem; font-weight: 700; color: #8C6D32;">
+                                    <%- format_money_exact(Number($inv['fee_amount'] ?? 0), $currency) %> <span style="font-size: 0.8rem; font-family: var(--font-mono);"><%- e($currency) %></span>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <!-- Receiving Account & Cryptocurrency Details Box -->
+                <div style="background: #161514; color: #F4EFE6; padding: 1.75rem 2rem; border: 1px solid #B8965A; margin-bottom: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid rgba(184, 150, 90, 0.35); padding-bottom: 0.85rem; margin-bottom: 1.25rem;">
+                        <div>
+                            <p style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.2em; color: #C6A664; font-weight: 700;">
+                                Official Payment Remittance Instructions
+                            </p>
+                            <h3 style="font-family: var(--font-serif); font-size: 1.3rem; color: #F4EFE6; margin-top: 0.15rem;">
+                                Designated Bank &amp; Cryptocurrency Payment Details
+                            </h3>
+                        </div>
+                        <span style="font-family: var(--font-mono); font-size: 0.78rem; padding: 0.3rem 0.75rem; background: rgba(198, 166, 100, 0.16); border: 1px solid #C6A664; color: #C6A664;">
+                             QUOTE INVOICE NO: <%- e($inv['invoice_number'] ?? '') %>
+                        </span>
+                    </div>
+
+                    <% var $hasBank = !empty($inv['payment_account_number']) || !empty($inv['payment_bank_name']) || !empty($inv['payment_account_name']);
+                       var $hasCrypto = !empty($inv['crypto_wallet_address']) || !empty($inv['crypto_currency']); %>
+
+                    <% if ($hasBank) { %>
+                    <div style="<%- $hasCrypto ? 'padding-bottom: 1.25rem; margin-bottom: 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.14);' : '' %>">
+                        <p style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.16em; color: #C6A664; font-weight: 700; margin-bottom: 0.75rem;">
+                            🏛 Option A — Bank Wire / Financial Institution Transfer
+                        </p>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.15rem;">
+                            <% if (!empty($inv['payment_account_name'])) { %>
+                            <div>
+                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Beneficiary / Account Name</p>
+                                <p style="font-family: var(--font-mono); font-size: 0.94rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['payment_account_name']) %></p>
+                            </div>
+                            <% } %>
+
+                            <% if (!empty($inv['payment_bank_name'])) { %>
+                            <div>
+                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Bank / Financial Institution</p>
+                                <p style="font-family: var(--font-mono); font-size: 0.94rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['payment_bank_name']) %></p>
+                            </div>
+                            <% } %>
+
+                            <% if (!empty($inv['payment_account_number'])) { %>
+                            <div>
+                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Account Number / IBAN</p>
+                                <p style="font-family: var(--font-mono); font-size: 0.98rem; font-weight: 700; color: #C6A664; word-break: break-all;"><%- e($inv['payment_account_number']) %></p>
+                            </div>
+                            <% } %>
+
+                            <% if (!empty($inv['payment_routing_details'])) { %>
+                            <div>
+                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Routing / SWIFT / BIC / Sort Code</p>
+                                <p style="font-family: var(--font-mono); font-size: 0.92rem; color: #FFFFFF;"><%- e($inv['payment_routing_details']) %></p>
+                            </div>
+                            <% } %>
+                        </div>
+                    </div>
+                    <% } %>
+
+                    <% if ($hasCrypto) { %>
+                    <div>
+                        <p style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.16em; color: #C6A664; font-weight: 700; margin-bottom: 0.75rem;">
+                            ₿ <%- $hasBank ? 'Option B — ' : '' %>Cryptocurrency / Digital Asset Remittance
+                        </p>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.15rem;">
+                            <% if (!empty($inv['crypto_currency'])) { %>
+                            <div>
+                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Accepted Cryptocurrency / Coin</p>
+                                <p style="font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: #FFFFFF;"><%- e($inv['crypto_currency']) %></p>
+                            </div>
+                            <% } %>
+
+                            <% if (!empty($inv['crypto_network'])) { %>
+                            <div>
+                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Blockchain Network / Protocol</p>
+                                <p style="font-family: var(--font-mono); font-size: 0.95rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['crypto_network']) %></p>
+                            </div>
+                            <% } %>
+                        </div>
+
+                        <% if (!empty($inv['crypto_wallet_address'])) { %>
+                        <div style="margin-top: 0.9rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(198, 166, 100, 0.45); padding: 0.85rem 1rem;">
+                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.25rem;">Receiving Crypto Wallet Address</p>
+                            <p style="font-family: var(--font-mono); font-size: 0.98rem; font-weight: 700; color: #C6A664; word-break: break-all; margin: 0;"><%- e($inv['crypto_wallet_address']) %></p>
+                        </div>
+                        <% } %>
+
+                        <% if (!empty($inv['crypto_memo'])) { %>
+                        <div style="margin-top: 0.75rem;">
+                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Destination Tag / Memo / Network Note</p>
+                            <p style="font-family: var(--font-mono); font-size: 0.88rem; color: #FFFFFF;"><%- e($inv['crypto_memo']) %></p>
+                        </div>
+                        <% } %>
+                    </div>
+                    <% } %>
+
+                    <% if (!empty($inv['payment_instructions'])) { %>
+                        <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.12); font-size: 0.85rem; color: #D8D1C5; line-height: 1.6;">
+                            <strong style="color: #C6A664; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.12em; display: block; margin-bottom: 0.25rem;">Additional Payment Instructions &amp; Notes:</strong>
+                            <%- nl2br(e($inv['payment_instructions'])) %>
+                        </div>
+                    <% } %>
+                </div>
+
+                <!-- Footer / Authorization -->
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1.5rem; padding-top: 1.25rem; border-top: 1px solid #DCD5C9;">
+                    <div style="max-width: 460px;">
+                        <p style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; color: #6E6A63; margin-bottom: 0.35rem;">
+                            Authentication &amp; 72-Hour Bidding Activation Notice
+                        </p>
+                        <p style="font-size: 0.78rem; color: #57524C; line-height: 1.55;">
+                            Upon confirmation of the authentication fee remittance above, independent connoisseurship &amp; AI-powered authentication completes and your masterpiece is automatically scheduled to open live collector bidding after the standard 72-hour exhibition preview window.
+                        </p>
+                    </div>
+                    <div style="text-align: right;">
+                        <p style="font-family: var(--font-serif); font-size: 1.35rem; font-style: italic; color: #161514; margin-bottom: 0.25rem;">
+                            ArtAlly Curatorial &amp; AI Board
+                        </p>
+                        <p style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.15em; color: #8C6D32;">
+                            Authorized Provenance &amp; Billing Seal
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('print') === '1') {
+        setTimeout(function () {
+            window.print();
+        }, 350);
+    }
+});
+</script>

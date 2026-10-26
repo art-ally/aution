@@ -1,0 +1,479 @@
+<?php
+$commissionPercent = (float)($settings['commission_rate_percent'] ?? 15.0);
+$dArt = $draftArtwork ?? [];
+$dSub = $draftSubmission ?? [];
+?>
+<div class="max-w-5xl mx-auto px-4 sm:px-8 py-12" x-data="{
+    step: 1,
+    stepError: '',
+    showValidation: false,
+    title: '<?= e($dArt['title'] ?? '') ?>',
+    medium: '<?= e($dArt['medium'] ?? '') ?>',
+    year: '<?= e((string)($dArt['year_created'] ?? gmdate('Y'))) ?>',
+    dimensions: '<?= e($dArt['dimensions'] ?? '') ?>',
+    classification: '<?= e($dArt['classification'] ?? 'Original Unique Work') ?>',
+    edition: '<?= e($dArt['edition_number'] ?? 'Unique (1/1)') ?>',
+    attribution: '<?= e($dArt['artist_attribution'] ?? ('Signed and dated on verso by ' . $user['name'])) ?>',
+    description: `<?= e($dArt['description'] ?? '') ?>`,
+    imageUrls: ['<?= e($dArt['primary_image'] ?? '') ?>'],
+    localPreviews: [],
+    primaryIndex: 0,
+    handleLocalFiles(e) {
+        this.localPreviews = [];
+        const files = Array.from(e.target.files || []);
+        files.forEach(file => {
+            const item = { name: file.name, url: URL.createObjectURL(file), dataUrl: '' };
+            const reader = new FileReader();
+            reader.onload = (ev) => { item.dataUrl = ev.target.result; };
+            reader.readAsDataURL(file);
+            this.localPreviews.push(item);
+        });
+        if (files.length > 0) {
+            this.stepError = '';
+        }
+    },
+    startingBid: <?= (float)($dSub['suggested_starting_bid'] ?? 5000) ?>,
+    expectedPrice: <?= (float)($dSub['artist_expected_price'] ?? 8500) ?>,
+    reservePrice: <?= (float)($dSub['reserve_price'] ?? 6500) ?>,
+    estimateLow: <?= (float)($dSub['estimate_low'] ?? 7000) ?>,
+    estimateHigh: <?= (float)($dSub['estimate_high'] ?? 10000) ?>,
+    currency: '<?= e($dSub['currency'] ?? 'USD') ?>',
+    durationDays: <?= (int)($dSub['preferred_duration_days'] ?? 7) ?>,
+    provenance: `<?= e($dArt['provenance'] ?? 'Direct from the studio of the artist.') ?>`,
+    conditionReport: `<?= e($dArt['condition_report'] ?? 'In pristine original studio condition.') ?>`,
+    ownershipDeclared: true,
+    copyrightConfirmed: true,
+
+    getMissingStep1Fields() {
+        const missing = [];
+        if (!this.title || this.title.trim() === '') missing.push('Artwork Title');
+        if (!this.medium || this.medium.trim() === '') missing.push('Medium & Materials');
+        if (!this.year || String(this.year).trim() === '' || Number(this.year) < 1800 || Number(this.year) > 2035) missing.push('Year Created');
+        if (!this.dimensions || this.dimensions.trim() === '') missing.push('Dimensions (H × W × D)');
+        if (!this.attribution || this.attribution.trim() === '') missing.push('Artist Attribution & Signature');
+        if (!this.description || this.description.trim() === '') missing.push('Curatorial Description');
+        return missing;
+    },
+    isStep1Complete() {
+        return this.getMissingStep1Fields().length === 0;
+    },
+    isStep2Complete() {
+        return this.localPreviews.length > 0 || this.imageUrls.some(u => u && u.trim() !== '');
+    },
+    isStep3Complete() {
+        return Number(this.expectedPrice) >= 100 && Number(this.startingBid) >= 100;
+    },
+    isStep4Complete() {
+        return this.provenance.trim() !== '' && this.conditionReport.trim() !== '' && this.ownershipDeclared && this.copyrightConfirmed;
+    },
+    goToStep(target) {
+        if (target <= this.step) {
+            this.stepError = '';
+            this.step = target;
+            return;
+        }
+        if (target >= 2 && !this.isStep1Complete()) {
+            this.showValidation = true;
+            this.step = 1;
+            this.stepError = 'Stage 1 Incomplete — You cannot access Stage 2 until all required fields are completed: ' + this.getMissingStep1Fields().join(', ') + '.';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+        if (target >= 3 && !this.isStep2Complete()) {
+            this.showValidation = true;
+            this.step = 2;
+            this.stepError = 'Stage 2 Incomplete — Please upload at least one artwork photograph (or enter a valid image URL) before proceeding to Stage 3.';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+        if (target >= 4 && !this.isStep3Complete()) {
+            this.showValidation = true;
+            this.step = 3;
+            this.stepError = 'Stage 3 Incomplete — Please enter your Expected Target Price and Suggested Starting Bid (minimum $100) before proceeding.';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+        if (target >= 5 && !this.isStep4Complete()) {
+            this.showValidation = true;
+            this.step = 4;
+            this.stepError = 'Stage 4 Incomplete — Please complete the Provenance History, Condition Report, and legal declarations before Final Review.';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+        this.stepError = '';
+        this.showValidation = false;
+        this.step = target;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    addUrl() { this.imageUrls.push(''); },
+    removeUrl(idx) { if (this.imageUrls.length > 1) { this.imageUrls.splice(idx, 1); if (this.primaryIndex >= this.imageUrls.length) this.primaryIndex = 0; } },
+    moveUp(idx) { if (idx > 0) { const tmp = this.imageUrls[idx - 1]; this.imageUrls[idx - 1] = this.imageUrls[idx]; this.imageUrls[idx] = tmp; } }
+}">
+    <!-- Header -->
+    <div class="border-b border-hairline pb-6 mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+            <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-1">Consignment Dossier Workflow</p>
+            <h1 class="font-serif text-4xl text-obsidian">Submit Artwork for Curatorial Review</h1>
+        </div>
+        <a href="/artist/dashboard" class="text-xs uppercase tracking-widest text-stone hover:text-obsidian">← Back to Studio Dashboard</a>
+    </div>
+
+    <!-- 5-Step Progress Indicator (Locked Until Previous Stage Is Completed) -->
+    <div class="grid grid-cols-5 gap-2 mb-6 text-xs">
+        <button type="button" @click="goToStep(1)" :class="step === 1 ? 'border-bronze bg-obsidian text-ivory' : (isStep1Complete() ? 'border-obsidian bg-white text-obsidian' : 'border-hairline bg-alabaster text-stone')" class="p-3.5 border text-left transition">
+            <span class="block text-[10px] uppercase tracking-widest opacity-75">Stage 01</span>
+            <span class="font-semibold hidden sm:inline">Artwork Info *</span>
+        </button>
+        <button type="button" @click="goToStep(2)" :class="step === 2 ? 'border-bronze bg-obsidian text-ivory' : (isStep1Complete() ? 'border-obsidian bg-white text-obsidian' : 'border-hairline bg-alabaster text-stone opacity-60 cursor-not-allowed')" class="p-3.5 border text-left transition">
+            <span class="block text-[10px] uppercase tracking-widest opacity-75" x-text="isStep1Complete() ? 'Stage 02' : '🔒 Stage 02'">Stage 02</span>
+            <span class="font-semibold hidden sm:inline">Photography *</span>
+        </button>
+        <button type="button" @click="goToStep(3)" :class="step === 3 ? 'border-bronze bg-obsidian text-ivory' : (isStep1Complete() && isStep2Complete() ? 'border-obsidian bg-white text-obsidian' : 'border-hairline bg-alabaster text-stone opacity-60 cursor-not-allowed')" class="p-3.5 border text-left transition">
+            <span class="block text-[10px] uppercase tracking-widest opacity-75" x-text="(isStep1Complete() && isStep2Complete()) ? 'Stage 03' : '🔒 Stage 03'">Stage 03</span>
+            <span class="font-semibold hidden sm:inline">Pricing &amp; Reserve *</span>
+        </button>
+        <button type="button" @click="goToStep(4)" :class="step === 4 ? 'border-bronze bg-obsidian text-ivory' : (isStep1Complete() && isStep2Complete() && isStep3Complete() ? 'border-obsidian bg-white text-obsidian' : 'border-hairline bg-alabaster text-stone opacity-60 cursor-not-allowed')" class="p-3.5 border text-left transition">
+            <span class="block text-[10px] uppercase tracking-widest opacity-75" x-text="(isStep1Complete() && isStep2Complete() && isStep3Complete()) ? 'Stage 04' : '🔒 Stage 04'">Stage 04</span>
+            <span class="font-semibold hidden sm:inline">Provenance *</span>
+        </button>
+        <button type="button" @click="goToStep(5)" :class="step === 5 ? 'border-bronze bg-obsidian text-ivory' : (isStep1Complete() && isStep2Complete() && isStep3Complete() && isStep4Complete() ? 'border-obsidian bg-white text-obsidian' : 'border-hairline bg-alabaster text-stone opacity-60 cursor-not-allowed')" class="p-3.5 border text-left transition">
+            <span class="block text-[10px] uppercase tracking-widest opacity-75" x-text="(isStep1Complete() && isStep2Complete() && isStep3Complete() && isStep4Complete()) ? 'Stage 05' : '🔒 Stage 05'">Stage 05</span>
+            <span class="font-semibold hidden sm:inline">Review &amp; Submit</span>
+        </button>
+    </div>
+
+    <!-- Stage Gate Validation Alert Banner -->
+    <template x-if="stepError !== ''">
+        <div class="bg-[#FDF2F2] border-2 border-red-800 text-red-900 px-6 py-4 mb-6 text-xs flex items-center justify-between gap-4">
+            <div>
+                <p class="text-[10px] uppercase tracking-widest font-bold text-red-800">⚠ Stage Requirement Not Met</p>
+                <p class="font-medium mt-0.5" x-text="stepError"></p>
+            </div>
+            <button type="button" @click="stepError = ''" class="text-[10px] uppercase tracking-widest underline font-semibold">Dismiss</button>
+        </div>
+    </template>
+
+    <form action="/artist/submit" method="POST" enctype="multipart/form-data" class="bg-white border border-hairline p-8 sm:p-12">
+        <?= csrf_field() ?>
+        <?php if (!empty($dSub['id'])): ?>
+            <input type="hidden" name="edit_submission_id" value="<?= (int)$dSub['id'] ?>">
+        <?php endif; ?>
+
+        <!-- Hidden base64 inputs for uploaded local files so images are guaranteed to save -->
+        <template x-for="(preview, bIdx) in localPreviews" :key="'b64_' + bIdx">
+            <input type="hidden" name="artwork_images_data[]" :value="preview.dataUrl">
+        </template>
+
+        <!-- STEP 1: Artwork Information -->
+        <div x-show="step === 1" class="space-y-6 text-xs">
+            <div class="border-b border-hairline pb-3 flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+                <div>
+                    <h2 class="font-serif text-3xl text-obsidian">Stage 1: Artwork Information &amp; Attribution</h2>
+                    <p class="text-xs text-stone mt-1">All starred (*) fields in Stage 1 must be completed before Stage 2 (Photography) unlocks.</p>
+                </div>
+                <span :class="isStep1Complete() ? 'bg-[#1A2E22] text-ivory' : 'bg-bronze text-white'" class="px-3 py-1 text-[10px] uppercase tracking-widest font-semibold self-start sm:self-end" x-text="isStep1Complete() ? '✓ Stage 1 Complete' : 'Required Before Stage 2'"></span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Artwork Title *</label>
+                    <input type="text" name="title" x-model="title" required placeholder="e.g. Study in Raw Umber VII" :class="(showValidation && !title.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
+                </div>
+
+                <div>
+                    <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Curatorial Department Category *</label>
+                    <select name="category_id" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
+                        <?php foreach ($categories as $cat): ?>
+                            <option value="<?= (int)$cat['id'] ?>" <?= ((int)($dArt['category_id'] ?? 1) === (int)$cat['id']) ? 'selected' : '' ?>>
+                                <?= e($cat['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="md:col-span-2">
+                    <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Medium &amp; Materials *</label>
+                    <input type="text" name="medium" x-model="medium" required placeholder="e.g. Oil, cold beeswax, and mineral pigment on Belgian linen" :class="(showValidation && !medium.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
+                </div>
+
+                <div>
+                    <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Year Created *</label>
+                    <input type="number" name="year_created" x-model="year" min="1850" max="2030" required :class="(showValidation && (!year || Number(year) < 1800)) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Dimensions (H × W × D) *</label>
+                    <input type="text" name="dimensions" x-model="dimensions" required placeholder="e.g. 150 × 120 × 4 cm" :class="(showValidation && !dimensions.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
+                </div>
+
+                <div>
+                    <label class="block uppercase tracking-widest text-stone mb-2">Classification *</label>
+                    <select name="classification" x-model="classification" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
+                        <option value="Original Unique Work">Original Unique Work (1/1)</option>
+                        <option value="Limited Edition">Limited Edition (Signed &amp; Numbered)</option>
+                        <option value="Archival Print / Monotype">Archival Print / Monotype</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block uppercase tracking-widest text-stone mb-2">Edition Number</label>
+                    <input type="text" name="edition_number" x-model="edition" placeholder="Unique (1/1) or Edition 1 of 5" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
+                </div>
+            </div>
+
+            <div>
+                <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Artist Attribution &amp; Signature Location *</label>
+                <input type="text" name="artist_attribution" x-model="attribution" required :class="(showValidation && !attribution.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
+            </div>
+
+            <div>
+                <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Curatorial Description &amp; Conceptual Essay *</label>
+                <textarea name="description" x-model="description" rows="4" required placeholder="Describe the technique, surface texture, and conceptual background of the work..." :class="(showValidation && !description.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border p-4 text-sm"></textarea>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-hairline">
+                <p class="text-[11px] text-stone">
+                    <span x-show="!isStep1Complete()" class="text-bronze font-semibold">Please complete all required (*) fields above to unlock Stage 2.</span>
+                    <span x-show="isStep1Complete()" class="text-[#1A2E22] font-semibold">✓ All Stage 1 required fields completed. You may proceed to Stage 2.</span>
+                </p>
+                <button type="button" @click="goToStep(2)" class="bg-obsidian text-ivory px-8 py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">
+                    Continue to Stage 2: Photography →
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 2: Artwork Images & Primary Image Selection -->
+        <div x-cloak x-show="step === 2" class="space-y-6 text-xs">
+            <div class="border-b border-hairline pb-3">
+                <h2 class="font-serif text-3xl text-obsidian">Stage 2: High-Resolution Artwork Photography</h2>
+                <p class="text-xs text-stone mt-1">Upload artwork image files (JPG, PNG, WEBP) or provide studio archive image URLs. At least one photograph is required before proceeding to Stage 3.</p>
+            </div>
+
+            <div class="bg-ivory border-2 border-bronze p-6 space-y-3">
+                <label class="block uppercase tracking-widest text-obsidian font-semibold">Upload Studio Image Files (Multiple Supported) *</label>
+                <input type="file" name="artwork_images[]" multiple accept="image/*" @change="handleLocalFiles($event)" class="w-full text-xs">
+                <p class="text-[11px] text-stone">Select one or more artwork photographs from your device. They will be stored directly in your portfolio and reflected in the Admin Backend.</p>
+
+                <template x-if="localPreviews.length > 0">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3">
+                        <template x-for="(preview, pIdx) in localPreviews" :key="pIdx">
+                            <div class="bg-white border border-bronze p-2">
+                                <div class="aspect-square bg-alabaster overflow-hidden mb-1.5">
+                                    <img :src="preview.url" class="w-full h-full object-cover" alt="">
+                                </div>
+                                <p class="text-[10px] text-obsidian truncate" x-text="preview.name"></p>
+                                <span x-show="pIdx === 0" class="text-[9px] uppercase tracking-widest text-bronze font-semibold">★ Primary Upload</span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+
+            <input type="hidden" name="primary_image_index" :value="primaryIndex">
+
+            <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <label class="uppercase tracking-widest text-stone">Or Provide Gallery Image URLs &amp; Preview Order</label>
+                    <button type="button" @click="addUrl()" class="text-bronze uppercase tracking-widest font-semibold hover:underline">+ Add Another Image Slot</button>
+                </div>
+
+                <template x-for="(imgUrl, index) in imageUrls" :key="index">
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center bg-ivory border border-hairline p-4">
+                        <div class="sm:col-span-2 aspect-square bg-alabaster overflow-hidden border border-hairline">
+                            <img :src="imgUrl || 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=400&q=80'" alt="Preview" class="w-full h-full object-cover">
+                        </div>
+                        <div class="sm:col-span-6">
+                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1" x-text="'Image Slot #' + (index + 1)"></label>
+                            <input type="text" name="image_urls[]" x-model="imageUrls[index]" placeholder="https://..." class="w-full bg-white border border-hairline px-3 py-2 text-xs">
+                        </div>
+                        <div class="sm:col-span-4 flex flex-wrap items-center justify-end gap-2">
+                            <button type="button" @click="primaryIndex = index" :class="primaryIndex === index ? 'bg-bronze text-white border-bronze' : 'bg-white text-charcoal border-hairline'" class="px-3 py-1.5 border text-[10px] uppercase tracking-widest">
+                                <span x-text="primaryIndex === index ? '★ Primary Image' : 'Set Primary'"></span>
+                            </button>
+                            <button type="button" @click="moveUp(index)" class="px-2.5 py-1.5 border border-hairline bg-white text-[10px] uppercase">↑</button>
+                            <button type="button" @click="removeUrl(index)" class="px-2.5 py-1.5 border border-hairline bg-white text-red-700 text-[10px] uppercase">Remove</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="flex justify-between pt-4">
+                <button type="button" @click="goToStep(1)" class="border border-obsidian px-6 py-3.5 text-xs uppercase tracking-widest">← Return to Stage 1</button>
+                <button type="button" @click="goToStep(3)" class="bg-obsidian text-ivory px-8 py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">Continue to Stage 3: Pricing →</button>
+            </div>
+        </div>
+
+        <!-- STEP 3: Pricing, Reserve & Commission Transparency -->
+        <div x-cloak x-show="step === 3" class="space-y-6 text-xs">
+            <div class="border-b border-hairline pb-3">
+                <h2 class="font-serif text-3xl text-obsidian">Stage 3: Valuation, Expected Price &amp; Auction Duration</h2>
+                <p class="text-xs text-stone mt-1">Specify your expected price, opening bid, confidential reserve protection, and view transparent seller commission calculations.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
+                <div>
+                    <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Artist Expected Target Price *</label>
+                    <input type="number" name="artist_expected_price" x-model="expectedPrice" min="100" step="50" required class="w-full bg-ivory border-2 border-bronze px-4 py-3 text-sm font-semibold text-obsidian">
+                    <p class="text-[10px] text-bronze mt-1">Desired price you want for this artwork.</p>
+                </div>
+
+                <div>
+                    <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Suggested Starting Bid *</label>
+                    <input type="number" name="suggested_starting_bid" x-model="startingBid" min="100" step="50" required class="w-full bg-ivory border border-hairline px-4 py-3 text-sm font-semibold">
+                </div>
+
+                <div>
+                    <label class="block uppercase tracking-widest text-stone mb-2">Confidential Reserve Price</label>
+                    <input type="number" name="reserve_price" x-model="reservePrice" min="100" step="50" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm font-semibold">
+                    <p class="text-[10px] text-stone mt-1">Lot will not sell below this price.</p>
+                </div>
+
+                <div>
+                    <label class="block uppercase tracking-widest text-stone mb-2">Currency &amp; Duration</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <select name="currency" x-model="currency" class="bg-ivory border border-hairline px-3 py-3 text-sm">
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="GBP">GBP (£)</option>
+                            <option value="CHF">CHF</option>
+                        </select>
+                        <select name="preferred_duration_days" x-model="durationDays" class="bg-ivory border border-hairline px-3 py-3 text-sm">
+                            <option value="5">5 Days</option>
+                            <option value="7">7 Days</option>
+                            <option value="10">10 Days</option>
+                            <option value="14">14 Days</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block uppercase tracking-widest text-stone mb-2">Low Pre-Sale Estimate</label>
+                    <input type="number" name="estimate_low" x-model="estimateLow" step="100" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
+                </div>
+                <div>
+                    <label class="block uppercase tracking-widest text-stone mb-2">High Pre-Sale Estimate</label>
+                    <input type="number" name="estimate_high" x-model="estimateHigh" step="100" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
+                </div>
+            </div>
+
+            <!-- Transparent Commission & Net Payout Calculator -->
+            <div class="bg-alabaster border border-hairline p-6 space-y-2">
+                <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold">Transparent Seller Commission Preview (At Expected Price)</p>
+                <div class="flex justify-between text-xs pt-2">
+                    <span>Your Expected Target Price:</span>
+                    <span class="font-semibold" x-text="currency + ' ' + Number(expectedPrice).toLocaleString()"></span>
+                </div>
+                <div class="flex justify-between text-xs text-stone">
+                    <span>ArtAlly Seller Commission (<?= $commissionPercent ?>%):</span>
+                    <span x-text="'- ' + currency + ' ' + Math.round(expectedPrice * <?= $commissionPercent / 100 ?>).toLocaleString()"></span>
+                </div>
+                <div class="flex justify-between text-sm font-serif font-semibold text-obsidian border-t border-hairline pt-2">
+                    <span>Estimated Net Artist Payout:</span>
+                    <span class="text-bronze" x-text="currency + ' ' + Math.round(expectedPrice * <?= 1 - ($commissionPercent / 100) ?>).toLocaleString()"></span>
+                </div>
+            </div>
+
+            <div>
+                <label class="block uppercase tracking-widest text-stone mb-2">Additional Notes for Specialist Valuation Department</label>
+                <textarea name="seller_notes" rows="2" placeholder="Framing details, crating readiness, or exhibition history..." class="w-full bg-ivory border border-hairline p-3 text-sm"><?= e($dSub['seller_notes'] ?? '') ?></textarea>
+            </div>
+
+            <div class="flex justify-between pt-4">
+                <button type="button" @click="goToStep(2)" class="border border-obsidian px-6 py-3.5 text-xs uppercase tracking-widest">← Return to Stage 2</button>
+                <button type="button" @click="goToStep(4)" class="bg-obsidian text-ivory px-8 py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">Continue to Stage 4: Provenance →</button>
+            </div>
+        </div>
+
+        <!-- STEP 4: Provenance, Condition & Authenticity -->
+        <div x-cloak x-show="step === 4" class="space-y-6 text-xs">
+            <div class="border-b border-hairline pb-3">
+                <h2 class="font-serif text-3xl text-obsidian">Stage 4: Provenance, Condition &amp; Authenticity Dossier</h2>
+                <p class="text-xs text-stone mt-1">Confidential documents uploaded here are stored in private storage (`storage/private/documents`) and never exposed publicly.</p>
+            </div>
+
+            <div>
+                <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Provenance History *</label>
+                <textarea name="provenance" x-model="provenance" rows="3" required class="w-full bg-ivory border border-hairline p-3.5 text-sm"></textarea>
+            </div>
+
+            <div>
+                <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Physical Condition Report *</label>
+                <textarea name="condition_report" x-model="conditionReport" rows="3" required class="w-full bg-ivory border border-hairline p-3.5 text-sm"></textarea>
+            </div>
+
+            <div class="bg-ivory border border-hairline p-6 space-y-3">
+                <label class="block uppercase tracking-widest text-obsidian font-semibold">Upload Confidential Certificate of Authenticity / Provenance PDF or Image (Optional)</label>
+                <input type="file" name="authenticity_document" accept=".pdf,image/jpeg,image/png" class="w-full text-xs">
+                <p class="text-[11px] text-stone">Accessible exclusively by the Curatorial Review Board.</p>
+            </div>
+
+            <div class="space-y-3 pt-2">
+                <label class="flex items-start space-x-3 cursor-pointer">
+                    <input type="checkbox" name="ownership_declared" value="1" x-model="ownershipDeclared" class="mt-1 accent-obsidian">
+                    <span class="text-charcoal leading-relaxed">
+                        <strong>Declaration of Sole Ownership &amp; Good Title *:</strong> I warrant that I am the creator or sole legal owner of this artwork, free of any liens, encumbrances, or third-party claims.
+                    </span>
+                </label>
+
+                <label class="flex items-start space-x-3 cursor-pointer">
+                    <input type="checkbox" name="copyright_confirmed" value="1" x-model="copyrightConfirmed" class="mt-1 accent-obsidian">
+                    <span class="text-charcoal leading-relaxed">
+                        <strong>Catalogue &amp; Archival Reproduction License *:</strong> I grant ArtAlly permission to reproduce the uploaded photographs in the auction catalogue and editorial journal.
+                    </span>
+                </label>
+            </div>
+
+            <div class="flex justify-between pt-4">
+                <button type="button" @click="goToStep(3)" class="border border-obsidian px-6 py-3.5 text-xs uppercase tracking-widest">← Return to Stage 3</button>
+                <button type="button" @click="goToStep(5)" class="bg-obsidian text-ivory px-8 py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">Continue to Stage 5: Final Review →</button>
+            </div>
+        </div>
+
+        <!-- STEP 5: Complete Dossier Summary & Submission -->
+        <div x-cloak x-show="step === 5" class="space-y-6 text-xs">
+            <div class="border-b border-hairline pb-3">
+                <h2 class="font-serif text-3xl text-obsidian">Stage 5: Review Dossier &amp; Submit for Approval</h2>
+                <p class="text-xs text-stone mt-1">Verify your submission summary. Artworks are never published directly; our Administrator will review your work, set the agreed price, and control the live auction.</p>
+            </div>
+
+            <div class="bg-ivory border border-hairline p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-2">
+                    <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Artwork Specification</p>
+                    <p class="font-serif text-2xl text-obsidian" x-text="title || 'Untitled Work'"></p>
+                    <p class="text-charcoal"><span class="text-stone">Medium:</span> <span x-text="medium"></span></p>
+                    <p class="text-charcoal"><span class="text-stone">Dimensions:</span> <span x-text="dimensions"></span> (<span x-text="year"></span>)</p>
+                    <p class="text-charcoal"><span class="text-stone">Edition:</span> <span x-text="classification + ' · ' + edition"></span></p>
+                </div>
+
+                <div class="space-y-2 border-t md:border-t-0 md:border-l border-hairline pt-4 md:pt-0 md:pl-6">
+                    <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Auction &amp; Financial Parameters</p>
+                    <p class="text-charcoal"><span class="text-stone">Artist Expected Target Price:</span> <strong class="text-bronze" x-text="currency + ' ' + Number(expectedPrice).toLocaleString()"></strong></p>
+                    <p class="text-charcoal"><span class="text-stone">Suggested Opening Bid:</span> <strong x-text="currency + ' ' + Number(startingBid).toLocaleString()"></strong></p>
+                    <p class="text-charcoal"><span class="text-stone">Confidential Reserve:</span> <strong x-text="currency + ' ' + Number(reservePrice).toLocaleString()"></strong></p>
+                    <p class="text-charcoal"><span class="text-stone">Preferred Duration:</span> <span x-text="durationDays + ' Days'"></span></p>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
+                <button type="button" @click="goToStep(4)" class="w-full sm:w-auto border border-obsidian px-6 py-3.5 text-xs uppercase tracking-widest">
+                    ← Return to Stage 4
+                </button>
+
+                <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                    <button type="submit" name="submission_mode" value="draft" class="border border-obsidian text-obsidian px-6 py-4 text-xs uppercase tracking-widest hover:bg-alabaster transition">
+                        Save as Studio Draft
+                    </button>
+                    <button type="submit" name="submission_mode" value="submit" class="bg-obsidian text-ivory px-8 py-4 text-xs uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                        Submit for Curatorial Approval
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>

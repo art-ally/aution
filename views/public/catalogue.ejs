@@ -1,0 +1,166 @@
+<% var $watchedIds = user_watchlist_ids();
+var $viewMode = $filters?.['view'] ?? 'grid'; %>
+<div class="max-w-[1440px] mx-auto px-4 sm:px-8 py-14">
+    <!-- Catalogue Header -->
+    <div class="border-b border-hairline pb-8 mb-10 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        <div>
+            <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-2">Curatorial Archive &amp; Live Lots</p>
+            <h1 class="font-serif text-4xl sm:text-5xl text-obsidian font-normal">Fine Art Catalogue</h1>
+        </div>
+        <div class="flex items-center space-x-4 text-xs text-stone">
+            <span>Showing <strong class="text-obsidian"><%- count($artworks) %></strong> vetted works</span>
+            <span>|</span>
+            <a href="/catalogue?<%- e(http_build_query(array_merge($filters, { 'view': 'grid' }))) %>" class="uppercase tracking-widest <%- $viewMode === 'grid' ? 'text-obsidian font-semibold underline' : 'hover:text-obsidian' %>">Grid View</a>
+            <a href="/catalogue?<%- e(http_build_query(array_merge($filters, { 'view': 'list' }))) %>" class="uppercase tracking-widest <%- $viewMode === 'list' ? 'text-obsidian font-semibold underline' : 'hover:text-obsidian' %>">List View</a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <!-- Left Sidebar: Database-Driven Filter Controls -->
+        <aside class="lg:col-span-3">
+            <form action="/catalogue" method="GET" class="bg-white border border-hairline p-6 space-y-6 sticky top-28">
+                <input type="hidden" name="view" value="<%- e($viewMode) %>">
+
+                <div class="flex items-center justify-between border-b border-hairline pb-3">
+                    <h2 class="font-sans text-xs uppercase tracking-widest font-semibold text-obsidian">Filter Catalogue</h2>
+                    <a href="/catalogue" class="text-[11px] uppercase tracking-wider text-bronze hover:underline">Reset All</a>
+                </div>
+
+                <!-- Keyword Search -->
+                <div>
+                    <label class="block text-[11px] uppercase tracking-widest text-stone mb-2">Keyword / Lot / Title</label>
+                    <input type="text" name="q" value="<%- e(String($filters?.['q'] ?? "")) %>" placeholder="e.g. Bronze, Lindqvist..." class="w-full bg-ivory border border-hairline px-3.5 py-2.5 text-xs focus:outline-none focus:border-bronze">
+                </div>
+
+                <!-- Category Filter -->
+                <div>
+                    <label class="block text-[11px] uppercase tracking-widest text-stone mb-2">Department Category</label>
+                    <select name="category" class="w-full bg-ivory border border-hairline px-3.5 py-2.5 text-xs focus:outline-none focus:border-bronze">
+                        <option value="">All 10 Departments</option>
+                        <% for (const $cat of Object.values($categories || [])) { %>
+                            <option value="<%- e($cat?.['slug']) %>" <%- ($filters?.['category'] === $cat?.['slug']) ? 'selected' : '' %>>
+                                <%- e($cat?.['name']) %>
+                            </option>
+                        <% } %>
+                    </select>
+                </div>
+
+                <!-- Artist Filter -->
+                <div>
+                    <label class="block text-[11px] uppercase tracking-widest text-stone mb-2">Artist</label>
+                    <select name="artist" class="w-full bg-ivory border border-hairline px-3.5 py-2.5 text-xs focus:outline-none focus:border-bronze">
+                        <option value="">All Represented Artists</option>
+                        <% for (const $artist of Object.values($artists || [])) { %>
+                            <option value="<%- e($artist?.['slug']) %>" <%- ($filters?.['artist'] === $artist?.['slug']) ? 'selected' : '' %>>
+                                <%- e($artist?.['display_name']) %>
+                            </option>
+                        <% } %>
+                    </select>
+                </div>
+
+                <!-- Auction Status -->
+                <div>
+                    <label class="block text-[11px] uppercase tracking-widest text-stone mb-2">Auction Status</label>
+                    <select name="status" class="w-full bg-ivory border border-hairline px-3.5 py-2.5 text-xs focus:outline-none focus:border-bronze">
+                        <option value="">All Statuses</option>
+                        <option value="active" <%- ($filters?.['status'] === 'active') ? 'selected' : '' %>>Live Bidding Now</option>
+                        <option value="upcoming" <%- ($filters?.['status'] === 'upcoming') ? 'selected' : '' %>>Upcoming Lots</option>
+                        <option value="closed" <%- ($filters?.['status'] === 'closed') ? 'selected' : '' %>>Closed / Sold Results</option>
+                    </select>
+                </div>
+
+                <!-- Medium Filter -->
+                <div>
+                    <label class="block text-[11px] uppercase tracking-widest text-stone mb-2">Medium / Material</label>
+                    <input type="text" name="medium" value="<%- e(String($filters?.['medium'] ?? "")) %>" placeholder="Oil, Bronze, Platinum, Paper..." class="w-full bg-ivory border border-hairline px-3.5 py-2.5 text-xs focus:outline-none focus:border-bronze">
+                </div>
+
+                <!-- Price Range -->
+                <div>
+                    <label class="block text-[11px] uppercase tracking-widest text-stone mb-2">Current Bid Range (USD)</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="number" name="min_price" value="<%- e(String(($filters?.['min_price'] ?? '') ?? "")) %>" placeholder="Min $" class="w-full bg-ivory border border-hairline px-3 py-2 text-xs">
+                        <input type="number" name="max_price" value="<%- e(String(($filters?.['max_price'] ?? '') ?? "")) %>" placeholder="Max $" class="w-full bg-ivory border border-hairline px-3 py-2 text-xs">
+                    </div>
+                </div>
+
+                <!-- Sort Order -->
+                <div>
+                    <label class="block text-[11px] uppercase tracking-widest text-stone mb-2">Sort Catalogue By</label>
+                    <select name="sort" class="w-full bg-ivory border border-hairline px-3.5 py-2.5 text-xs focus:outline-none focus:border-bronze">
+                        <option value="closing_soon" <%- ($filters?.['sort'] === 'closing_soon') ? 'selected' : '' %>>Closing Soonest</option>
+                        <option value="newest" <%- ($filters?.['sort'] === 'newest') ? 'selected' : '' %>>Newly Added</option>
+                        <option value="price_asc" <%- ($filters?.['sort'] === 'price_asc') ? 'selected' : '' %>>Price: Low to High</option>
+                        <option value="price_desc" <%- ($filters?.['sort'] === 'price_desc') ? 'selected' : '' %>>Price: High to Low</option>
+                        <option value="popularity" <%- ($filters?.['sort'] === 'popularity') ? 'selected' : '' %>>Most Bids Placed</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="w-full bg-obsidian text-ivory py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">
+                    Apply Catalogue Filters
+                </button>
+            </form>
+        </aside>
+
+        <!-- Right Main Area: Grid or List Results -->
+        <div class="lg:col-span-9">
+            <% if (empty($artworks)) { %>
+                <div class="bg-white border border-hairline p-16 text-center space-y-4">
+                    <p class="text-[11px] uppercase tracking-widest text-bronze">Zero Matching Lots</p>
+                    <h3 class="font-serif text-3xl text-obsidian">No Approved Works Match Your Filter Criteria</h3>
+                    <p class="text-xs text-stone max-w-md mx-auto">Try clearing one or more filters or broadening your price range to explore all published works.</p>
+                    <a href="/catalogue" class="inline-block bg-obsidian text-ivory px-7 py-3 text-xs uppercase tracking-widest hover:bg-bronze transition">
+                        Clear All Filters
+                    </a>
+                </div>
+            <% } else if ($viewMode === 'list') { %>
+                <div class="space-y-6">
+                    <% for (const $lot of Object.values($artworks || [])) { %>
+                        <% var $auction = $lot?.['auction'] ?? null;
+                        var $currentBid = Number(($auction?.['current_bid'] ?? $lot?.['starting_bid'] ?? 0)); %>
+                        <article class="bg-white border border-hairline p-6 grid grid-cols-1 md:grid-cols-12 gap-6 items-center hover:border-bronze transition">
+                            <div class="md:col-span-4 aspect-[4/3] bg-alabaster overflow-hidden">
+                                <a href="/artworks/<%- e($lot?.['slug']) %>">
+                                    <img src="<%- e($lot?.['primary_image']) %>" alt="<%- e($lot?.['title']) %>" class="w-full h-full object-cover">
+                                </a>
+                            </div>
+                            <div class="md:col-span-5 space-y-2">
+                                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">
+                                    <%- e($auction?.['lot_number'] ?? 'LOT') %> · <%- e($lot?.['category_name']) %>
+                                </p>
+                                <h3 class="font-serif text-2xl text-obsidian">
+                                    <a href="/artworks/<%- e($lot?.['slug']) %>" class="hover:text-bronze transition">
+                                        <%- e($lot?.['artist_name']) %> — <span class="italic"><%- e($lot?.['title']) %></span>, <%- e(String($lot?.['year_created'] ?? "")) %>
+                                    </a>
+                                </h3>
+                                <p class="text-xs text-stone"><%- e($lot?.['medium']) %> · <%- e($lot?.['dimensions']) %></p>
+                                <p class="text-xs text-charcoal/80 line-clamp-2 pt-1"><%- e($lot?.['description']) %></p>
+                            </div>
+                            <div class="md:col-span-3 md:text-right border-t md:border-t-0 md:border-l border-hairline pt-4 md:pt-0 md:pl-6 space-y-3">
+                                <div>
+                                    <p class="text-[10px] uppercase tracking-widest text-stone">Current Bid</p>
+                                    <p class="font-serif text-2xl font-semibold text-obsidian"><%- format_money($currentBid) %></p>
+                                    <p class="text-[11px] text-stone">Est. <%- format_money($lot?.['estimate_low']) %>–<%- format_money($lot?.['estimate_high']) %></p>
+                                </div>
+                                <% if ($auction && ($auction?.['status'] ?? '') === 'active') { %>
+                                    <p class="text-xs text-bronze font-medium" data-countdown="<%- e($auction?.['ends_at']) %>">
+                                        <%- e(time_remaining_label($auction?.['ends_at'])) %>
+                                    </p>
+                                <% } %>
+                                <a href="/artworks/<%- e($lot?.['slug']) %>" class="inline-block w-full text-center bg-obsidian text-ivory py-2.5 px-4 text-[11px] uppercase tracking-widest hover:bg-bronze transition">
+                                    Inspect &amp; Bid
+                                </a>
+                            </div>
+                        </article>
+                    <% } %>
+                </div>
+            <% } else { %>
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-7">
+                    <% for (const $lot of Object.values($artworks || [])) { %>
+                        <% __output += __renderPartial("partials/artwork-card", { lot: typeof $lot !== "undefined" ? $lot : null, watchedIds: typeof $watchedIds !== "undefined" ? $watchedIds : undefined }); %>
+                    <% } %>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</div>

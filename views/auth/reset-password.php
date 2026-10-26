@@ -1,0 +1,25 @@
+<div class="max-w-xl mx-auto px-4 sm:px-8 py-20">
+    <div class="bg-white border border-hairline p-8 sm:p-12 space-y-6">
+        <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold">Security Verification</p>
+        <h1 class="font-serif text-4xl text-obsidian">Set New Password</h1>
+
+        <form action="/reset-password" method="POST" class="space-y-4 text-xs">
+            <?= csrf_field() ?>
+            <div>
+                <label class="block uppercase tracking-widest text-stone mb-2">Email Address</label>
+                <input type="email" name="email" value="<?= e($email) ?>" required class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
+            </div>
+            <div>
+                <label class="block uppercase tracking-widest text-stone mb-2">Recovery Token</label>
+                <input type="text" name="token" value="<?= e($token) ?>" required class="w-full bg-ivory border border-hairline px-4 py-3 text-sm font-mono">
+            </div>
+            <div>
+                <label class="block uppercase tracking-widest text-stone mb-2">New Password (Min. 8 Characters)</label>
+                <input type="password" name="password" minlength="8" required class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
+            </div>
+            <button type="submit" class="w-full bg-obsidian text-ivory py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">
+                Update Password
+            </button>
+        </form>
+    </div>
+</div>

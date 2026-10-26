@@ -1,0 +1,173 @@
+<% var $watchedIds = user_watchlist_ids(); %>
+<div class="max-w-[1440px] mx-auto px-4 sm:px-8 py-14">
+    <% if ((typeof $isApproved !== "undefined" && $isApproved !== null) && !$isApproved) { %>
+        <div class="bg-[#3B2A18] text-ivory px-6 py-4 mb-8 border border-bronze flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+            <div>
+                <span class="uppercase tracking-widest text-[10px] text-bronzeLight font-semibold block">Awaiting Curatorial Approval</span>
+                <p>This artist profile is currently <strong>Awaiting Approval</strong> by the Administrator. Only you (and the Administrator) can preview this page until it is approved in the backend.</p>
+            </div>
+            <span class="px-3 py-1 bg-bronze text-white text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap">Pending Admin Approval</span>
+        </div>
+    <% } %>
+
+    <!-- Artist Dossier Header -->
+    <div class="bg-white border border-hairline p-8 sm:p-12 mb-16 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+        <div class="lg:col-span-4 aspect-square bg-alabaster overflow-hidden border border-hairline">
+            <img src="<%- e($artist?.['profile_photo']) %>" alt="<%- e($artist?.['display_name']) %>" class="w-full h-full object-cover">
+        </div>
+        <div class="lg:col-span-8 space-y-6">
+            <div class="flex flex-wrap items-center justify-between gap-4 border-b border-hairline pb-4">
+                <div>
+                    <span class="text-[11px] uppercase tracking-widest text-bronze font-semibold">
+                        Verified Studio Artist · <%- e($artist?.['city'] ? ($artist?.['city'] + ', ' + $artist?.['country']) : $artist?.['country']) %>
+                    </span>
+                    <h1 class="font-serif text-4xl sm:text-5xl text-obsidian mt-1"><%- e($artist?.['display_name']) %></h1>
+                </div>
+
+                <form action="/buyer/artists/follow" method="POST">
+                    <%- csrf_field() %>
+                    <input type="hidden" name="artist_profile_id" value="<%- Number($artist?.['id']) %>">
+                    <button type="submit" class="px-6 py-3 text-xs uppercase tracking-widest border border-obsidian transition <%- $isFollowing ? 'bg-obsidian text-ivory' : 'hover:bg-obsidian hover:text-ivory' %>">
+                        <%- $isFollowing ? '✓ Following Artist' : '+ Follow Artist Alerts' %>
+                    </button>
+                </form>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-6 text-xs">
+                <div>
+                    <p class="text-[10px] uppercase tracking-widest text-stone">Artistic Discipline</p>
+                    <p class="font-medium text-obsidian mt-0.5"><%- e($artist?.['discipline']) %></p>
+                </div>
+                <div>
+                    <p class="text-[10px] uppercase tracking-widest text-stone">Years Active</p>
+                    <p class="font-medium text-obsidian mt-0.5"><%- e($artist?.['years_active'] ?? 'Contemporary') %></p>
+                </div>
+                <div>
+                    <p class="text-[10px] uppercase tracking-widest text-stone">Studio Links</p>
+                    <p class="font-medium text-bronze mt-0.5"><%- e($artist?.['social_instagram'] || 'ArtAlly Archive') %></p>
+                </div>
+            </div>
+
+            <div>
+                <h2 class="text-[11px] uppercase tracking-widest text-stone mb-2">Biography</h2>
+                <p class="text-sm text-charcoal/90 leading-relaxed"><%- e($artist?.['biography']) %></p>
+            </div>
+
+            <% if (!empty($artist?.['artist_statement'])) { %>
+                <blockquote class="border-l-2 border-bronze pl-5 italic font-serif text-xl text-charcoal">
+                    “<%- e($artist?.['artist_statement']) %>”
+                </blockquote>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Curatorial & AI-Powered Authentication Invoices (Download Copy on Artist Page) -->
+    <% if (!empty($authInvoices)) { %>
+        <div class="bg-white border-2 border-bronze p-6 sm:p-8 mb-14 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-hairline pb-4">
+                <div>
+                    <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Independent Connoisseurship &amp; AI Forensic Verification</p>
+                    <h2 class="font-serif text-2xl sm:text-3xl text-obsidian mt-0.5">Curatorial &amp; AI-Powered Authentication Invoices</h2>
+                </div>
+                <span class="bg-obsidian text-bronzeLight text-[10px] uppercase tracking-widest px-3 py-1 font-semibold self-start sm:self-center">
+                    Official Artist Invoice Copy
+                </span>
+            </div>
+
+            <div class="space-y-4">
+                <% for (const $inv of Object.values($authInvoices || [])) { %>
+                    <% var $invPaid = ($inv?.['status'] ?? 'unpaid') === 'paid';
+                       var $invCurrency = $inv?.['currency'] ?? 'USD'; %>
+                    <div class="border border-hairline bg-ivory p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div class="space-y-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-mono text-xs font-bold text-obsidian bg-white border border-hairline px-2.5 py-0.5">
+                                    <%- e($inv?.['invoice_number']) %>
+                                </span>
+                                <span class="text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold <%- $invPaid ? 'bg-[#1A2E22] text-ivory' : 'bg-bronze text-white' %>">
+                                    <%- $invPaid ? '✓ Paid & Verified' : '● Awaiting Payment' %>
+                                </span>
+                            </div>
+                            <h3 class="font-serif text-xl text-obsidian">
+                                Artwork Verified: <span class="italic">"<%- e($inv?.['artwork_title']) %>"</span>
+                            </h3>
+                            <p class="text-xs text-stone">
+                                <%- e($inv?.['service_type']) %>
+                                <% if (!empty($inv?.['payment_account_number'])) { %>
+                                    · Bank: <strong class="text-obsidian"><%- e($inv?.['payment_bank_name']) %> (<%- e($inv?.['payment_account_name']) %> · <%- e($inv?.['payment_account_number']) %>)</strong>
+                                <% } %>
+                                <% if (!empty($inv?.['crypto_wallet_address'])) { %>
+                                    · Crypto: <strong class="text-obsidian"><%- e($inv?.['crypto_currency'] || 'Crypto') %> (<%- e($inv?.['crypto_network'] || 'Mainnet') %> · <span class="font-mono"><%- e($inv?.['crypto_wallet_address']) %></span>)</strong>
+                                <% } %>
+                            </p>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div class="mr-2">
+                                <span class="block text-[10px] uppercase tracking-widest text-stone">Fee To Be Paid</span>
+                                <span class="font-serif text-2xl font-bold text-obsidian">
+                                    <%- format_money_exact(Number($inv?.['fee_amount'] ?? 0), $invCurrency) %> <span class="text-xs font-mono"><%- e($invCurrency) %></span>
+                                </span>
+                            </div>
+                            <a href="/invoices/<%- Number($inv?.['id']) %>/download" class="bg-obsidian text-ivory px-4 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                                ⬇ Download Invoice Copy
+                            </a>
+                            <a href="/invoices/<%- Number($inv?.['id']) %>?print=1" target="_blank" class="border border-obsidian bg-white text-obsidian px-4 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-obsidian hover:text-ivory transition">
+                                🖨 View &amp; Print Invoice
+                            </a>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Approved Works & Auctions by this Artist -->
+    <div>
+        <div class="border-b border-hairline pb-4 mb-8 flex items-end justify-between">
+            <div>
+                <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold">Catalogue Raisonné &amp; Sales</p>
+                <h2 class="font-serif text-3xl sm:text-4xl text-obsidian">Approved Works &amp; Active Lots (<%- count($artworks) %>)</h2>
+            </div>
+        </div>
+
+        <% var $lotsWithBids = array_filter($artworks, ($w) => (Number(($w?.['auction']?.['bid_count'] ?? 0)) > 0) || !empty($w?.['current_bid'])); %>
+        <% if (!empty($lotsWithBids)) { %>
+            <div class="bg-[#1A2E22] text-ivory border border-bronze px-6 py-4 mb-8 space-y-2">
+                <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">🔔 Live Auction Bid Updates for <%- e($artist?.['display_name']) %></p>
+                <div class="flex flex-wrap gap-4 text-xs">
+                    <% for (const $bLot of Object.values($lotsWithBids || [])) { %>
+                        <% var $liveAmt = Number(($bLot?.['auction']?.['current_bid'] ?? $bLot?.['current_bid'] ?? $bLot?.['starting_bid'] ?? 0));
+                           var $bStatus = $bLot?.['auction']?.['status'] ?? 'active';
+                           var $bEndsAt = $bLot?.['auction']?.['ends_at'] ?? ''; %>
+                        <a href="/artworks/<%- e($bLot?.['slug']) %>" class="bg-obsidian/80 border border-bronze/50 px-3.5 py-2 hover:border-ivory transition flex flex-wrap items-center gap-2">
+                            <span class="font-serif text-base text-ivory"><%- e($bLot?.['title']) %>:</span>
+                            <strong class="text-bronzeLight">Current Bid <%- format_money($liveAmt) %></strong>
+                            <% if ($bStatus === 'active' && !empty($bEndsAt)) { %>
+                                <span class="text-[11px] bg-[#1A2E22] border border-bronze/60 px-2 py-0.5 text-ivory font-mono">
+                                    ⏱ <span data-countdown="<%- e($bEndsAt) %>"><%- e(time_remaining_label($bEndsAt)) %></span>
+                                </span>
+                            <% } else if (str_starts_with(String($bStatus), 'closed')) { %>
+                                <span class="text-[10px] uppercase tracking-widest bg-charcoal px-2 py-0.5 text-stone">
+                                    Auction Closed
+                                </span>
+                            <% } %>
+                        </a>
+                    <% } %>
+                </div>
+            </div>
+        <% } %>
+
+        <% if (empty($artworks)) { %>
+            <div class="bg-white border border-hairline p-12 text-center text-xs text-stone">
+                No public lots currently scheduled for this artist. Follow the artist above to receive advance notification of upcoming consignments.
+            </div>
+        <% } else { %>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <% for (const $lot of Object.values($artworks || [])) { %>
+                    <% __output += __renderPartial("partials/artwork-card", { lot: typeof $lot !== "undefined" ? $lot : null, watchedIds: typeof $watchedIds !== "undefined" ? $watchedIds : undefined }); %>
+                <% } %>
+            </div>
+        <% } %>
+    </div>
+</div>

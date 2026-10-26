@@ -1,0 +1,660 @@
+<% var $heroLot = $featuredAuctions[0] ?? null;
+var $watchedIds = user_watchlist_ids(); %>
+
+<!-- Section 1: Editorial Hero & Brand Positioning -->
+<section class="relative border-b border-hairline bg-ivory overflow-hidden">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-8 py-12 lg:py-20">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+            <!-- Left Column: Institutional Typography & Mission -->
+            <div class="lg:col-span-6 space-y-7">
+                <div class="inline-flex items-center space-x-3 border-b border-bronze pb-2">
+                    <span class="w-2 h-2 rounded-full bg-bronze"></span>
+                    <span class="text-[11px] uppercase tracking-widest text-bronze font-semibold">
+                        Borderless Fine Art Saleroom · Curated Timed Auctions
+                    </span>
+                </div>
+
+                <h1 class="font-serif text-5xl sm:text-6xl xl:text-7xl font-normal text-obsidian leading-[1.05] tracking-tight">
+                    Art Worth Discovering. <br>
+                    <span class="italic text-charcoal">Stories Worth Collecting.</span>
+                </h1>
+
+                <p class="text-base sm:text-lg text-charcoal/85 leading-relaxed max-w-xl font-light">
+                    Discover exceptional digital and contemporary works from independent visionaries and established creators—vetted by our curatorial board and delivered through transparent, boundary-free timed auctions.
+                </p>
+
+                <!-- Mission Statement Callout -->
+                <div class="border-l-2 border-bronze bg-alabaster/70 pl-5 pr-6 py-4 max-w-xl">
+                    <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold mb-1">
+                        The ArtAlly Mission
+                    </p>
+                    <p class="font-serif italic text-base sm:text-lg text-obsidian leading-snug">
+                        “To eliminate physical borders in the fine art market by delivering world-class auction experiences directly to creators’ studios and collectors’ screens—democratizing access, elevating digital provenance, and celebrating genuine artistic intent.”
+                    </p>
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2">
+                    <a href="/auctions" class="bg-obsidian text-ivory px-8 py-4 text-xs uppercase tracking-widest font-medium hover:bg-bronze transition text-center">
+                        Enter Virtual Saleroom
+                    </a>
+                    <a href="/sell-your-art" class="border border-obsidian text-obsidian px-8 py-4 text-xs uppercase tracking-widest font-medium hover:bg-obsidian hover:text-ivory transition text-center">
+                        Consign Your Masterpiece
+                    </a>
+                </div>
+
+                <!-- Institutional Highlights -->
+                <div class="grid grid-cols-3 gap-6 pt-6 border-t border-hairline text-xs">
+                    <div>
+                        <p class="font-serif text-2xl font-semibold text-obsidian">72-Hr</p>
+                        <p class="text-[11px] uppercase tracking-wider text-stone mt-0.5">Exhibition Preview</p>
+                    </div>
+                    <div>
+                        <p class="font-serif text-2xl font-semibold text-obsidian">5% – 20%</p>
+                        <p class="text-[11px] uppercase tracking-wider text-stone mt-0.5">Fair Tiered Commission</p>
+                    </div>
+                    <div>
+                        <p class="font-serif text-2xl font-semibold text-obsidian">100%</p>
+                        <p class="text-[11px] uppercase tracking-wider text-stone mt-0.5">Seller Bid Confirmation</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Featured Flagship Lot Presentation -->
+            <div class="lg:col-span-6">
+                <% if ($heroLot) { %>
+                    <div class="bg-white border border-hairline p-4 sm:p-6 shadow-sm">
+                        <div class="relative aspect-[4/3] bg-alabaster overflow-hidden mb-6">
+                            <a href="/artworks/<%- e($heroLot?.['slug']) %>">
+                                <img
+                                    src="<%- e($heroLot?.['primary_image']) %>"
+                                    alt="<%- e($heroLot?.['title']) %>"
+                                    class="w-full h-full object-cover gallery-image-zoom"
+                                >
+                            </a>
+                            <div class="absolute top-4 left-4 bg-obsidian/90 text-ivory text-[10px] uppercase tracking-widest px-3 py-1.5">
+                                Flagship Lot · <%- e($heroLot?.['auction']?.['lot_number'] ?? 'LOT 01') %>
+                            </div>
+                            <div class="absolute bottom-4 right-4 bg-ivory/95 text-obsidian text-[10px] uppercase tracking-widest px-3 py-1.5 border border-hairline font-medium">
+                                Curatorial &amp; AI Authenticated
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-t border-hairline pt-5">
+                            <div>
+                                <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-1">
+                                    <%- e($heroLot?.['artist_name']) %> (<%- e($heroLot?.['artist_country']) %>)
+                                </p>
+                                <h2 class="font-serif text-2xl sm:text-3xl italic text-obsidian">
+                                    <a href="/artworks/<%- e($heroLot?.['slug']) %>" class="hover:text-bronze transition">
+                                        <%- e($heroLot?.['title']) %>, <%- e(String($heroLot?.['year_created'] ?? "")) %>
+                                    </a>
+                                </h2>
+                                <p class="text-xs text-stone mt-1"><%- e($heroLot?.['medium']) %></p>
+                            </div>
+                            <div class="sm:text-right">
+                                <p class="text-[10px] uppercase tracking-widest text-stone">Current Bid</p>
+                                <p class="font-serif text-2xl font-semibold text-obsidian">
+                                    <%- format_money($heroLot?.['auction']?.['current_bid'] ?? $heroLot?.['starting_bid']) %>
+                                </p>
+                                <p class="text-[11px] text-bronze font-medium" data-countdown="<%- e($heroLot?.['auction']?.['ends_at'] ?? '') %>">
+                                    <%- e(time_remaining_label($heroLot?.['auction']?.['ends_at'] ?? '')) %>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section 2: The Vision — Bringing the Auction Room to the Creator -->
+<section class="bg-obsidian text-ivory border-b border-charcoal py-20 lg:py-28">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
+            <div class="lg:col-span-5 space-y-6">
+                <p class="text-[11px] uppercase tracking-widest text-bronzeLight font-semibold">
+                    01 · Our Institutional Manifesto
+                </p>
+                <h2 class="font-serif text-4xl sm:text-5xl lg:text-6xl font-normal leading-[1.08]">
+                    Bringing the Auction Room <span class="italic text-bronzeLight">Directly to the Creator’s Studio.</span>
+                </h2>
+                <div class="w-16 h-px bg-bronze"></div>
+                <p class="text-xs uppercase tracking-widest text-stone leading-relaxed">
+                    No Black-Tie Gatekeeping · No Geographical Barriers · No Opaque Private Backrooms
+                </p>
+            </div>
+
+            <div class="lg:col-span-7 space-y-6 text-gray-300 font-light leading-relaxed text-sm sm:text-base border-l border-charcoal lg:pl-12">
+                <p class="text-lg sm:text-xl font-serif italic text-ivory leading-relaxed">
+                    “We believe an artist shouldn’t need a black-tie invitation, expensive gallery representation, or an international visa to have their work celebrated and competitively valued.”
+                </p>
+                <p>
+                    For centuries, fine art auctioning has been locked inside exclusive physical salerooms in London, New York, and Paris. Independent digital and contemporary creators have spent years producing breathtaking masterpieces, only to be sidelined by geographical isolation, prohibitive gallery overheads, and opaque private sales.
+                </p>
+                <p>
+                    Our vision is simple yet transformative: <strong class="text-ivory font-medium">ArtAlly brings the prestige, drama, and liquidity of a premier auction house directly to the artist’s studio.</strong> By uniting timed, auditable digital auctions with curated editorial storytelling and hybrid specialist + AI authentication, we connect global patrons to authentic talent—seamlessly, anywhere in the world.
+                </p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 border-t border-charcoal text-xs">
+                    <div class="bg-charcoal/50 border border-stone/20 p-5">
+                        <span class="text-bronzeLight font-serif text-2xl block mb-1">24 / 7</span>
+                        <p class="text-gray-300">Borderless virtual salerooms open to verified international collectors.</p>
+                    </div>
+                    <div class="bg-charcoal/50 border border-stone/20 p-5">
+                        <span class="text-bronzeLight font-serif text-2xl block mb-1">AI + Human</span>
+                        <p class="text-gray-300">Dual authentication and valuation by connoisseurship specialists &amp; AI.</p>
+                    </div>
+                    <div class="bg-charcoal/50 border border-stone/20 p-5">
+                        <span class="text-bronzeLight font-serif text-2xl block mb-1">Sovereign</span>
+                        <p class="text-gray-300">Final bid review &amp; confirmation rests with the creator before sale execution.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section 4: The Challenges in Digital Art & The Solutions We Deliver -->
+<section class="bg-alabaster border-y border-hairline py-20 lg:py-24">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-8">
+        <div class="max-w-3xl mb-14">
+            <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-2">
+                02 · Industry Transformation
+            </p>
+            <h2 class="font-serif text-4xl sm:text-5xl font-normal text-obsidian leading-tight">
+                Dismantling Traditional Art Barriers. <span class="italic text-charcoal">Elevating the Digital Saleroom.</span>
+            </h2>
+            <p class="text-sm text-charcoal/80 mt-3 leading-relaxed">
+                How ArtAlly replaces legacy gatekeeping and uncurated marketplace noise with institutional rigor and creator-first economics.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Row 1: Geographic Isolation vs Global Virtual Salerooms -->
+            <div class="bg-white border border-hairline p-8 grid grid-cols-1 sm:grid-cols-12 gap-6 items-start">
+                <div class="sm:col-span-5 border-b sm:border-b-0 sm:border-r border-hairline pb-4 sm:pb-0 sm:pr-6">
+                    <span class="inline-block text-[10px] uppercase tracking-widest text-stone bg-alabaster px-2.5 py-1 mb-2">Legacy Barrier 01</span>
+                    <h3 class="font-serif text-2xl text-charcoal">Geographic Isolation</h3>
+                    <p class="text-xs text-stone mt-2 leading-relaxed">
+                        Exceptional creators outside major cultural capitals rarely gain access to high-net-worth collectors or premier physical auction spaces.
+                    </p>
+                </div>
+                <div class="sm:col-span-7 sm:pl-2">
+                    <span class="inline-block text-[10px] uppercase tracking-widest text-white bg-bronze px-2.5 py-1 mb-2">The ArtAlly Solution</span>
+                    <h3 class="font-serif text-2xl text-obsidian font-semibold">Global Virtual Salerooms</h3>
+                    <p class="text-xs text-charcoal/90 mt-2 leading-relaxed">
+                        Borderless, 24/7 timed auctions open to verified international bidders—placing every independent visionary on a level global stage without shipping or visa hurdles.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Row 2: Lack of Context vs Curated Storytelling -->
+            <div class="bg-white border border-hairline p-8 grid grid-cols-1 sm:grid-cols-12 gap-6 items-start">
+                <div class="sm:col-span-5 border-b sm:border-b-0 sm:border-r border-hairline pb-4 sm:pb-0 sm:pr-6">
+                    <span class="inline-block text-[10px] uppercase tracking-widest text-stone bg-alabaster px-2.5 py-1 mb-2">Legacy Barrier 02</span>
+                    <h3 class="font-serif text-2xl text-charcoal">Lack of Narrative &amp; Context</h3>
+                    <p class="text-xs text-stone mt-2 leading-relaxed">
+                        Open platforms treat digital and contemporary works like anonymous commodities or raw files, stripping away the artist’s creative journey.
+                    </p>
+                </div>
+                <div class="sm:col-span-7 sm:pl-2">
+                    <span class="inline-block text-[10px] uppercase tracking-widest text-white bg-bronze px-2.5 py-1 mb-2">The ArtAlly Solution</span>
+                    <h3 class="font-serif text-2xl text-obsidian font-semibold">Curated Exhibition Storytelling</h3>
+                    <p class="text-xs text-charcoal/90 mt-2 leading-relaxed">
+                        Dedicated catalogue dossiers highlighting the creative philosophy, technical medium, inspiration, and studio provenance behind every individual masterpiece.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Row 3: Market Speculation & Noise vs Curatorial Board & AI Vetting -->
+            <div class="bg-white border border-hairline p-8 grid grid-cols-1 sm:grid-cols-12 gap-6 items-start">
+                <div class="sm:col-span-5 border-b sm:border-b-0 sm:border-r border-hairline pb-4 sm:pb-0 sm:pr-6">
+                    <span class="inline-block text-[10px] uppercase tracking-widest text-stone bg-alabaster px-2.5 py-1 mb-2">Legacy Barrier 03</span>
+                    <h3 class="font-serif text-2xl text-charcoal">Speculation &amp; Marketplace Noise</h3>
+                    <p class="text-xs text-stone mt-2 leading-relaxed">
+                        Uncurated marketplaces suffer from mass-minted spam, copyright ambiguity, unverified attribution, and artificial price manipulation.
+                    </p>
+                </div>
+                <div class="sm:col-span-7 sm:pl-2">
+                    <span class="inline-block text-[10px] uppercase tracking-widest text-white bg-bronze px-2.5 py-1 mb-2">The ArtAlly Solution</span>
+                    <h3 class="font-serif text-2xl text-obsidian font-semibold">Connoisseurship &amp; AI Vetting</h3>
+                    <p class="text-xs text-charcoal/90 mt-2 leading-relaxed">
+                        Every submission undergoes strict evaluation by independent connoisseurship experts and AI-powered authentication models for originality, merit, and technical integrity.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Row 4: Opaque Valuation & Fees vs Transparent Bidding & Direct Settlement -->
+            <div class="bg-white border border-hairline p-8 grid grid-cols-1 sm:grid-cols-12 gap-6 items-start">
+                <div class="sm:col-span-5 border-b sm:border-b-0 sm:border-r border-hairline pb-4 sm:pb-0 sm:pr-6">
+                    <span class="inline-block text-[10px] uppercase tracking-widest text-stone bg-alabaster px-2.5 py-1 mb-2">Legacy Barrier 04</span>
+                    <h3 class="font-serif text-2xl text-charcoal">Opaque 25%–50% Commissions</h3>
+                    <p class="text-xs text-stone mt-2 leading-relaxed">
+                        Traditional gallery and auction consignment extracts 25%–50% in fees, compounded by slow settlement and hidden crating overheads.
+                    </p>
+                </div>
+                <div class="sm:col-span-7 sm:pl-2">
+                    <span class="inline-block text-[10px] uppercase tracking-widest text-white bg-bronze px-2.5 py-1 mb-2">The ArtAlly Solution</span>
+                    <h3 class="font-serif text-2xl text-obsidian font-semibold">5%–20% Commission &amp; Direct Settlement</h3>
+                    <p class="text-xs text-charcoal/90 mt-2 leading-relaxed">
+                        Fair 5%–20% tiered commissions, confidential reserve protection, final bid confirmation by the seller, and rapid direct payout upon settlement.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section 5: Core Platform Value Pillars (For Artists & For Collectors) -->
+<section class="max-w-[1440px] mx-auto px-4 sm:px-8 py-20 lg:py-24">
+    <div class="text-center max-w-3xl mx-auto mb-16">
+        <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-2">
+            03 · Dual-Sided Architecture
+        </p>
+        <h2 class="font-serif text-4xl sm:text-5xl font-normal text-obsidian">
+            Core Platform Value Pillars
+        </h2>
+        <p class="text-sm text-charcoal/80 mt-3">
+            Designed to protect the creative sovereignty of independent artists while guaranteeing verified provenance for discerning collectors.
+        </p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        <!-- Left Pillar Card: For Artists -->
+        <div class="bg-white border border-hairline p-8 sm:p-12 flex flex-col justify-between relative overflow-hidden">
+            <div class="space-y-8">
+                <div class="border-b border-hairline pb-6">
+                    <span class="text-[10px] uppercase tracking-widest px-3 py-1 bg-obsidian text-ivory font-semibold">For Creators &amp; Studios</span>
+                    <h3 class="font-serif text-3xl sm:text-4xl text-obsidian mt-4">
+                        Sovereign Exposure &amp; Fair Valuation
+                    </h3>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="flex items-start space-x-4">
+                        <span class="font-serif text-2xl text-bronze font-semibold leading-none mt-0.5">I.</span>
+                        <div>
+                            <h4 class="font-serif text-xl text-obsidian font-semibold">Your Studio is the Stage</h4>
+                            <p class="text-xs text-charcoal/80 leading-relaxed mt-1">
+                                Launch international timed auctions directly from your studio—free from upfront listing fees, framing overheads, or restrictive gallery exclusivity contracts.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start space-x-4">
+                        <span class="font-serif text-2xl text-bronze font-semibold leading-none mt-0.5">II.</span>
+                        <div>
+                            <h4 class="font-serif text-xl text-obsidian font-semibold">Preserved Curatorial Integrity</h4>
+                            <p class="text-xs text-charcoal/80 leading-relaxed mt-1">
+                                Our curatorial board ensures your masterpiece is exhibited alongside works of equal caliber in a museum-grade editorial environment—never lost in algorithmic clutter.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start space-x-4">
+                        <span class="font-serif text-2xl text-bronze font-semibold leading-none mt-0.5">III.</span>
+                        <div>
+                            <h4 class="font-serif text-xl text-obsidian font-semibold">Secondary Market Royalties &amp; Final Bid Consent</h4>
+                            <p class="text-xs text-charcoal/80 leading-relaxed mt-1">
+                                Review and confirm the winning bid before any sale concludes, while smart provenance tracking ensures you continue to benefit as your work appreciates in future collector resales.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-10 pt-6 border-t border-hairline flex items-center justify-between">
+                <span class="text-[11px] uppercase tracking-widest text-stone">Commission: 5% – 20% Tiered</span>
+                <a href="/register?role=artist" class="text-xs uppercase tracking-widest font-semibold text-obsidian hover:text-bronze transition">
+                    Apply as an Artist →
+                </a>
+            </div>
+        </div>
+
+        <!-- Right Pillar Card: For Collectors -->
+        <div class="bg-obsidian text-ivory border border-charcoal p-8 sm:p-12 flex flex-col justify-between relative overflow-hidden">
+            <div class="space-y-8">
+                <div class="border-b border-charcoal pb-6">
+                    <span class="text-[10px] uppercase tracking-widest px-3 py-1 bg-bronze text-white font-semibold">For Patrons &amp; Collectors</span>
+                    <h3 class="font-serif text-3xl sm:text-4xl text-ivory mt-4">
+                        Verified Provenance &amp; Confident Discovery
+                    </h3>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="flex items-start space-x-4">
+                        <span class="font-serif text-2xl text-bronzeLight font-semibold leading-none mt-0.5">I.</span>
+                        <div>
+                            <h4 class="font-serif text-xl text-ivory font-semibold">Curated Excellence</h4>
+                            <p class="text-xs text-gray-300 leading-relaxed mt-1">
+                                Spend zero time filtering through speculative digital noise. Acquire vetted masterpieces with documented conceptual depth, exhibition history, and specialist valuation notes.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start space-x-4">
+                        <span class="font-serif text-2xl text-bronzeLight font-semibold leading-none mt-0.5">II.</span>
+                        <div>
+                            <h4 class="font-serif text-xl text-ivory font-semibold">Transparent Timed Auctions</h4>
+                            <p class="text-xs text-gray-300 leading-relaxed mt-1">
+                                Experience fair, auditable bidding countdowns with anonymous collector paddles, clear reserve status indicators, and automated 5-minute anti-sniping protection.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start space-x-4">
+                        <span class="font-serif text-2xl text-bronzeLight font-semibold leading-none mt-0.5">III.</span>
+                        <div>
+                            <h4 class="font-serif text-xl text-ivory font-semibold">Digital Custody &amp; Signed Provenance</h4>
+                            <p class="text-xs text-gray-300 leading-relaxed mt-1">
+                                Receive an immutable ArtAlly Certificate of Authenticity &amp; Provenance tied directly to the creator’s signature and our independent authentication ledger.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-10 pt-6 border-t border-charcoal flex items-center justify-between">
+                <span class="text-[11px] uppercase tracking-widest text-stone">100% Authenticity Guarantee</span>
+                <a href="/auctions" class="text-xs uppercase tracking-widest font-semibold text-bronzeLight hover:text-white transition">
+                    Browse Active Lots →
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section 6: How It Works — The 6-Step Institutional Auction Protocol -->
+<section class="bg-ivory border-y border-hairline py-20 lg:py-24">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-8">
+        <div class="flex flex-col lg:flex-row lg:items-end justify-between mb-14 border-b border-hairline pb-6 gap-6">
+            <div>
+                <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-2">
+                    04 · The Consignment &amp; Bidding Protocol
+                </p>
+                <h2 class="font-serif text-4xl sm:text-5xl font-normal text-obsidian">
+                    How ArtAlly Works: From Studio to Settlement
+                </h2>
+            </div>
+            <p class="text-xs text-stone max-w-md leading-relaxed">
+                Every masterpiece follows a transparent, six-stage curatorial and transactional protocol—combining specialist connoisseurship, a 72-hour exhibition window, and seller confirmation.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <!-- Step 1 -->
+            <div class="bg-white border border-hairline p-8 flex flex-col justify-between group hover:border-bronze transition">
+                <div>
+                    <div class="flex items-center justify-between mb-6">
+                        <span class="font-serif text-4xl text-bronze font-semibold">01</span>
+                        <span class="text-[10px] uppercase tracking-widest px-2.5 py-1 bg-alabaster text-obsidian font-medium">Onboarding</span>
+                    </div>
+                    <h3 class="font-serif text-2xl text-obsidian mb-3">Register &amp; Get Approved</h3>
+                    <p class="text-xs text-charcoal/80 leading-relaxed">
+                        Artists and sellers complete the studio registration dossier and await curatorial onboarding approval before listing their masterpieces on the platform.
+                    </p>
+                </div>
+                <p class="text-[10px] uppercase tracking-widest text-stone mt-6 pt-4 border-t border-hairline">
+                    Verified Studio &amp; Identity Credentials
+                </p>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="bg-white border border-hairline p-8 flex flex-col justify-between group hover:border-bronze transition">
+                <div>
+                    <div class="flex items-center justify-between mb-6">
+                        <span class="font-serif text-4xl text-bronze font-semibold">02</span>
+                        <span class="text-[10px] uppercase tracking-widest px-2.5 py-1 bg-alabaster text-obsidian font-medium">Curatorial Dossier</span>
+                    </div>
+                    <h3 class="font-serif text-2xl text-obsidian mb-3">Upload &amp; Showcase Your Masterpiece</h3>
+                    <p class="text-xs text-charcoal/80 leading-relaxed">
+                        Approved creators upload high-definition imagery accompanied by a rich catalogue narrative detailing the story, technical medium, inspiration, and creative vision behind the work.
+                    </p>
+                </div>
+                <p class="text-[10px] uppercase tracking-widest text-stone mt-6 pt-4 border-t border-hairline">
+                    High-Resolution Visuals &amp; Artist Essay
+                </p>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="bg-white border border-hairline p-8 flex flex-col justify-between group hover:border-bronze transition">
+                <div>
+                    <div class="flex items-center justify-between mb-6">
+                        <span class="font-serif text-4xl text-bronze font-semibold">03</span>
+                        <span class="text-[10px] uppercase tracking-widest px-2.5 py-1 bg-alabaster text-obsidian font-medium">Connoisseurship + AI</span>
+                    </div>
+                    <h3 class="font-serif text-2xl text-obsidian mb-3">Independent Authentication &amp; Evaluation</h3>
+                    <p class="text-xs text-charcoal/80 leading-relaxed">
+                        Every submitted work undergoes rigorous evaluation by our independent connoisseurship specialists and AI-powered authentication services to verify originality and establish fair auction estimates.
+                    </p>
+                </div>
+                <p class="text-[10px] uppercase tracking-widest text-stone mt-6 pt-4 border-t border-hairline">
+                    Dual Specialist &amp; AI Valuation Certificate
+                </p>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="bg-white border border-hairline p-8 flex flex-col justify-between group hover:border-bronze transition">
+                <div>
+                    <div class="flex items-center justify-between mb-6">
+                        <span class="font-serif text-4xl text-bronze font-semibold">04</span>
+                        <span class="text-[10px] uppercase tracking-widest px-2.5 py-1 bg-alabaster text-obsidian font-medium">72-Hour Preview</span>
+                    </div>
+                    <h3 class="font-serif text-2xl text-obsidian mb-3">Exhibition Preview &amp; Timed Bidding</h3>
+                    <p class="text-xs text-charcoal/80 leading-relaxed">
+                        Once authenticated, the masterpiece enters a 72-hour advance exhibition preview with interviews and catalogue notes before live timed bidding opens with real-time countdowns.
+                    </p>
+                </div>
+                <p class="text-[10px] uppercase tracking-widest text-stone mt-6 pt-4 border-t border-hairline">
+                    Bidding Begins After 72-Hour Exhibition Window
+                </p>
+            </div>
+
+            <!-- Step 5 -->
+            <div class="bg-white border border-hairline p-8 flex flex-col justify-between group hover:border-bronze transition">
+                <div>
+                    <div class="flex items-center justify-between mb-6">
+                        <span class="font-serif text-4xl text-bronze font-semibold">05</span>
+                        <span class="text-[10px] uppercase tracking-widest px-2.5 py-1 bg-alabaster text-obsidian font-medium">Creator Consent</span>
+                    </div>
+                    <h3 class="font-serif text-2xl text-obsidian mb-3">Final Bid Review &amp; Seller Confirmation</h3>
+                    <p class="text-xs text-charcoal/80 leading-relaxed">
+                        At the conclusion of bidding, the seller is notified of the highest bid and reviews the offer. The transaction proceeds only upon the seller’s formal confirmation and acceptance of the final bid.
+                    </p>
+                </div>
+                <p class="text-[10px] uppercase tracking-widest text-stone mt-6 pt-4 border-t border-hairline">
+                    100% Seller Sovereignty Over Final Hammer
+                </p>
+            </div>
+
+            <!-- Step 6 -->
+            <div class="bg-white border border-hairline p-8 flex flex-col justify-between group hover:border-bronze transition">
+                <div>
+                    <div class="flex items-center justify-between mb-6">
+                        <span class="font-serif text-4xl text-bronze font-semibold">06</span>
+                        <span class="text-[10px] uppercase tracking-widest px-2.5 py-1 bg-bronze text-white font-medium">5% – 20% Fee Tier</span>
+                    </div>
+                    <h3 class="font-serif text-2xl text-obsidian mb-3">Transparent Commission &amp; Settlement</h3>
+                    <p class="text-xs text-charcoal/80 leading-relaxed">
+                        Our platform applies a transparent 5% to 20% commission structured by category and artwork value. Upon settlement, the Certificate of Authenticity and master asset transfer as proceeds remit directly to the creator.
+                    </p>
+                </div>
+                <p class="text-[10px] uppercase tracking-widest text-stone mt-6 pt-4 border-t border-hairline">
+                    Direct Creator Payout &amp; Provenance Transfer
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section 7: Upcoming Auctions Editorial Preview -->
+<% if (!empty($upcomingAuctions)) { %>
+<section class="bg-alabaster border-b border-hairline py-20">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-8">
+        <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 border-b border-hairline pb-6">
+            <div>
+                <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-2">72-Hour Advance Exhibition Catalogue</p>
+                <h2 class="font-serif text-4xl sm:text-5xl font-normal text-obsidian">Upcoming Evening Sales</h2>
+            </div>
+            <a href="/upcoming-auctions" class="mt-4 md:mt-0 text-xs uppercase tracking-widest text-obsidian hover:text-bronze transition font-semibold">
+                Explore Upcoming Calendar →
+            </a>
+        </div>
+
+        <% for (const $upLot of Object.values($upcomingAuctions || [])) { %>
+            <div class="bg-white border border-hairline grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+                <div class="lg:col-span-5 aspect-[4/3] lg:aspect-auto bg-obsidian overflow-hidden">
+                    <img src="<%- e($upLot?.['primary_image']) %>" alt="<%- e($upLot?.['title']) %>" class="w-full h-full object-cover">
+                </div>
+                <div class="lg:col-span-7 p-8 sm:p-12 flex flex-col justify-between">
+                    <div class="space-y-4">
+                        <div class="flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-widest">
+                            <span class="bg-obsidian text-ivory px-3 py-1"><%- e($upLot?.['auction']?.['title'] ?? 'Upcoming Flagship Sale') %></span>
+                            <span class="text-bronze font-semibold">Opens <%- e(gmdate('d M Y · H:i', strtotime($upLot?.['auction']?.['starts_at']))) %> UTC</span>
+                        </div>
+                        <h3 class="font-serif text-3xl sm:text-4xl text-obsidian">
+                            <%- e($upLot?.['artist_name']) %> — <span class="italic"><%- e($upLot?.['title']) %></span>
+                        </h3>
+                        <p class="text-sm text-charcoal/80 leading-relaxed max-w-2xl">
+                            <%- e($upLot?.['description']) %>
+                        </p>
+                    </div>
+
+                    <div class="mt-8 pt-6 border-t border-hairline flex flex-wrap items-center justify-between gap-6">
+                        <div class="flex items-center space-x-8">
+                            <div>
+                                <p class="text-[10px] uppercase tracking-widest text-stone">Estimate Range</p>
+                                <p class="font-serif text-xl font-semibold text-obsidian">
+                                    <%- format_money($upLot?.['estimate_low']) %> – <%- format_money($upLot?.['estimate_high']) %>
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] uppercase tracking-widest text-stone">Opening Bid</p>
+                                <p class="font-serif text-xl font-semibold text-obsidian">
+                                    <%- format_money($upLot?.['starting_bid']) %>
+                                </p>
+                            </div>
+                        </div>
+                        <a href="/artworks/<%- e($upLot?.['slug']) %>" class="bg-obsidian text-ivory px-7 py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">
+                            Preview Lot &amp; Register Interest
+                        </a>
+                    </div>
+                </div>
+            </div>
+        <% } %>
+    </div>
+</section>
+<% } %>
+
+<!-- Section 9: Discover Curated Artists (Typographical Artist Roster — Names Only) -->
+<section class="bg-white border-y border-hairline py-20">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-8">
+        <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 border-b border-hairline pb-6">
+            <div>
+                <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-2">The Artist Roster</p>
+                <h2 class="font-serif text-4xl sm:text-5xl font-normal text-obsidian">Discover Represented Creators</h2>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <% for (const $artist of Object.values($artists || [])) { %>
+                <a href="/artists/<%- e($artist?.['slug']) %>" class="group border border-hairline bg-ivory px-7 py-8 flex items-center justify-between hover:border-bronze hover:bg-alabaster/60 transition">
+                    <h3 class="font-serif text-2xl sm:text-3xl text-obsidian group-hover:text-bronze transition">
+                        <%- e($artist?.['display_name']) %>
+                    </h3>
+                    <span class="text-stone group-hover:text-bronze transition text-sm">→</span>
+                </a>
+            <% } %>
+        </div>
+    </div>
+</section>
+
+<!-- Section 10: Editorial Stories & Journal -->
+<section class="max-w-[1440px] mx-auto px-4 sm:px-8 py-20">
+    <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 border-b border-hairline pb-6">
+        <div>
+            <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-2">Editorial &amp; Market Intelligence</p>
+            <h2 class="font-serif text-4xl sm:text-5xl font-normal text-obsidian">Stories &amp; Curatorial Journal</h2>
+        </div>
+        <a href="/journal" class="mt-4 md:mt-0 text-xs uppercase tracking-widest text-obsidian hover:text-bronze transition font-semibold">
+            Read All Stories →
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <% for (const $article of Object.values($articles || [])) { %>
+            <article class="group bg-white border border-hairline flex flex-col justify-between">
+                <div>
+                    <a href="/journal/<%- e($article?.['slug']) %>" class="block aspect-[16/10] overflow-hidden bg-alabaster">
+                        <img
+                            src="<%- e($article?.['image']) %>"
+                            alt="<%- e($article?.['title']) %>"
+                            loading="lazy"
+                            class="w-full h-full object-cover gallery-image-zoom"
+                        >
+                    </a>
+                    <div class="p-6">
+                        <div class="flex items-center justify-between text-[10px] uppercase tracking-widest text-bronze font-semibold mb-2">
+                            <span><%- e($article?.['category']) %></span>
+                            <span class="text-stone"><%- e($article?.['reading_time'] ?? '5 min read') %></span>
+                        </div>
+                        <h3 class="font-serif text-2xl text-obsidian group-hover:text-bronze transition leading-snug mb-3">
+                            <a href="/journal/<%- e($article?.['slug']) %>"><%- e($article?.['title']) %></a>
+                        </h3>
+                        <p class="text-xs text-charcoal/80 leading-relaxed line-clamp-3">
+                            <%- e($article?.['excerpt']) %>
+                        </p>
+                    </div>
+                </div>
+                <div class="px-6 pb-6 pt-3 border-t border-hairline flex items-center justify-between text-[11px] text-stone">
+                    <span>By <%- e($article?.['author']) %></span>
+                    <a href="/journal/<%- e($article?.['slug']) %>" class="uppercase tracking-widest text-obsidian font-semibold group-hover:text-bronze">Read →</a>
+                </div>
+            </article>
+        <% } %>
+    </div>
+</section>
+
+<!-- Section 11: Sell Your Art Call-To-Action -->
+<section class="bg-obsidian text-ivory py-24 border-t border-charcoal">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-8 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        <div class="lg:col-span-7 space-y-6">
+            <p class="text-[11px] uppercase tracking-widest text-bronzeLight font-semibold">Consign With ArtAlly</p>
+            <h2 class="font-serif text-4xl sm:text-6xl font-normal leading-tight">
+                Your Studio is the Stage. <span class="italic text-bronzeLight">Your Art Deserves the World.</span>
+            </h2>
+            <p class="text-gray-300 text-sm sm:text-base leading-relaxed max-w-2xl font-light">
+                Join an international roster of independent visionaries and private consignors. Submit your masterpiece for independent connoisseurship &amp; AI evaluation, launch after a 72-hour advance exhibition preview, and retain final confirmation over the winning bid.
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-4 text-xs border-t border-charcoal">
+                <div>
+                    <span class="text-bronzeLight font-serif text-xl block mb-1">01. Hybrid Vetting</span>
+                    <p class="text-stone">Independent connoisseurship experts &amp; AI-powered authentication verify every work.</p>
+                </div>
+                <div>
+                    <span class="text-bronzeLight font-serif text-xl block mb-1">02. 72-Hour Launch</span>
+                    <p class="text-stone">Accepted works feature in a 72-hour advance exhibition before timed bidding begins.</p>
+                </div>
+                <div>
+                    <span class="text-bronzeLight font-serif text-xl block mb-1">03. 5%–20% Commission</span>
+                    <p class="text-stone">Fair, tiered commissions with seller final-bid confirmation and direct payouts.</p>
+                </div>
+            </div>
+        </div>
+        <div class="lg:col-span-5 flex flex-col items-start lg:items-end justify-center">
+            <div class="bg-charcoal/60 border border-stone/30 p-8 sm:p-10 w-full max-w-md space-y-6">
+                <h3 class="font-serif text-2xl text-ivory">Begin Your Consignment</h3>
+                <p class="text-xs text-gray-300 leading-relaxed">
+                    Transparent commission structure ranging from <strong>5% to 20%</strong> based on category and valuation. Zero upfront listing fees and 100% seller confirmation on final bids.
+                </p>
+                <a href="/artist/submit" class="block w-full text-center bg-bronze text-white py-4 text-xs uppercase tracking-widest font-medium hover:bg-bronzeLight transition">
+                    Submit Your Masterpiece
+                </a>
+                <a href="/sell-your-art" class="block w-full text-center border border-stone/50 text-ivory py-3.5 text-xs uppercase tracking-widest hover:border-ivory transition">
+                    Explore Full Consignment Guide
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
