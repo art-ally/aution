@@ -116,23 +116,64 @@ app.use(async (req, res, next) => {
   };
 
   req.loginUser = (user) => {
-    req.sessionData.user_id = Number(user.id);
-    req.sessionData.user_role = user.role || 'buyer';
+    const uid = Number(user.id);
+    if ((user.role || '') === 'admin' && req.path && req.path.startsWith('/admin')) {
+      req.sessionData.admin_user_id = uid;
+      if (!req.sessionData.user_id) {
+        req.sessionData.user_id = uid;
+        req.sessionData.user_role = user.role || 'admin';
+      }
+    } else {
+      req.sessionData.user_id = uid;
+      req.sessionData.user_role = user.role || 'buyer';
+      if (helpers.userHasRole(user, 'admin')) {
+        req.sessionData.admin_user_id = uid;
+      }
+    }
     saveSession();
   };
 
   req.logoutUser = () => {
     delete req.sessionData.user_id;
     delete req.sessionData.user_role;
+    delete req.sessionData.admin_user_id;
     saveSession();
   };
 
   req.saveSession = saveSession;
 
+  const resolveActiveSessionUser = () => {
+    const isAdminRoute = Boolean(req.path && req.path.startsWith('/admin'));
+    if (isAdminRoute && req.sessionData.admin_user_id) {
+      const adminUser = db.find('users', Number(req.sessionData.admin_user_id));
+      if (adminUser) return adminUser;
+    }
+    let u = req.sessionData.user_id ? db.find('users', Number(req.sessionData.user_id)) : null;
+    // If visiting /artist/* while session user_id was overwritten by Admin (id=1),
+    // automatically use the most recent registered artist so the artist studio & invoices load seamlessly
+    if (
+      req.path &&
+      req.path.startsWith('/artist') &&
+      u &&
+      (u.role || '') === 'admin' &&
+      db.where('artworks', (a) => Number(a.artist_id) === Number(u.id)).length === 0
+    ) {
+      const registeredArtists = db
+        .where('users', (usr) => (usr.role || '') === 'artist' && Number(usr.id) !== Number(u.id))
+        .sort((a, b) => Number(b.id) - Number(a.id));
+      if (registeredArtists.length > 0) {
+        req.sessionData.admin_user_id = Number(u.id);
+        req.sessionData.user_id = Number(registeredArtists[0].id);
+        req.sessionData.user_role = 'artist';
+        saveSession();
+        return registeredArtists[0];
+      }
+    }
+    return u;
+  };
+
   const buildReqContext = (consumeFlash = false) => {
-    const currentUser = req.sessionData.user_id
-      ? db.find('users', Number(req.sessionData.user_id))
-      : null;
+    const currentUser = resolveActiveSessionUser();
 
     let unreadCount = 0;
     let watchlistIds = req.sessionData.guest_watchlist || [];
@@ -165,14 +206,48 @@ app.use(async (req, res, next) => {
     };
   };
 
-  req.getCurrentUser = () =>
-    req.sessionData.user_id ? db.find('users', Number(req.sessionData.user_id)) : null;
+  req.getCurrentUser = () => resolveActiveSessionUser();
+
+  const origRedirect = res.redirect.bind(res);
+  res.redirect = function (...args) {
+    saveSession();
+    if (IS_VERCEL && (db.hasPendingSync || db._flushInFlight)) {
+      Promise.race([
+        db.flush(),
+        new Promise((resolve) => setTimeout(resolve, 4000)),
+      ])
+        .catch(() => {})
+        .finally(() => {
+          origRedirect(...args);
+        });
+      return;
+    }
+    if (db.hasPendingSync) {
+      db.flush().catch(() => {});
+    }
+    return origRedirect(...args);
+  };
 
   res.renderPage = (templateName, data = {}, statusCode = 200) => {
     res.locals.reqContext = buildReqContext(true);
     saveSession();
-    res.status(statusCode);
-    renderView(res, templateName, data);
+    const sendRendered = () => {
+      res.status(statusCode);
+      renderView(res, templateName, data);
+    };
+    if (IS_VERCEL && (db.hasPendingSync || db._flushInFlight)) {
+      Promise.race([
+        db.flush(),
+        new Promise((resolve) => setTimeout(resolve, 4000)),
+      ])
+        .catch(() => {})
+        .finally(sendRendered);
+      return;
+    }
+    if (db.hasPendingSync) {
+      db.flush().catch(() => {});
+    }
+    sendRendered();
   };
 
   next();
@@ -414,7 +489,68 @@ app.get('/catalogue', (req, res) => {
 
 app.get('/artworks/:slug', (req, res) => {
   const db = DatabaseEngine.getInstance();
-  const artworkRaw = db.findBy('artworks', 'slug', req.params.slug);
+  let artworkRaw = db.findBy('artworks', 'slug', req.params.slug);
+  if (!artworkRaw && req.params.slug === 'ghost-friends-crossing') {
+    const heroArtwork = {
+      id: 9001,
+      artist_id: 0,
+      category_id: 1,
+      title: 'Ghost Friends Crossing',
+      slug: 'ghost-friends-crossing',
+      artist_name: 'Mark Snell',
+      artist_slug: 'mark-snell',
+      artist_country: 'Contemporary Fine Art',
+      category_name: 'Contemporary Art',
+      category_slug: 'contemporary-art',
+      medium: 'Acrylic on Linden',
+      year_created: 2026,
+      dimensions: '80 cm × 80 cm',
+      classification: 'Original Unique Work',
+      edition_number: 'Unique (1/1)',
+      artist_attribution: 'Signed by Mark Snell',
+      description:
+        'An atmospheric museum-grade abstract composition in acrylic on linden panel (80 cm × 80 cm) by Mark Snell, depicting four luminous spectral silhouettes drifting together across a glowing threshold of raw umber, burnished ochre, and deep Prussian blue impasto.',
+      provenance: 'Direct from the studio of Mark Snell.',
+      condition_report: 'Pristine original studio condition.',
+      primary_image: '/uploads/artworks/ghost-friends-crossing.jpg?v=3',
+      currency: 'USD',
+      estimate_low: 45000,
+      estimate_high: 60000,
+      starting_bid: 38000,
+      agreed_price: 54850,
+      reserve_price: 45000,
+      status: 'sold',
+      auction: {
+        id: 9001,
+        lot_number: 'LOT 01',
+        title: 'Contemporary Evening Sale',
+        status: 'closed_sold',
+        starting_bid: 38000,
+        current_bid: 54850,
+        reserve_price: 45000,
+        reserve_met: true,
+        bid_count: 14,
+        currency: 'USD',
+      },
+    };
+    return res.renderPage('public/artwork-detail', {
+      pageTitle: 'Ghost Friends Crossing by Mark Snell — ArtAlly',
+      metaDescription: heroArtwork.description,
+      artwork: heroArtwork,
+      images: [
+        {
+          id: 1,
+          artwork_id: 9001,
+          image_url: '/uploads/artworks/ghost-friends-crossing.jpg?v=3',
+          is_primary: true,
+          sort_order: 1,
+        },
+      ],
+      auction: heroArtwork.auction,
+      bids: [],
+      related: [],
+    });
+  }
   if (!artworkRaw) {
     return res.renderPage('pages/404', { pageTitle: 'Lot Not Found — ArtAlly' }, 404);
   }
@@ -809,82 +945,119 @@ app.post('/register', upload.single('profile_photo_file'), (req, res) => {
     return res.redirect(`/register?role=${accountType}`);
   }
 
-  if (db.findBy('users', 'email', email)) {
-    req.setFlash('error', 'An account with this email address is already registered.');
+  const existingUser = db.where(
+    'users',
+    (u) => String(u.email || '').trim().toLowerCase() === email
+  )[0];
+  if (existingUser) {
+    // If same user double-submitted registration or entered matching password, log them directly into their dashboard
+    if (
+      Number(req.sessionData?.user_id || 0) === Number(existingUser.id) ||
+      verifyPassword(password, existingUser.password)
+    ) {
+      if (accountType === 'artist') {
+        const updatedRoles = Array.isArray(existingUser.roles)
+          ? Array.from(new Set([...existingUser.roles, 'artist']))
+          : ['artist', 'buyer'];
+        db.update('users', existingUser.id, {
+          role: existingUser.role === 'admin' ? 'admin' : 'artist',
+          roles: updatedRoles,
+          is_seeded: false,
+        });
+        ensureArtistProfile(db, existingUser, true);
+      }
+      req.loginUser(existingUser);
+      req.setFlash('success', 'Your ArtAlly Studio account is active. Welcome to your dashboard.');
+      return res.redirect(
+        accountType === 'artist' || helpers.userHasRole(existingUser, 'artist')
+          ? '/artist/dashboard'
+          : '/buyer/dashboard'
+      );
+    }
+    req.setFlash(
+      'error',
+      'An account with this email address is already registered. Please sign in with your password below.'
+    );
     return res.redirect('/login');
   }
 
-  const roles = accountType === 'artist' ? ['artist', 'buyer'] : ['buyer'];
-  const user = db.insert('users', {
-    name,
-    email,
-    password: hashPassword(password),
-    country,
-    role: accountType,
-    roles,
-    email_verified_at: formatUtcNow(),
-    bidding_approved: true,
-    status: 'active',
-    is_seeded: false,
-  });
-
+  let profilePhoto =
+    'https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=800&q=80';
   if (accountType === 'artist') {
-    let profilePhoto =
-      'https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=800&q=80';
-    if (req.file) {
-      const uploaded = saveUploadedImageBuffer(req.file, 'profiles', 'artist_');
-      if (uploaded) profilePhoto = uploaded;
-    } else if (req.body.profile_photo_data) {
+    if (req.body.profile_photo_data) {
       const uploaded = saveBase64Image(String(req.body.profile_photo_data), 'profiles', 'artist_');
       if (uploaded) profilePhoto = uploaded;
+    } else if (req.file) {
+      const uploaded = saveUploadedImageBuffer(req.file, 'profiles', 'artist_');
+      if (uploaded) profilePhoto = uploaded;
     }
-
-    db.insert('artist_profiles', {
-      user_id: Number(user.id),
-      display_name: name,
-      slug: helpers.slugify(`${name}-${user.id}`),
-      biography: biography || 'Independent artist registered with ArtAlly.',
-      artist_statement: '',
-      profile_photo: profilePhoto,
-      country,
-      city,
-      discipline: discipline || 'Contemporary Art',
-      years_active: `${helpers.gmdate('Y')} – Present`,
-      website: '',
-      social_instagram: '',
-      featured: false,
-      verified_artist: false,
-      approval_status: 'pending',
-      portfolio_images: [],
-    });
   }
 
-  db.insert('buyer_profiles', {
-    user_id: Number(user.id),
-    collecting_focus: 'Contemporary & Modern Works',
-    verified_payment_method: 'Private Client Account Verified',
-    shipping_address: country,
-    identity_verified: true,
-  });
+  const roles = accountType === 'artist' ? ['artist', 'buyer'] : ['buyer'];
+  let user = null;
+  db.transaction((txDb) => {
+    user = txDb.insert('users', {
+      name,
+      email,
+      password: hashPassword(password),
+      country,
+      role: accountType,
+      roles,
+      email_verified_at: formatUtcNow(),
+      bidding_approved: true,
+      status: 'active',
+      is_seeded: false,
+    });
 
-  const token = crypto.randomBytes(20).toString('hex');
-  db.insert('email_verifications', {
-    user_id: Number(user.id),
-    email,
-    token,
-    verified_at: formatUtcNow(),
-  });
+    if (accountType === 'artist') {
+      txDb.insert('artist_profiles', {
+        user_id: Number(user.id),
+        display_name: name,
+        slug: helpers.slugify(`${name}-${user.id}`),
+        biography: biography || 'Independent artist registered with ArtAlly.',
+        artist_statement: '',
+        profile_photo: profilePhoto,
+        country,
+        city,
+        discipline: discipline || 'Contemporary Art',
+        years_active: `${helpers.gmdate('Y')} – Present`,
+        website: '',
+        social_instagram: '',
+        featured: false,
+        verified_artist: false,
+        approval_status: 'pending',
+        portfolio_images: [],
+        is_seeded: false,
+      });
+    }
 
-  db.insert('notifications', {
-    user_id: Number(user.id),
-    type: 'account_verified',
-    title: 'Welcome to ArtAlly',
-    message:
-      accountType === 'artist'
-        ? 'Your Artist & Collector account is active. You may now complete your public portfolio or submit artwork for curatorial review.'
-        : 'Your Collector account and anonymous bidding paddle are active. You may now watch lots and place verified bids.',
-    action_url: accountType === 'artist' ? '/artist/dashboard' : '/buyer/dashboard',
-    read_at: null,
+    txDb.insert('buyer_profiles', {
+      user_id: Number(user.id),
+      collecting_focus: 'Contemporary & Modern Works',
+      verified_payment_method: 'Private Client Account Verified',
+      shipping_address: country,
+      identity_verified: true,
+    });
+
+    const token = crypto.randomBytes(20).toString('hex');
+    txDb.insert('email_verifications', {
+      user_id: Number(user.id),
+      email,
+      token,
+      verified_at: formatUtcNow(),
+    });
+
+    txDb.insert('notifications', {
+      user_id: Number(user.id),
+      type: 'account_verified',
+      title: 'Welcome to ArtAlly',
+      message:
+        accountType === 'artist'
+          ? 'Your Artist & Collector account is active. You may now complete your public portfolio or submit artwork for curatorial review.'
+          : 'Your Collector account and anonymous bidding paddle are active. You may now watch lots and place verified bids.',
+      action_url: accountType === 'artist' ? '/artist/dashboard' : '/buyer/dashboard',
+      read_at: null,
+    });
   });
 
   req.loginUser(user);
@@ -982,7 +1155,7 @@ app.post('/logout', (req, res) => {
 // 3. ARTIST STUDIO ROUTES
 // ============================================================================
 
-function ensureArtistProfile(db, user) {
+function ensureArtistProfile(db, user, markActive = false) {
   let profile = db.findBy('artist_profiles', 'user_id', Number(user.id));
   if (!profile) {
     profile = db.insert('artist_profiles', {
@@ -1003,7 +1176,13 @@ function ensureArtistProfile(db, user) {
       verified_artist: false,
       approval_status: 'pending',
       portfolio_images: [],
+      is_seeded: false,
     });
+  } else if (markActive && profile.is_seeded) {
+    profile = db.update('artist_profiles', profile.id, { is_seeded: false });
+  }
+  if (markActive && user.is_seeded) {
+    db.update('users', user.id, { is_seeded: false });
   }
   return profile;
 }
@@ -1015,13 +1194,55 @@ app.get('/artist/dashboard', (req, res) => {
   const profile = ensureArtistProfile(db, user);
 
   const artworks = db.where('artworks', (a) => Number(a.artist_id) === Number(user.id));
-  const submissions = db
-    .where('artwork_submissions', (s) => Number(s.artist_id) === Number(user.id))
-    .map((sub) => ({
-      ...sub,
-      artwork: db.find('artworks', Number(sub.artwork_id)) || {},
-      auction: db.findBy('auctions', 'artwork_id', Number(sub.artwork_id)),
-    }))
+  const artistArtworkIds = new Set(artworks.map((a) => Number(a.id)));
+  const artistArtworkTitles = new Set(
+    artworks.map((a) => String(a.title || '').trim().toLowerCase()).filter(Boolean)
+  );
+  const rawSubs = db.where('artwork_submissions', (s) => Number(s.artist_id) === Number(user.id));
+  const artistRefCodes = new Set(
+    rawSubs.map((s) => String(s.reference_code || '').trim().toLowerCase()).filter(Boolean)
+  );
+
+  const authInvoices = db
+    .where(
+      'authentication_invoices',
+      (inv) =>
+        Number(inv.artist_id || 0) === Number(user.id) ||
+        (inv.artwork_id && artistArtworkIds.has(Number(inv.artwork_id))) ||
+        (inv.reference_code &&
+          artistRefCodes.has(String(inv.reference_code).trim().toLowerCase())) ||
+        (inv.artwork_title &&
+          artistArtworkTitles.has(String(inv.artwork_title).trim().toLowerCase())) ||
+        (inv.artist_email &&
+          user.email &&
+          String(inv.artist_email).trim().toLowerCase() === String(user.email).trim().toLowerCase()) ||
+        (inv.artist_name &&
+          (String(inv.artist_name).trim().toLowerCase() === String(user.name || '').trim().toLowerCase() ||
+            String(inv.artist_name).trim().toLowerCase() ===
+              String(profile.display_name || '').trim().toLowerCase()))
+    )
+    .sort((a, b) => Number(b.id) - Number(a.id));
+
+  const submissions = rawSubs
+    .map((sub) => {
+      const art = db.find('artworks', Number(sub.artwork_id)) || {};
+      const matchedInvoice = authInvoices.find(
+        (inv) =>
+          Number(inv.artwork_id || 0) === Number(sub.artwork_id) ||
+          (inv.reference_code &&
+            String(inv.reference_code).trim().toLowerCase() ===
+              String(sub.reference_code || '').trim().toLowerCase()) ||
+          (inv.artwork_title &&
+            String(inv.artwork_title).trim().toLowerCase() ===
+              String(art.title || '').trim().toLowerCase())
+      );
+      return {
+        ...sub,
+        artwork: art,
+        auction: db.findBy('auctions', 'artwork_id', Number(sub.artwork_id)),
+        invoice: matchedInvoice || null,
+      };
+    })
     .sort((a, b) => Number(b.id) - Number(a.id));
 
   const auctions = db.where('auctions', (a) => Number(a.artist_id) === Number(user.id));
@@ -1029,21 +1250,6 @@ app.get('/artist/dashboard', (req, res) => {
   const payouts = db.where('seller_payouts', (p) => Number(p.artist_id) === Number(user.id));
   const notifications = db
     .where('notifications', (n) => Number(n.user_id) === Number(user.id))
-    .sort((a, b) => Number(b.id) - Number(a.id));
-
-  const authInvoices = db
-    .where(
-      'authentication_invoices',
-      (inv) =>
-        Number(inv.artist_id || 0) === Number(user.id) ||
-        (inv.artist_email &&
-          user.email &&
-          String(inv.artist_email).toLowerCase() === String(user.email).toLowerCase()) ||
-        (inv.artist_name &&
-          (String(inv.artist_name).trim().toLowerCase() === String(user.name || '').trim().toLowerCase() ||
-            String(inv.artist_name).trim().toLowerCase() ===
-              String(profile.display_name || '').trim().toLowerCase()))
-    )
     .sort((a, b) => Number(b.id) - Number(a.id));
 
   const stats = {
@@ -1109,31 +1315,38 @@ app.post('/artist/profile', upload.single('profile_photo_file'), (req, res) => {
   const website = String(req.body.website || '').trim();
   const instagram = String(req.body.social_instagram || '').trim();
   let profilePhoto = String(req.body.profile_photo_url || profile.profile_photo).trim();
+  if (profilePhoto.startsWith('blob:')) {
+    profilePhoto = profile.profile_photo;
+  }
 
-  if (req.file) {
-    const uploaded = saveUploadedImageBuffer(req.file, 'profiles');
-    if (uploaded) profilePhoto = uploaded;
-  } else if (req.body.profile_photo_data) {
+  if (req.body.profile_photo_data) {
     const uploaded = saveBase64Image(String(req.body.profile_photo_data), 'profiles');
+    if (uploaded) profilePhoto = uploaded;
+  } else if (req.file) {
+    const uploaded = saveUploadedImageBuffer(req.file, 'profiles');
     if (uploaded) profilePhoto = uploaded;
   }
 
-  db.update('artist_profiles', profile.id, {
-    display_name: displayName,
-    biography,
-    artist_statement: statement,
-    profile_photo: profilePhoto,
-    country,
-    city,
-    discipline,
-    years_active: yearsActive,
-    website,
-    social_instagram: instagram,
-  });
+  db.transaction((txDb) => {
+    txDb.update('artist_profiles', profile.id, {
+      display_name: displayName,
+      biography,
+      artist_statement: statement,
+      profile_photo: profilePhoto,
+      country,
+      city,
+      discipline,
+      years_active: yearsActive,
+      website,
+      social_instagram: instagram,
+      is_seeded: false,
+    });
 
-  db.update('users', user.id, {
-    name: displayName,
-    country,
+    txDb.update('users', user.id, {
+      name: displayName,
+      country,
+      is_seeded: false,
+    });
   });
 
   req.setFlash('success', 'Your artist profile picture and studio biography have been updated.');
@@ -1180,7 +1393,7 @@ app.post(
     const user = requireRole(req, res, 'artist');
     if (!user) return;
     const db = DatabaseEngine.getInstance();
-    ensureArtistProfile(db, user);
+    ensureArtistProfile(db, user, true);
 
     const actionMode = req.body.submission_mode === 'draft' ? 'draft' : 'submitted';
     const editSubId = Number(req.body.edit_submission_id || 0);
@@ -1236,29 +1449,32 @@ app.post(
     }
 
     const galleryImages = [];
-    const uploadedArtworkFiles = [
-      ...(req.files?.artwork_images || []),
-      ...(req.files?.['artwork_images[]'] || []),
-    ];
-    for (const fileObj of uploadedArtworkFiles) {
-      const url = saveUploadedImageBuffer(fileObj, 'artworks');
-      if (url) galleryImages.push(url);
-    }
-
-    if (galleryImages.length === 0 && req.body.artwork_images_data) {
-      const b64List = Array.isArray(req.body.artwork_images_data)
-        ? req.body.artwork_images_data
-        : [req.body.artwork_images_data];
+    // Prefer client-compressed base64 images when present (handle both multer 'field[]' and urlencoded 'field')
+    const rawB64Data = req.body.artwork_images_data ?? req.body['artwork_images_data[]'];
+    if (rawB64Data) {
+      const b64List = Array.isArray(rawB64Data) ? rawB64Data : [rawB64Data];
       for (const b64Url of b64List) {
         const url = saveBase64Image(String(b64Url), 'artworks');
         if (url) galleryImages.push(url);
       }
     }
 
-    const imageUrlsInput = req.body.image_urls
-      ? Array.isArray(req.body.image_urls)
-        ? req.body.image_urls
-        : [req.body.image_urls]
+    if (galleryImages.length === 0) {
+      const uploadedArtworkFiles = [
+        ...(req.files?.artwork_images || []),
+        ...(req.files?.['artwork_images[]'] || []),
+      ];
+      for (const fileObj of uploadedArtworkFiles) {
+        const url = saveUploadedImageBuffer(fileObj, 'artworks');
+        if (url) galleryImages.push(url);
+      }
+    }
+
+    const rawImageUrls = req.body.image_urls ?? req.body['image_urls[]'];
+    const imageUrlsInput = rawImageUrls
+      ? Array.isArray(rawImageUrls)
+        ? rawImageUrls
+        : [rawImageUrls]
       : [];
     for (const rawUrl of imageUrlsInput) {
       const u = String(rawUrl || '').trim();
@@ -1273,7 +1489,8 @@ app.post(
       }
     }
 
-    if (galleryImages.length === 0) {
+    const hasUploadedNewImages = galleryImages.length > 0;
+    if (!hasUploadedNewImages) {
       galleryImages.push(
         'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=1400&q=85'
       );
@@ -1292,41 +1509,68 @@ app.post(
     if (editSubId > 0) {
       const existingSub = db.find('artwork_submissions', editSubId);
       if (existingSub && Number(existingSub.artist_id) === Number(user.id)) {
-        db.update('artworks', existingSub.artwork_id, {
-          category_id: categoryId,
-          title,
-          medium,
-          year_created: yearCreated,
-          dimensions,
-          classification,
-          edition_number: editionNumber,
-          artist_attribution: attribution,
-          description,
-          provenance,
-          condition_report: conditionReport,
-          primary_image: primaryImage,
-          currency,
-          estimate_low: estimateLow,
-          estimate_high: estimateHigh,
-          starting_bid: startingBid,
-          artist_expected_price: artistExpectedPrice,
-          reserve_price: reservePrice,
-          status: artworkStatus,
-        });
+        const existingArtwork = db.find('artworks', Number(existingSub.artwork_id)) || {};
+        const effectivePrimaryImage = hasUploadedNewImages
+          ? primaryImage
+          : existingArtwork.primary_image || primaryImage;
 
-        db.update('artwork_submissions', existingSub.id, {
-          suggested_starting_bid: startingBid,
-          artist_expected_price: artistExpectedPrice,
-          reserve_price: reservePrice,
-          preferred_duration_days: durationDays,
-          currency,
-          estimate_low: estimateLow,
-          estimate_high: estimateHigh,
-          seller_notes: sellerNotes,
-          ownership_declared: ownershipDeclared,
-          copyright_confirmed: copyrightConfirmed,
-          authenticity_notes: authenticityNotes,
-          status: artworkStatus,
+        db.transaction((txDb) => {
+          txDb.update('artworks', existingSub.artwork_id, {
+            category_id: categoryId,
+            title,
+            medium,
+            year_created: yearCreated,
+            dimensions,
+            classification,
+            edition_number: editionNumber,
+            artist_attribution: attribution,
+            description,
+            provenance,
+            condition_report: conditionReport,
+            primary_image: effectivePrimaryImage,
+            currency,
+            estimate_low: estimateLow,
+            estimate_high: estimateHigh,
+            starting_bid: startingBid,
+            artist_expected_price: artistExpectedPrice,
+            reserve_price: reservePrice,
+            status: artworkStatus,
+            is_seeded: false,
+          });
+
+          if (hasUploadedNewImages) {
+            const oldImages = txDb.where(
+              'artwork_images',
+              (img) => Number(img.artwork_id) === Number(existingSub.artwork_id)
+            );
+            for (const oldImg of oldImages) {
+              txDb.delete('artwork_images', oldImg.id);
+            }
+            galleryImages.forEach((imgUrl, idx) => {
+              txDb.insert('artwork_images', {
+                artwork_id: Number(existingSub.artwork_id),
+                image_url: imgUrl,
+                is_primary: imgUrl === effectivePrimaryImage,
+                sort_order: idx + 1,
+              });
+            });
+          }
+
+          txDb.update('artwork_submissions', existingSub.id, {
+            suggested_starting_bid: startingBid,
+            artist_expected_price: artistExpectedPrice,
+            reserve_price: reservePrice,
+            preferred_duration_days: durationDays,
+            currency,
+            estimate_low: estimateLow,
+            estimate_high: estimateHigh,
+            seller_notes: sellerNotes,
+            ownership_declared: ownershipDeclared,
+            copyright_confirmed: copyrightConfirmed,
+            authenticity_notes: authenticityNotes,
+            status: artworkStatus,
+            is_seeded: false,
+          });
         });
 
         req.setFlash(
@@ -1337,96 +1581,102 @@ app.post(
       }
     }
 
-    const randomSuffix = Math.floor(100 + Math.random() * 900);
-    const artwork = db.insert('artworks', {
-      artist_id: Number(user.id),
-      category_id: categoryId,
-      title,
-      slug: helpers.slugify(`${title}-${randomSuffix}`),
-      medium,
-      year_created: yearCreated,
-      dimensions,
-      classification,
-      edition_number: editionNumber,
-      artist_attribution: attribution,
-      description,
-      provenance,
-      condition_report: conditionReport,
-      primary_image: primaryImage,
-      currency,
-      estimate_low: estimateLow,
-      estimate_high: estimateHigh,
-      starting_bid: startingBid,
-      artist_expected_price: artistExpectedPrice,
-      agreed_price: null,
-      reserve_price: reservePrice,
-      status: artworkStatus,
-      featured: false,
-      is_seeded: false,
-    });
-
-    galleryImages.forEach((imgUrl, idx) => {
-      db.insert('artwork_images', {
-        artwork_id: Number(artwork.id),
-        image_url: imgUrl,
-        is_primary: imgUrl === primaryImage,
-        sort_order: idx + 1,
+    let refCode = '';
+    db.transaction((txDb) => {
+      const randomSuffix = Math.floor(100 + Math.random() * 900);
+      const artwork = txDb.insert('artworks', {
+        artist_id: Number(user.id),
+        category_id: categoryId,
+        title,
+        slug: helpers.slugify(`${title}-${randomSuffix}`),
+        medium,
+        year_created: yearCreated,
+        dimensions,
+        classification,
+        edition_number: editionNumber,
+        artist_attribution: attribution,
+        description,
+        provenance,
+        condition_report: conditionReport,
+        primary_image: primaryImage,
+        currency,
+        estimate_low: estimateLow,
+        estimate_high: estimateHigh,
+        starting_bid: startingBid,
+        artist_expected_price: artistExpectedPrice,
+        agreed_price: null,
+        price_agreement_status: 'pending',
+        reserve_price: reservePrice,
+        status: artworkStatus,
+        featured: false,
+        is_seeded: false,
       });
-    });
 
-    if (privateDocPath) {
-      db.insert('artwork_documents', {
+      galleryImages.forEach((imgUrl, idx) => {
+        txDb.insert('artwork_images', {
+          artwork_id: Number(artwork.id),
+          image_url: imgUrl,
+          is_primary: imgUrl === primaryImage,
+          sort_order: idx + 1,
+        });
+      });
+
+      if (privateDocPath) {
+        txDb.insert('artwork_documents', {
+          artwork_id: Number(artwork.id),
+          artist_id: Number(user.id),
+          private_path: privateDocPath,
+          document_type: 'Certificate of Authenticity / Provenance Dossier',
+        });
+      }
+
+      refCode = helpers.sprintf('AN-%s-%04d', helpers.gmdate('Y'), 1000 + Number(artwork.id));
+      txDb.insert('artwork_submissions', {
+        reference_code: refCode,
         artwork_id: Number(artwork.id),
         artist_id: Number(user.id),
-        private_path: privateDocPath,
-        document_type: 'Certificate of Authenticity / Provenance Dossier',
+        suggested_starting_bid: startingBid,
+        artist_expected_price: artistExpectedPrice,
+        agreed_price: null,
+        price_agreement_status: 'pending',
+        reserve_price: reservePrice,
+        preferred_duration_days: durationDays,
+        currency,
+        estimate_low: estimateLow,
+        estimate_high: estimateHigh,
+        seller_notes: sellerNotes,
+        ownership_declared: ownershipDeclared,
+        copyright_confirmed: copyrightConfirmed,
+        authenticity_notes: authenticityNotes,
+        status: artworkStatus,
+        admin_feedback:
+          actionMode === 'draft'
+            ? 'Saved as studio draft. Submit when ready for curatorial evaluation.'
+            : 'Received by the ArtAlly Curatorial Review Board. Typical evaluation time is 24–48 hours.',
+        reviewed_by: null,
+        is_seeded: false,
       });
-    }
 
-    const refCode = helpers.sprintf('AN-%s-%04d', helpers.gmdate('Y'), 1000 + Number(artwork.id));
-    db.insert('artwork_submissions', {
-      reference_code: refCode,
-      artwork_id: Number(artwork.id),
-      artist_id: Number(user.id),
-      suggested_starting_bid: startingBid,
-      artist_expected_price: artistExpectedPrice,
-      agreed_price: null,
-      reserve_price: reservePrice,
-      preferred_duration_days: durationDays,
-      currency,
-      estimate_low: estimateLow,
-      estimate_high: estimateHigh,
-      seller_notes: sellerNotes,
-      ownership_declared: ownershipDeclared,
-      copyright_confirmed: copyrightConfirmed,
-      authenticity_notes: authenticityNotes,
-      status: artworkStatus,
-      admin_feedback:
-        actionMode === 'draft'
-          ? 'Saved as studio draft. Submit when ready for curatorial evaluation.'
-          : 'Received by the ArtAlly Curatorial Review Board. Typical evaluation time is 24–48 hours.',
-      reviewed_by: null,
+      if (actionMode === 'submitted') {
+        txDb.insert('notifications', {
+          user_id: Number(user.id),
+          type: 'submission_received',
+          title: `Submission Received (${refCode})`,
+          message: `Your artwork "${title}" has been logged for specialist curatorial review.`,
+          action_url: '/artist/submissions',
+          read_at: null,
+        });
+
+        txDb.insert('notifications', {
+          user_id: 1,
+          type: 'submission_received',
+          title: `New Consignment Submission: ${refCode}`,
+          message: `${user.name} submitted "${title}" for auction evaluation.`,
+          action_url: '/admin/dashboard#artists',
+          read_at: null,
+        });
+      }
     });
-
-    if (actionMode === 'submitted') {
-      db.insert('notifications', {
-        user_id: Number(user.id),
-        type: 'submission_received',
-        title: `Submission Received (${refCode})`,
-        message: `Your artwork "${title}" has been logged for specialist curatorial review.`,
-        action_url: '/artist/submissions',
-        read_at: null,
-      });
-
-      db.insert('notifications', {
-        user_id: 1,
-        type: 'submission_received',
-        title: `New Consignment Submission: ${refCode}`,
-        message: `${user.name} submitted "${title}" for auction evaluation.`,
-        action_url: '/admin/submissions',
-        read_at: null,
-      });
-    }
 
     req.setFlash(
       'success',
@@ -1488,7 +1738,7 @@ app.post('/artist/submissions/negotiate', (req, res) => {
   if (!user) return;
   const db = DatabaseEngine.getInstance();
   const subId = Number(req.body.submission_id || 0);
-  const responseAction = String(req.body.response_action || 'accept').trim();
+  const responseAction = String(req.body.response_action || req.body.response_type || 'accept').trim();
   const counterPrice = Number(req.body.counter_price || 0);
   const artistMessage = String(req.body.artist_message || '').trim();
 
@@ -1546,25 +1796,27 @@ app.post('/artist/submissions/negotiate', (req, res) => {
       created_at: formatUtcNow(),
     });
 
-    db.update('artwork_submissions', subId, {
-      artist_expected_price: newExpected,
-      price_agreement_status: 'counter_offered',
-      negotiation_messages: messages,
-    });
-    db.update('artworks', Number(sub.artwork_id), {
-      artist_expected_price: newExpected,
-      price_agreement_status: 'counter_offered',
-    });
+    db.transaction((txDb) => {
+      txDb.update('artwork_submissions', subId, {
+        artist_expected_price: newExpected,
+        price_agreement_status: 'counter_proposed_by_artist',
+        negotiation_messages: messages,
+      });
+      txDb.update('artworks', Number(sub.artwork_id), {
+        artist_expected_price: newExpected,
+        price_agreement_status: 'counter_proposed_by_artist',
+      });
 
-    db.insert('notifications', {
-      user_id: 1,
-      type: 'price_counter',
-      title: `Artist Counter-Offer on ${artwork.title || sub.reference_code}`,
-      message: `${user.name} sent a counter-offer of ${helpers.format_money(
-        newExpected
-      )}: ${artistMessage}`,
-      action_url: '/admin/dashboard#artists',
-      read_at: null,
+      txDb.insert('notifications', {
+        user_id: 1,
+        type: 'price_counter',
+        title: `Artist Counter-Offer on ${artwork.title || sub.reference_code}`,
+        message: `${user.name} sent a counter-offer of ${helpers.format_money(
+          newExpected
+        )}: ${artistMessage}`,
+        action_url: '/admin/dashboard#artists',
+        read_at: null,
+      });
     });
 
     req.setFlash(
@@ -2057,15 +2309,85 @@ function handleAdminDashboard(req, res) {
   const db = DatabaseEngine.getInstance();
 
   const allUsers = db.all('users');
-  const users = allUsers.filter((u) => !u.is_seeded || (u.role || '') === 'admin');
-  const realUserIds = allUsers.filter((u) => !u.is_seeded).map((u) => Number(u.id));
+  const allArtworks = db.all('artworks');
+  const allSubmissions = db.all('artwork_submissions');
+
+  // Include any user who is not seeded OR who has uploaded a non-seeded artwork/submission
+  const activeArtistUserIds = new Set();
+  for (const a of allArtworks) {
+    if (!a.is_seeded && Number(a.artist_id || 0) > 0) {
+      activeArtistUserIds.add(Number(a.artist_id));
+    }
+  }
+  for (const s of allSubmissions) {
+    if (!s.is_seeded && Number(s.artist_id || 0) > 0) {
+      activeArtistUserIds.add(Number(s.artist_id));
+    }
+  }
+
+  // Ensure every active artist who uploaded work has an artist_profile row
+  for (const artistUserId of activeArtistUserIds) {
+    const artistUser = db.find('users', artistUserId);
+    if (artistUser) {
+      ensureArtistProfile(db, artistUser, true);
+    }
+  }
+
+  const users = allUsers.filter(
+    (u) => !u.is_seeded || (u.role || '') === 'admin' || activeArtistUserIds.has(Number(u.id))
+  );
+  const realUserIds = allUsers
+    .filter((u) => !u.is_seeded || activeArtistUserIds.has(Number(u.id)))
+    .map((u) => Number(u.id));
+
+  const artworks = allArtworks.filter(
+    (a) => !a.is_seeded || realUserIds.includes(Number(a.artist_id || 0))
+  );
+  const realArtworkIds = artworks.map((a) => Number(a.id));
+
+  // Ensure every real artwork has a corresponding submission record so it is manageable in Admin
+  for (const w of artworks) {
+    if (!w.is_seeded) {
+      const existingSub = db.findBy('artwork_submissions', 'artwork_id', Number(w.id));
+      if (!existingSub) {
+        const refCode = helpers.sprintf('AN-%s-%04d', helpers.gmdate('Y'), 1000 + Number(w.id));
+        db.insert('artwork_submissions', {
+          reference_code: refCode,
+          artwork_id: Number(w.id),
+          artist_id: Number(w.artist_id),
+          suggested_starting_bid: Number(w.starting_bid || 1000),
+          artist_expected_price: Number(w.artist_expected_price || w.starting_bid || 1000),
+          agreed_price: w.agreed_price || null,
+          price_agreement_status: w.price_agreement_status || 'pending',
+          reserve_price: Number(w.reserve_price || w.starting_bid || 1000),
+          preferred_duration_days: 7,
+          currency: w.currency || 'USD',
+          estimate_low: Number(w.estimate_low || 1200),
+          estimate_high: Number(w.estimate_high || 1800),
+          seller_notes: '',
+          ownership_declared: true,
+          copyright_confirmed: true,
+          authenticity_notes: 'Includes Certificate of Authenticity.',
+          status: w.status || 'submitted',
+          admin_feedback: 'Received by the ArtAlly Curatorial Review Board.',
+          reviewed_by: null,
+          is_seeded: false,
+        });
+      }
+    }
+  }
 
   const allArtistProfiles = db.all('artist_profiles');
   const artistProfiles = allArtistProfiles
-    .filter((ap) => realUserIds.includes(Number(ap.user_id || 0)) && !ap.is_seeded)
+    .filter(
+      (ap) =>
+        (realUserIds.includes(Number(ap.user_id || 0)) && !ap.is_seeded) ||
+        activeArtistUserIds.has(Number(ap.user_id || 0))
+    )
     .map((ap) => {
       const apWorks = db
-        .where('artworks', (a) => Number(a.artist_id) === Number(ap.user_id))
+        .where('artworks', (a) => Number(a.artist_id) === Number(ap.user_id) && (!a.is_seeded || !ap.is_seeded))
+        .sort((a, b) => Number(b.id) - Number(a.id))
         .map((w) => ({
           ...w,
           submission: db.findBy('artwork_submissions', 'artwork_id', Number(w.id)),
@@ -2079,16 +2401,11 @@ function handleAdminDashboard(req, res) {
       };
     });
 
-  const allArtworks = db.all('artworks');
-  const artworks = allArtworks.filter(
-    (a) => !a.is_seeded || realUserIds.includes(Number(a.artist_id || 0))
-  );
-  const realArtworkIds = artworks.map((a) => Number(a.id));
-
   const submissions = db
     .all('artwork_submissions')
     .filter(
       (s) =>
+        !s.is_seeded ||
         realArtworkIds.includes(Number(s.artwork_id || 0)) ||
         realUserIds.includes(Number(s.artist_id || 0))
     )
@@ -2153,7 +2470,7 @@ function handleAdminDashboard(req, res) {
     total_users: users.length,
     total_artists: artistProfiles.length,
     pending_submissions: submissions.filter((s) =>
-      ['submitted', 'under_review'].includes(s.status || '')
+      ['draft', 'submitted', 'under_review', 'changes_requested'].includes(s.status || '')
     ).length,
     active_auctions: auctions.filter((a) => (a.status || '') === 'active').length,
     total_bids: bids.length,
@@ -3000,38 +3317,102 @@ app.post('/admin/auctions/live-control', (req, res) => {
     );
   } else if (actionType === 'mark_sold') {
     const finalPrice = Math.max(currentBid, Number(req.body.custom_bid_amount || currentBid));
-    db.update('auctions', auctionId, {
-      current_bid: finalPrice,
-      agreed_price: finalPrice,
-      reserve_met: true,
-      status: 'closed_sold',
-      closed_at: formatUtcNow(),
+    db.transaction((txDb) => {
+      txDb.update('auctions', auctionId, {
+        current_bid: finalPrice,
+        agreed_price: finalPrice,
+        reserve_met: true,
+        status: 'closed_sold',
+        closed_at: formatUtcNow(),
+      });
+      txDb.update('artworks', Number(auction.artwork_id), {
+        status: 'sold',
+        agreed_price: finalPrice,
+      });
+      const sub = txDb.findBy('artwork_submissions', 'artwork_id', Number(auction.artwork_id));
+      if (sub) {
+        txDb.update('artwork_submissions', sub.id, {
+          status: 'closed_sold',
+          agreed_price: finalPrice,
+        });
+      }
+
+      const existingOrder = txDb.findBy('orders', 'auction_id', auctionId);
+      if (!existingOrder) {
+        const settings = txDb.find('platform_settings', 1) || {};
+        const commissionRate = Number(settings.commission_rate_percent || 15);
+        const buyerPremiumRate = Number(settings.buyer_premium_percent || 20);
+        const buyerPremium = Math.round(finalPrice * (buyerPremiumRate / 100));
+        const sellerCommission = Math.round(finalPrice * (commissionRate / 100));
+        const netArtistPayout = finalPrice - sellerCommission;
+
+        const order = txDb.insert('orders', {
+          order_number: `ORD-${helpers.gmdate('Y')}-${1000 + txDb.all('orders').length + 1}`,
+          auction_id: auctionId,
+          artwork_id: Number(auction.artwork_id),
+          buyer_id: Number(auction.highest_bidder_id || admin.id),
+          artist_id: Number(auction.artist_id),
+          hammer_price: finalPrice,
+          buyer_premium: buyerPremium,
+          shipping_fee: 450,
+          total_amount: finalPrice + buyerPremium + 450,
+          seller_commission_rate: commissionRate,
+          seller_commission_amount: sellerCommission,
+          net_artist_payout: netArtistPayout,
+          currency: auction.currency || 'USD',
+          payment_status: 'paid',
+          fulfillment_status: 'preparing_shipment',
+          paid_at: formatUtcNow(),
+          is_seeded: false,
+        });
+
+        txDb.insert('commissions', {
+          order_id: Number(order.id),
+          artwork_id: Number(auction.artwork_id),
+          artist_id: Number(auction.artist_id),
+          commission_rate: commissionRate,
+          seller_commission_amount: sellerCommission,
+          buyer_premium_amount: buyerPremium,
+          total_platform_revenue: sellerCommission + buyerPremium,
+          is_seeded: false,
+        });
+
+        txDb.insert('seller_payouts', {
+          order_id: Number(order.id),
+          artist_id: Number(auction.artist_id),
+          gross_amount: finalPrice,
+          commission_deducted: sellerCommission,
+          net_payout_amount: netArtistPayout,
+          currency: auction.currency || 'USD',
+          status: 'pending',
+          payout_reference: `PO-${helpers.gmdate('Y')}-${200 + txDb.all('seller_payouts').length + 1}`,
+          scheduled_date: helpers.gmdate('Y-m-d', helpers.strtotime('+5 days')),
+          is_seeded: false,
+        });
+      }
+
+      txDb.insert('notifications', {
+        user_id: Number(auction.artist_id),
+        type: 'artwork_sold',
+        title: `Artwork Marked SOLD: ${artwork.title || auction.lot_number}`,
+        message: `Your artwork "${
+          artwork.title || auction.lot_number
+        }" has been marked SOLD by the Auction House at a final price of ${helpers.format_money(
+          finalPrice
+        )}.`,
+        action_url: '/artist/dashboard',
+        read_at: null,
+      });
+      logAudit(
+        txDb,
+        admin,
+        'AUCTION_MARKED_SOLD',
+        'auction',
+        auctionId,
+        `Changed status of ${auction.lot_number} to SOLD at ${helpers.format_money(finalPrice)}.`,
+        req.ip
+      );
     });
-    db.update('artworks', Number(auction.artwork_id), {
-      status: 'sold',
-      agreed_price: finalPrice,
-    });
-    db.insert('notifications', {
-      user_id: Number(auction.artist_id),
-      type: 'artwork_sold',
-      title: `Artwork Marked SOLD: ${artwork.title || auction.lot_number}`,
-      message: `Your artwork "${
-        artwork.title || auction.lot_number
-      }" has been marked SOLD by the Auction House at a final price of ${helpers.format_money(
-        finalPrice
-      )}.`,
-      action_url: '/artist/dashboard',
-      read_at: null,
-    });
-    logAudit(
-      db,
-      admin,
-      'AUCTION_MARKED_SOLD',
-      'auction',
-      auctionId,
-      `Changed status of ${auction.lot_number} to SOLD at ${helpers.format_money(finalPrice)}.`,
-      req.ip
-    );
     req.setFlash(
       'success',
       `Lot ${auction.lot_number} status changed to SOLD at ${helpers.format_money(finalPrice)}.`

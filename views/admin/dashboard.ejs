@@ -580,8 +580,8 @@
                                                             <span class="px-2 py-0.5 text-[9px] uppercase tracking-widest font-semibold <%- $aucState === 'active' ? 'bg-[#1A2E22] text-ivory' : ($aucState === 'closed_sold' ? 'bg-obsidian text-bronzeLight' : 'bg-alabaster text-charcoal border border-hairline') %>">
                                                                 <%- $aucState === 'closed_sold' ? 'SOLD' : e(strtoupper(str_replace('_', ' ', $aucState))) %>
                                                             </span>
-                                                            <span class="px-2 py-0.5 text-[9px] uppercase tracking-widest font-semibold <%- $priceAgreementStatus === 'accepted_by_artist' ? 'bg-[#1A2E22] text-ivory' : ($priceAgreementStatus === 'counter_proposed_by_artist' ? 'bg-bronze text-white' : 'bg-ivory text-stone border border-hairline') %>">
-                                                                <%- $priceAgreementStatus === 'accepted_by_artist' ? '✓ Price Accepted by Artist' : ($priceAgreementStatus === 'counter_proposed_by_artist' ? '⇄ Counter-Offer by Artist' : 'Price Pending') %>
+                                                            <span class="px-2 py-0.5 text-[9px] uppercase tracking-widest font-semibold <%- $priceAgreementStatus === 'accepted_by_artist' ? 'bg-[#1A2E22] text-ivory' : (in_array($priceAgreementStatus, ['counter_proposed_by_artist', 'counter_offered']) ? 'bg-bronze text-white' : 'bg-ivory text-stone border border-hairline') %>">
+                                                                <%- $priceAgreementStatus === 'accepted_by_artist' ? '✓ Price Accepted by Artist' : (in_array($priceAgreementStatus, ['counter_proposed_by_artist', 'counter_offered']) ? '⇄ Counter-Offer by Artist' : 'Price Pending') %>
                                                             </span>
                                                         </div>
                                                         <h5 class="font-serif text-xl text-obsidian">

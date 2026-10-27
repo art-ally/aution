@@ -295,6 +295,14 @@
                                 </div>
 
                                 <div class="flex flex-wrap items-center gap-2 self-end sm:self-center">
+                                    <% if (!empty($sub?.['invoice'])) { %>
+                                        <a href="/invoices/<%- Number($sub?.['invoice']?.['id']) %>/download" class="px-4 py-2 bg-obsidian text-bronzeLight border border-bronze text-[11px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition">
+                                            ⬇ Download Invoice (<%- e($sub?.['invoice']?.['invoice_number']) %>)
+                                        </a>
+                                        <a href="/invoices/<%- Number($sub?.['invoice']?.['id']) %>?print=1" target="_blank" class="px-3.5 py-2 border border-obsidian bg-white text-obsidian text-[11px] uppercase tracking-widest font-semibold hover:bg-obsidian hover:text-ivory transition">
+                                            🖨 View &amp; Print Invoice
+                                        </a>
+                                    <% } %>
                                     <% if ($aucState === 'closed_sold' || ($art?.['status'] ?? '') === 'sold') { %>
                                         <a href="/certificates/<%- Number($art?.['id']) %>" class="px-4 py-2 bg-[#1A2E22] text-ivory text-[11px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
                                             ⎙ Official Sale Certificate
@@ -408,11 +416,39 @@
                 previewPhoto: '<%- e($profile?.['profile_photo']) %>',
                 photoData: '',
                 handleQuickPhoto(e) {
-                    const file = e.target.files[0];
+                    const self = this;
+                    const inputEl = e.target;
+                    const file = inputEl.files[0];
                     if (!file) return;
-                    this.previewPhoto = URL.createObjectURL(file);
                     const reader = new FileReader();
-                    reader.onload = (ev) => { this.photoData = ev.target.result; };
+                    reader.onload = (ev) => {
+                        const rawDataUrl = ev.target.result;
+                        self.previewPhoto = rawDataUrl;
+                        self.photoData = rawDataUrl;
+                        const img = new Image();
+                        img.onload = () => {
+                            try {
+                                const maxDim = 600;
+                                let w = img.width || 400;
+                                let h = img.height || 400;
+                                if (w > maxDim || h > maxDim) {
+                                    if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+                                    else { w = Math.round((w * maxDim) / h); h = maxDim; }
+                                }
+                                const canvas = document.createElement('canvas');
+                                canvas.width = w;
+                                canvas.height = h;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0, w, h);
+                                const compressed = canvas.toDataURL('image/jpeg', 0.82);
+                                self.previewPhoto = compressed;
+                                self.photoData = compressed;
+                                inputEl.removeAttribute('required');
+                                inputEl.value = '';
+                            } catch (_) {}
+                        };
+                        img.src = rawDataUrl;
+                    };
                     reader.readAsDataURL(file);
                 }
             }">

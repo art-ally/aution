@@ -1,112 +1,245 @@
 <% var $commissionPercent = Number(($settings?.['commission_rate_percent'] ?? 15.0));
-var $dArt = $draftArtwork ?? [];
-var $dSub = $draftSubmission ?? []; %>
-<div class="max-w-5xl mx-auto px-4 sm:px-8 py-12" x-data="{
-    step: 1,
-    stepError: '',
-    showValidation: false,
-    title: '<%- e($dArt?.['title'] ?? '') %>',
-    medium: '<%- e($dArt?.['medium'] ?? '') %>',
-    year: '<%- e(String(($dArt?.['year_created'] ?? gmdate('Y') ?? ""))) %>',
-    dimensions: '<%- e($dArt?.['dimensions'] ?? '') %>',
-    classification: '<%- e($dArt?.['classification'] ?? 'Original Unique Work') %>',
-    edition: '<%- e($dArt?.['edition_number'] ?? 'Unique (1/1)') %>',
-    attribution: '<%- e($dArt?.['artist_attribution'] ?? ('Signed and dated on verso by ' + $user?.['name'])) %>',
-    description: `<%- e($dArt?.['description'] ?? '') %>`,
-    imageUrls: ['<%- e($dArt?.['primary_image'] ?? '') %>'],
-    localPreviews: [],
-    primaryIndex: 0,
-    handleLocalFiles(e) {
-        this.localPreviews = [];
-        const files = Array.from(e.target.files || []);
-        files.forEach(file => {
-            const item = { name: file.name, url: URL.createObjectURL(file), dataUrl: '' };
-            const reader = new FileReader();
-            reader.onload = (ev) => { item.dataUrl = ev.target.result; };
-            reader.readAsDataURL(file);
-            this.localPreviews.push(item);
-        });
-        if (files.length > 0) {
-            this.stepError = '';
-        }
-    },
-    startingBid: <%- Number(($dSub?.['suggested_starting_bid'] ?? 5000)) %>,
-    expectedPrice: <%- Number(($dSub?.['artist_expected_price'] ?? 8500)) %>,
-    reservePrice: <%- Number(($dSub?.['reserve_price'] ?? 6500)) %>,
-    estimateLow: <%- Number(($dSub?.['estimate_low'] ?? 7000)) %>,
-    estimateHigh: <%- Number(($dSub?.['estimate_high'] ?? 10000)) %>,
-    currency: '<%- e($dSub?.['currency'] ?? 'USD') %>',
-    durationDays: <%- Number(($dSub?.['preferred_duration_days'] ?? 7)) %>,
-    provenance: `<%- e($dArt?.['provenance'] ?? 'Direct from the studio of the artist.') %>`,
-    conditionReport: `<%- e($dArt?.['condition_report'] ?? 'In pristine original studio condition.') %>`,
-    ownershipDeclared: true,
-    copyrightConfirmed: true,
+var $dArt = $draftArtwork ?? {};
+var $dSub = $draftSubmission ?? {};
+var $existingPrimaryImg = String($dArt?.['primary_image'] ?? '').trim();
+%>
+<script>
+function artworkSubmitWizard() {
+    var existingImg = <%- JSON.stringify($existingPrimaryImg) %>;
+    return {
+        step: 1,
+        stepError: '',
+        showValidation: false,
+        submitting: false,
+        submissionMode: 'submitted',
+        title: <%- JSON.stringify(String($dArt?.['title'] ?? '')) %>,
+        medium: <%- JSON.stringify(String($dArt?.['medium'] ?? '')) %>,
+        year: <%- JSON.stringify(String($dArt?.['year_created'] ?? gmdate('Y') ?? '2026')) %>,
+        dimensions: <%- JSON.stringify(String($dArt?.['dimensions'] ?? '')) %>,
+        classification: <%- JSON.stringify(String($dArt?.['classification'] ?? 'Original Unique Work')) %>,
+        edition: <%- JSON.stringify(String($dArt?.['edition_number'] ?? 'Unique (1/1)')) %>,
+        attribution: <%- JSON.stringify(String($dArt?.['artist_attribution'] ?? ('Signed and dated on verso by ' + ($user?.['name'] ?? 'Artist')))) %>,
+        description: <%- JSON.stringify(String($dArt?.['description'] ?? '')) %>,
+        imageUrls: existingImg && !existingImg.startsWith('data:image/') ? [existingImg] : [],
+        localPreviews: existingImg && existingImg.startsWith('data:image/')
+            ? [{ id: 'existing_0', name: 'Current Artwork Photograph', url: existingImg, dataUrl: existingImg }]
+            : [],
+        primaryIndex: 0,
+        startingBid: <%- Number(($dSub?.['suggested_starting_bid'] ?? 5000)) %>,
+        expectedPrice: <%- Number(($dSub?.['artist_expected_price'] ?? 8500)) %>,
+        reservePrice: <%- Number(($dSub?.['reserve_price'] ?? 6500)) %>,
+        estimateLow: <%- Number(($dSub?.['estimate_low'] ?? 7000)) %>,
+        estimateHigh: <%- Number(($dSub?.['estimate_high'] ?? 10000)) %>,
+        currency: <%- JSON.stringify(String($dSub?.['currency'] ?? 'USD')) %>,
+        durationDays: <%- Number(($dSub?.['preferred_duration_days'] ?? 7)) %>,
+        provenance: <%- JSON.stringify(String($dArt?.['provenance'] ?? 'Direct from the studio of the artist.')) %>,
+        conditionReport: <%- JSON.stringify(String($dArt?.['condition_report'] ?? 'In pristine original studio condition.')) %>,
+        ownershipDeclared: true,
+        copyrightConfirmed: true,
 
-    getMissingStep1Fields() {
-        const missing = [];
-        if (!this.title || this.title.trim() === '') missing.push('Artwork Title');
-        if (!this.medium || this.medium.trim() === '') missing.push('Medium & Materials');
-        if (!this.year || String(this.year).trim() === '' || Number(this.year) < 1800 || Number(this.year) > 2035) missing.push('Year Created');
-        if (!this.dimensions || this.dimensions.trim() === '') missing.push('Dimensions (H × W × D)');
-        if (!this.attribution || this.attribution.trim() === '') missing.push('Artist Attribution & Signature');
-        if (!this.description || this.description.trim() === '') missing.push('Curatorial Description');
-        return missing;
-    },
-    isStep1Complete() {
-        return this.getMissingStep1Fields().length === 0;
-    },
-    isStep2Complete() {
-        return this.localPreviews.length > 0 || this.imageUrls.some(u => u && u.trim() !== '');
-    },
-    isStep3Complete() {
-        return Number(this.expectedPrice) >= 100 && Number(this.startingBid) >= 100;
-    },
-    isStep4Complete() {
-        return this.provenance.trim() !== '' && this.conditionReport.trim() !== '' && this.ownershipDeclared && this.copyrightConfirmed;
-    },
-    goToStep(target) {
-        if (target <= this.step) {
+        handleLocalFiles(e) {
+            var self = this;
+            var inputEl = e.target;
+            var files = Array.from(inputEl.files || []);
+            if (!files.length) return;
+
+            files.forEach(function (file) {
+                var reader = new FileReader();
+                reader.onload = function (ev) {
+                    var rawDataUrl = ev.target.result;
+                    var img = new Image();
+                    img.onload = function () {
+                        var finalDataUrl = rawDataUrl;
+                        try {
+                            var maxDim = 1200;
+                            var w = img.width || 800;
+                            var h = img.height || 800;
+                            if (w > maxDim || h > maxDim) {
+                                if (w > h) {
+                                    h = Math.round((h * maxDim) / w);
+                                    w = maxDim;
+                                } else {
+                                    w = Math.round((w * maxDim) / h);
+                                    h = maxDim;
+                                }
+                            }
+                            var canvas = document.createElement('canvas');
+                            canvas.width = w;
+                            canvas.height = h;
+                            var ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, w, h);
+                            finalDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                        } catch (_) {}
+
+                        self.localPreviews = self.localPreviews.concat([
+                            {
+                                id: 'img_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                                name: file.name,
+                                url: finalDataUrl,
+                                dataUrl: finalDataUrl
+                            }
+                        ]);
+                        self.stepError = '';
+                    };
+                    img.onerror = function () {
+                        self.localPreviews = self.localPreviews.concat([
+                            {
+                                id: 'img_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                                name: file.name,
+                                url: rawDataUrl,
+                                dataUrl: rawDataUrl
+                            }
+                        ]);
+                        self.stepError = '';
+                    };
+                    img.src = rawDataUrl;
+                };
+                reader.readAsDataURL(file);
+            });
+
+            // Reset file input so selecting another photo later triggers @change and appends cleanly
+            inputEl.value = '';
+        },
+
+        removeLocalPreview(idx) {
+            var updated = this.localPreviews.slice();
+            updated.splice(idx, 1);
+            this.localPreviews = updated;
+            if (this.primaryIndex >= this.localPreviews.length) {
+                this.primaryIndex = 0;
+            }
+        },
+
+        moveLocalUp(idx) {
+            if (idx <= 0) return;
+            var updated = this.localPreviews.slice();
+            var tmp = updated[idx - 1];
+            updated[idx - 1] = updated[idx];
+            updated[idx] = tmp;
+            this.localPreviews = updated;
+            if (this.primaryIndex === idx) this.primaryIndex = idx - 1;
+            else if (this.primaryIndex === idx - 1) this.primaryIndex = idx;
+        },
+
+        getPrimaryPreviewUrl() {
+            if (this.localPreviews.length > 0) {
+                var p = this.localPreviews[this.primaryIndex] || this.localPreviews[0];
+                return p.dataUrl || p.url;
+            }
+            var validUrl = this.imageUrls.find(function (u) { return u && u.trim() !== ''; });
+            return validUrl || '';
+        },
+
+        getMissingStep1Fields() {
+            var missing = [];
+            if (!this.title || this.title.trim() === '') missing.push('Artwork Title');
+            if (!this.medium || this.medium.trim() === '') missing.push('Medium & Materials');
+            if (!this.year || String(this.year).trim() === '' || Number(this.year) < 1800 || Number(this.year) > 2035) missing.push('Year Created');
+            if (!this.dimensions || this.dimensions.trim() === '') missing.push('Dimensions (H × W × D)');
+            if (!this.attribution || this.attribution.trim() === '') missing.push('Artist Attribution & Signature');
+            if (!this.description || this.description.trim() === '') missing.push('Curatorial Description');
+            return missing;
+        },
+        isStep1Complete() {
+            return this.getMissingStep1Fields().length === 0;
+        },
+        isStep2Complete() {
+            return this.localPreviews.length > 0 || this.imageUrls.some(function (u) { return u && u.trim() !== ''; });
+        },
+        isStep3Complete() {
+            return Number(this.expectedPrice) >= 100 && Number(this.startingBid) >= 100;
+        },
+        isStep4Complete() {
+            return this.provenance.trim() !== '' && this.conditionReport.trim() !== '' && this.ownershipDeclared && this.copyrightConfirmed;
+        },
+        goToStep(target) {
+            if (target <= this.step) {
+                this.stepError = '';
+                this.step = target;
+                return;
+            }
+            if (target >= 2 && !this.isStep1Complete()) {
+                this.showValidation = true;
+                this.step = 1;
+                this.stepError = 'Stage 1 Incomplete — Please complete all required fields: ' + this.getMissingStep1Fields().join(', ') + '.';
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+            if (target >= 3 && !this.isStep2Complete()) {
+                this.showValidation = true;
+                this.step = 2;
+                this.stepError = 'Stage 2 Incomplete — Please upload at least one artwork photograph (or enter a valid image URL) before proceeding to Stage 3.';
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+            if (target >= 4 && !this.isStep3Complete()) {
+                this.showValidation = true;
+                this.step = 3;
+                this.stepError = 'Stage 3 Incomplete — Please enter your Expected Target Price and Suggested Starting Bid (minimum $100) before proceeding.';
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+            if (target >= 5 && !this.isStep4Complete()) {
+                this.showValidation = true;
+                this.step = 4;
+                this.stepError = 'Stage 4 Incomplete — Please complete the Provenance History, Condition Report, and legal declarations before Final Review.';
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
             this.stepError = '';
+            this.showValidation = false;
             this.step = target;
-            return;
-        }
-        if (target >= 2 && !this.isStep1Complete()) {
-            this.showValidation = true;
-            this.step = 1;
-            this.stepError = 'Stage 1 Incomplete — You cannot access Stage 2 until all required fields are completed: ' + this.getMissingStep1Fields().join(', ') + '.';
             window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
+        },
+        submitDossier(mode) {
+            if (this.submitting) return;
+            this.submissionMode = mode === 'draft' ? 'draft' : 'submitted';
+            if (!this.isStep1Complete()) {
+                this.goToStep(2);
+                return;
+            }
+            if (this.submissionMode === 'submitted') {
+                if (!this.isStep2Complete()) {
+                    this.goToStep(3);
+                    return;
+                }
+                if (!this.isStep3Complete()) {
+                    this.goToStep(4);
+                    return;
+                }
+                if (!this.isStep4Complete()) {
+                    this.goToStep(5);
+                    return;
+                }
+            }
+            this.submitting = true;
+            var formEl = this.$refs.dossierForm;
+            this.$nextTick(function () {
+                formEl.submit();
+            });
+        },
+        addUrl() {
+            this.imageUrls = this.imageUrls.concat(['']);
+        },
+        removeUrl(idx) {
+            var updated = this.imageUrls.slice();
+            updated.splice(idx, 1);
+            this.imageUrls = updated;
+        },
+        moveUp(idx) {
+            if (idx > 0) {
+                var updated = this.imageUrls.slice();
+                var tmp = updated[idx - 1];
+                updated[idx - 1] = updated[idx];
+                updated[idx] = tmp;
+                this.imageUrls = updated;
+            }
         }
-        if (target >= 3 && !this.isStep2Complete()) {
-            this.showValidation = true;
-            this.step = 2;
-            this.stepError = 'Stage 2 Incomplete — Please upload at least one artwork photograph (or enter a valid image URL) before proceeding to Stage 3.';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
-        }
-        if (target >= 4 && !this.isStep3Complete()) {
-            this.showValidation = true;
-            this.step = 3;
-            this.stepError = 'Stage 3 Incomplete — Please enter your Expected Target Price and Suggested Starting Bid (minimum $100) before proceeding.';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
-        }
-        if (target >= 5 && !this.isStep4Complete()) {
-            this.showValidation = true;
-            this.step = 4;
-            this.stepError = 'Stage 4 Incomplete — Please complete the Provenance History, Condition Report, and legal declarations before Final Review.';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
-        }
-        this.stepError = '';
-        this.showValidation = false;
-        this.step = target;
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-    addUrl() { this.imageUrls.push(''); },
-    removeUrl(idx) { if (this.imageUrls.length > 1) { this.imageUrls.splice(idx, 1); if (this.primaryIndex >= this.imageUrls.length) this.primaryIndex = 0; } },
-    moveUp(idx) { if (idx > 0) { const tmp = this.imageUrls[idx - 1]; this.imageUrls[idx - 1] = this.imageUrls[idx]; this.imageUrls[idx] = tmp; } }
-}">
+    };
+}
+</script>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-8 py-12" x-data="artworkSubmitWizard()">
     <!-- Header -->
     <div class="border-b border-hairline pb-6 mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
@@ -151,14 +284,15 @@ var $dSub = $draftSubmission ?? []; %>
         </div>
     </template>
 
-    <form action="/artist/submit" method="POST" enctype="multipart/form-data" class="bg-white border border-hairline p-8 sm:p-12">
+    <form x-ref="dossierForm" action="/artist/submit" method="POST" enctype="multipart/form-data" novalidate class="bg-white border border-hairline p-8 sm:p-12">
         <%- csrf_field() %>
+        <input type="hidden" name="submission_mode" :value="submissionMode">
         <% if (!empty($dSub?.['id'])) { %>
             <input type="hidden" name="edit_submission_id" value="<%- Number($dSub?.['id']) %>">
         <% } %>
 
         <!-- Hidden base64 inputs for uploaded local files so images are guaranteed to save -->
-        <template x-for="(preview, bIdx) in localPreviews" :key="'b64_' + bIdx">
+        <template x-for="(preview, bIdx) in localPreviews" :key="preview.id || ('b64_' + bIdx)">
             <input type="hidden" name="artwork_images_data[]" :value="preview.dataUrl">
         </template>
 
@@ -175,7 +309,7 @@ var $dSub = $draftSubmission ?? []; %>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Artwork Title *</label>
-                    <input type="text" name="title" x-model="title" required placeholder="e.g. Study in Raw Umber VII" :class="(showValidation && !title.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
+                    <input type="text" name="title" x-model="title" placeholder="e.g. Study in Raw Umber VII" :class="(showValidation && !title.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
                 </div>
 
                 <div>
@@ -193,19 +327,19 @@ var $dSub = $draftSubmission ?? []; %>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div class="md:col-span-2">
                     <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Medium &amp; Materials *</label>
-                    <input type="text" name="medium" x-model="medium" required placeholder="e.g. Oil, cold beeswax, and mineral pigment on Belgian linen" :class="(showValidation && !medium.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
+                    <input type="text" name="medium" x-model="medium" placeholder="e.g. Oil, cold beeswax, and mineral pigment on Belgian linen" :class="(showValidation && !medium.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
                 </div>
 
                 <div>
                     <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Year Created *</label>
-                    <input type="number" name="year_created" x-model="year" min="1850" max="2030" required :class="(showValidation && (!year || Number(year) < 1800)) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
+                    <input type="number" name="year_created" x-model="year" :class="(showValidation && (!year || Number(year) < 1800)) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
                 </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                     <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Dimensions (H × W × D) *</label>
-                    <input type="text" name="dimensions" x-model="dimensions" required placeholder="e.g. 150 × 120 × 4 cm" :class="(showValidation && !dimensions.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
+                    <input type="text" name="dimensions" x-model="dimensions" placeholder="e.g. 150 × 120 × 4 cm" :class="(showValidation && !dimensions.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
                 </div>
 
                 <div>
@@ -225,12 +359,12 @@ var $dSub = $draftSubmission ?? []; %>
 
             <div>
                 <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Artist Attribution &amp; Signature Location *</label>
-                <input type="text" name="artist_attribution" x-model="attribution" required :class="(showValidation && !attribution.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
+                <input type="text" name="artist_attribution" x-model="attribution" :class="(showValidation && !attribution.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border px-4 py-3 text-sm">
             </div>
 
             <div>
                 <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Curatorial Description &amp; Conceptual Essay *</label>
-                <textarea name="description" x-model="description" rows="4" required placeholder="Describe the technique, surface texture, and conceptual background of the work..." :class="(showValidation && !description.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border p-4 text-sm"></textarea>
+                <textarea name="description" x-model="description" rows="4" placeholder="Describe the technique, surface texture, and conceptual background of the work..." :class="(showValidation && !description.trim()) ? 'border-2 border-red-700 bg-[#FDF2F2]' : 'border-hairline bg-ivory'" class="w-full border p-4 text-sm"></textarea>
             </div>
 
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-hairline">
@@ -246,52 +380,95 @@ var $dSub = $draftSubmission ?? []; %>
 
         <!-- STEP 2: Artwork Images & Primary Image Selection -->
         <div x-cloak x-show="step === 2" class="space-y-6 text-xs">
-            <div class="border-b border-hairline pb-3">
-                <h2 class="font-serif text-3xl text-obsidian">Stage 2: High-Resolution Artwork Photography</h2>
-                <p class="text-xs text-stone mt-1">Upload artwork image files (JPG, PNG, WEBP) or provide studio archive image URLs. At least one photograph is required before proceeding to Stage 3.</p>
+            <div class="border-b border-hairline pb-3 flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+                <div>
+                    <h2 class="font-serif text-3xl text-obsidian">Stage 2: High-Resolution Artwork Photography</h2>
+                    <p class="text-xs text-stone mt-1">Upload one or more artwork photographs from your device (JPG, PNG, WEBP). You can add additional photos one by one or select multiple files at once.</p>
+                </div>
+                <span :class="isStep2Complete() ? 'bg-[#1A2E22] text-ivory' : 'bg-bronze text-white'" class="px-3 py-1 text-[10px] uppercase tracking-widest font-semibold self-start sm:self-end" x-text="isStep2Complete() ? ('✓ ' + (localPreviews.length || imageUrls.length) + ' Photo(s) Ready') : 'At Least 1 Photo Required'"></span>
             </div>
 
-            <div class="bg-ivory border-2 border-bronze p-6 space-y-3">
-                <label class="block uppercase tracking-widest text-obsidian font-semibold">Upload Studio Image Files (Multiple Supported) *</label>
-                <input type="file" name="artwork_images[]" multiple accept="image/*" @change="handleLocalFiles($event)" class="w-full text-xs">
-                <p class="text-[11px] text-stone">Select one or more artwork photographs from your device. They will be stored directly in your portfolio and reflected in the Admin Backend.</p>
+            <div class="bg-ivory border-2 border-bronze p-6 space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <label class="block uppercase tracking-widest text-obsidian font-semibold">Upload Studio Image Files (Multiple Supported) *</label>
+                        <p class="text-[11px] text-stone mt-0.5">Select artwork photographs from your device. Clicking "+ Add Another Photo" lets you add more angles or detail shots without replacing existing photos.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <input x-ref="fileInput" type="file" multiple accept="image/*" @change="handleLocalFiles($event)" class="hidden">
+                        <button type="button" @click="$refs.fileInput.click()" class="bg-obsidian text-ivory px-5 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                            <span x-text="localPreviews.length === 0 ? '+ Select Artwork Photo(s) from Device' : '+ Add Another Photo from Device'">+ Select Artwork Photo(s) from Device</span>
+                        </button>
+                    </div>
+                </div>
 
-                <template x-if="localPreviews.length > 0">
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3">
-                        <template x-for="(preview, pIdx) in localPreviews" :key="pIdx">
-                            <div class="bg-white border border-bronze p-2">
-                                <div class="aspect-square bg-alabaster overflow-hidden mb-1.5">
-                                    <img :src="preview.url" class="w-full h-full object-cover" alt="">
+                <!-- Live Uploaded Artwork Preview Gallery -->
+                <div x-show="localPreviews.length === 0" class="border border-dashed border-stone/50 bg-white p-8 text-center space-y-2 cursor-pointer hover:border-bronze transition" @click="$refs.fileInput.click()">
+                    <p class="font-serif text-xl text-obsidian">No Artwork Photographs Uploaded Yet</p>
+                    <p class="text-[11px] text-stone">Click here or use the button above to select your artwork photograph(s) from your computer or phone.</p>
+                </div>
+
+                <div x-show="localPreviews.length > 0" class="space-y-3 pt-2">
+                    <div class="flex items-center justify-between border-b border-hairline pb-2">
+                        <p class="text-[11px] uppercase tracking-widest text-obsidian font-semibold">
+                            Uploaded Artwork Preview Gallery (<span x-text="localPreviews.length"></span> <span x-text="localPreviews.length === 1 ? 'Photograph' : 'Photographs'"></span>)
+                        </p>
+                        <button type="button" @click="$refs.fileInput.click()" class="text-bronze uppercase tracking-widest font-semibold hover:underline">
+                            + Add Another Photo
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <template x-for="(preview, pIdx) in localPreviews" :key="preview.id || pIdx">
+                            <div :class="primaryIndex === pIdx ? 'border-2 border-bronze bg-white shadow-sm' : 'border border-hairline bg-white'" class="p-3 flex flex-col justify-between space-y-3">
+                                <div class="aspect-square bg-alabaster overflow-hidden border border-hairline relative">
+                                    <img :src="preview.dataUrl || preview.url" class="w-full h-full object-cover" alt="Uploaded Artwork Preview">
+                                    <span x-show="primaryIndex === pIdx" class="absolute top-2 left-2 bg-obsidian text-bronzeLight px-2.5 py-1 text-[9px] uppercase tracking-widest font-semibold">
+                                        ★ Primary Cover Photo
+                                    </span>
                                 </div>
-                                <p class="text-[10px] text-obsidian truncate" x-text="preview.name"></p>
-                                <span x-show="pIdx === 0" class="text-[9px] uppercase tracking-widest text-bronze font-semibold">★ Primary Upload</span>
+                                <div class="space-y-2">
+                                    <p class="text-[11px] text-obsidian font-medium truncate" x-text="preview.name || ('Artwork Photo #' + (pIdx + 1))"></p>
+                                    <div class="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-hairline">
+                                        <button type="button" @click="primaryIndex = pIdx" :class="primaryIndex === pIdx ? 'bg-bronze text-white border-bronze' : 'bg-ivory text-charcoal border-hairline hover:border-obsidian'" class="px-2.5 py-1 border text-[10px] uppercase tracking-widest">
+                                            <span x-text="primaryIndex === pIdx ? '★ Primary' : 'Set Primary'"></span>
+                                        </button>
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" x-show="pIdx > 0" @click="moveLocalUp(pIdx)" class="px-2 py-1 border border-hairline bg-ivory text-[10px] uppercase" title="Move Earlier">←</button>
+                                            <button type="button" @click="removeLocalPreview(pIdx)" class="px-2.5 py-1 border border-red-800/30 bg-[#FDF2F2] text-red-800 text-[10px] uppercase hover:bg-red-800 hover:text-white transition">Remove</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </template>
                     </div>
-                </template>
+                </div>
             </div>
 
             <input type="hidden" name="primary_image_index" :value="primaryIndex">
 
-            <div class="space-y-4">
+            <!-- Optional External Image URLs -->
+            <div class="space-y-3 border-t border-hairline pt-4">
                 <div class="flex items-center justify-between">
-                    <label class="uppercase tracking-widest text-stone">Or Provide Gallery Image URLs &amp; Preview Order</label>
-                    <button type="button" @click="addUrl()" class="text-bronze uppercase tracking-widest font-semibold hover:underline">+ Add Another Image Slot</button>
+                    <label class="uppercase tracking-widest text-stone text-[11px]">Optional: Or Provide External Image URL(s)</label>
+                    <button type="button" @click="addUrl()" class="text-bronze uppercase tracking-widest font-semibold hover:underline">+ Add External Image URL Slot</button>
                 </div>
 
-                <template x-for="(imgUrl, index) in imageUrls" :key="index">
+                <template x-for="(imgUrl, index) in imageUrls" :key="'url_' + index">
                     <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center bg-ivory border border-hairline p-4">
-                        <div class="sm:col-span-2 aspect-square bg-alabaster overflow-hidden border border-hairline">
-                            <img :src="imgUrl || 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=400&q=80'" alt="Preview" class="w-full h-full object-cover">
+                        <div class="sm:col-span-2 aspect-square bg-alabaster overflow-hidden border border-hairline flex items-center justify-center">
+                            <template x-if="imgUrl && imgUrl.trim() !== ''">
+                                <img :src="imgUrl" alt="URL Preview" class="w-full h-full object-cover">
+                            </template>
+                            <template x-if="!imgUrl || imgUrl.trim() === ''">
+                                <span class="text-[9px] uppercase tracking-widest text-stone text-center px-2">Enter URL to Preview</span>
+                            </template>
                         </div>
-                        <div class="sm:col-span-6">
-                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1" x-text="'Image Slot #' + (index + 1)"></label>
+                        <div class="sm:col-span-7">
+                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1" x-text="'External Image URL #' + (index + 1)"></label>
                             <input type="text" name="image_urls[]" x-model="imageUrls[index]" placeholder="https://..." class="w-full bg-white border border-hairline px-3 py-2 text-xs">
                         </div>
-                        <div class="sm:col-span-4 flex flex-wrap items-center justify-end gap-2">
-                            <button type="button" @click="primaryIndex = index" :class="primaryIndex === index ? 'bg-bronze text-white border-bronze' : 'bg-white text-charcoal border-hairline'" class="px-3 py-1.5 border text-[10px] uppercase tracking-widest">
-                                <span x-text="primaryIndex === index ? '★ Primary Image' : 'Set Primary'"></span>
-                            </button>
+                        <div class="sm:col-span-3 flex flex-wrap items-center justify-end gap-2">
                             <button type="button" @click="moveUp(index)" class="px-2.5 py-1.5 border border-hairline bg-white text-[10px] uppercase">↑</button>
                             <button type="button" @click="removeUrl(index)" class="px-2.5 py-1.5 border border-hairline bg-white text-red-700 text-[10px] uppercase">Remove</button>
                         </div>
@@ -315,18 +492,18 @@ var $dSub = $draftSubmission ?? []; %>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
                 <div>
                     <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Artist Expected Target Price *</label>
-                    <input type="number" name="artist_expected_price" x-model="expectedPrice" min="100" step="50" required class="w-full bg-ivory border-2 border-bronze px-4 py-3 text-sm font-semibold text-obsidian">
+                    <input type="number" name="artist_expected_price" x-model="expectedPrice" min="100" step="any" class="w-full bg-ivory border-2 border-bronze px-4 py-3 text-sm font-semibold text-obsidian">
                     <p class="text-[10px] text-bronze mt-1">Desired price you want for this artwork.</p>
                 </div>
 
                 <div>
                     <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Suggested Starting Bid *</label>
-                    <input type="number" name="suggested_starting_bid" x-model="startingBid" min="100" step="50" required class="w-full bg-ivory border border-hairline px-4 py-3 text-sm font-semibold">
+                    <input type="number" name="suggested_starting_bid" x-model="startingBid" min="100" step="any" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm font-semibold">
                 </div>
 
                 <div>
                     <label class="block uppercase tracking-widest text-stone mb-2">Confidential Reserve Price</label>
-                    <input type="number" name="reserve_price" x-model="reservePrice" min="100" step="50" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm font-semibold">
+                    <input type="number" name="reserve_price" x-model="reservePrice" min="100" step="any" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm font-semibold">
                     <p class="text-[10px] text-stone mt-1">Lot will not sell below this price.</p>
                 </div>
 
@@ -352,11 +529,11 @@ var $dSub = $draftSubmission ?? []; %>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <label class="block uppercase tracking-widest text-stone mb-2">Low Pre-Sale Estimate</label>
-                    <input type="number" name="estimate_low" x-model="estimateLow" step="100" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
+                    <input type="number" name="estimate_low" x-model="estimateLow" step="any" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
                 </div>
                 <div>
                     <label class="block uppercase tracking-widest text-stone mb-2">High Pre-Sale Estimate</label>
-                    <input type="number" name="estimate_high" x-model="estimateHigh" step="100" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
+                    <input type="number" name="estimate_high" x-model="estimateHigh" step="any" class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
                 </div>
             </div>
 
@@ -365,15 +542,15 @@ var $dSub = $draftSubmission ?? []; %>
                 <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold">Transparent Seller Commission Preview (At Expected Price)</p>
                 <div class="flex justify-between text-xs pt-2">
                     <span>Your Expected Target Price:</span>
-                    <span class="font-semibold" x-text="currency + ' ' + Number(expectedPrice).toLocaleString()"></span>
+                    <span class="font-semibold" x-text="currency + ' ' + Number(expectedPrice || 0).toLocaleString()"></span>
                 </div>
                 <div class="flex justify-between text-xs text-stone">
                     <span>ArtAlly Seller Commission (<%- $commissionPercent %>%):</span>
-                    <span x-text="'- ' + currency + ' ' + Math.round(expectedPrice * <%- $commissionPercent / 100 %>).toLocaleString()"></span>
+                    <span x-text="'- ' + currency + ' ' + Math.round(Number(expectedPrice || 0) * <%- $commissionPercent / 100 %>).toLocaleString()"></span>
                 </div>
                 <div class="flex justify-between text-sm font-serif font-semibold text-obsidian border-t border-hairline pt-2">
                     <span>Estimated Net Artist Payout:</span>
-                    <span class="text-bronze" x-text="currency + ' ' + Math.round(expectedPrice * <%- 1 - ($commissionPercent / 100) %>).toLocaleString()"></span>
+                    <span class="text-bronze" x-text="currency + ' ' + Math.round(Number(expectedPrice || 0) * <%- 1 - ($commissionPercent / 100) %>).toLocaleString()"></span>
                 </div>
             </div>
 
@@ -397,12 +574,12 @@ var $dSub = $draftSubmission ?? []; %>
 
             <div>
                 <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Provenance History *</label>
-                <textarea name="provenance" x-model="provenance" rows="3" required class="w-full bg-ivory border border-hairline p-3.5 text-sm"></textarea>
+                <textarea name="provenance" x-model="provenance" rows="3" class="w-full bg-ivory border border-hairline p-3.5 text-sm"></textarea>
             </div>
 
             <div>
                 <label class="block uppercase tracking-widest text-obsidian font-semibold mb-2">Physical Condition Report *</label>
-                <textarea name="condition_report" x-model="conditionReport" rows="3" required class="w-full bg-ivory border border-hairline p-3.5 text-sm"></textarea>
+                <textarea name="condition_report" x-model="conditionReport" rows="3" class="w-full bg-ivory border border-hairline p-3.5 text-sm"></textarea>
             </div>
 
             <div class="bg-ivory border border-hairline p-6 space-y-3">
@@ -437,23 +614,48 @@ var $dSub = $draftSubmission ?? []; %>
         <div x-cloak x-show="step === 5" class="space-y-6 text-xs">
             <div class="border-b border-hairline pb-3">
                 <h2 class="font-serif text-3xl text-obsidian">Stage 5: Review Dossier &amp; Submit for Approval</h2>
-                <p class="text-xs text-stone mt-1">Verify your submission summary. Artworks are never published directly; our Administrator will review your work, set the agreed price, and control the live auction.</p>
+                <p class="text-xs text-stone mt-1">Verify your submission summary and artwork photographs below. Our Administrator will review your work, set the agreed price, and control the live auction.</p>
             </div>
 
-            <div class="bg-ivory border border-hairline p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="space-y-2">
+            <div class="bg-ivory border border-hairline p-6 grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                <!-- Live Artwork Image Preview in Final Review -->
+                <div class="md:col-span-4 space-y-3">
+                    <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Primary Artwork Preview</p>
+                    <div class="aspect-square bg-alabaster border border-hairline overflow-hidden flex items-center justify-center">
+                        <template x-if="getPrimaryPreviewUrl()">
+                            <img :src="getPrimaryPreviewUrl()" alt="Primary Artwork Preview" class="w-full h-full object-cover">
+                        </template>
+                        <template x-if="!getPrimaryPreviewUrl()">
+                            <span class="text-[10px] uppercase tracking-widest text-stone">No Image Uploaded</span>
+                        </template>
+                    </div>
+                    <template x-if="localPreviews.length > 1">
+                        <div class="grid grid-cols-4 gap-2 pt-1">
+                            <template x-for="(p, idx) in localPreviews" :key="'rev_' + (p.id || idx)">
+                                <div class="aspect-square bg-white border border-hairline overflow-hidden">
+                                    <img :src="p.dataUrl || p.url" alt="" class="w-full h-full object-cover">
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Artwork Specification -->
+                <div class="md:col-span-4 space-y-2">
                     <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Artwork Specification</p>
                     <p class="font-serif text-2xl text-obsidian" x-text="title || 'Untitled Work'"></p>
                     <p class="text-charcoal"><span class="text-stone">Medium:</span> <span x-text="medium"></span></p>
                     <p class="text-charcoal"><span class="text-stone">Dimensions:</span> <span x-text="dimensions"></span> (<span x-text="year"></span>)</p>
                     <p class="text-charcoal"><span class="text-stone">Edition:</span> <span x-text="classification + ' · ' + edition"></span></p>
+                    <p class="text-charcoal"><span class="text-stone">Uploaded Photos:</span> <strong x-text="localPreviews.length + ' Studio File(s)'"></strong></p>
                 </div>
 
-                <div class="space-y-2 border-t md:border-t-0 md:border-l border-hairline pt-4 md:pt-0 md:pl-6">
+                <!-- Financial Parameters -->
+                <div class="md:col-span-4 space-y-2 border-t md:border-t-0 md:border-l border-hairline pt-4 md:pt-0 md:pl-6">
                     <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Auction &amp; Financial Parameters</p>
-                    <p class="text-charcoal"><span class="text-stone">Artist Expected Target Price:</span> <strong class="text-bronze" x-text="currency + ' ' + Number(expectedPrice).toLocaleString()"></strong></p>
-                    <p class="text-charcoal"><span class="text-stone">Suggested Opening Bid:</span> <strong x-text="currency + ' ' + Number(startingBid).toLocaleString()"></strong></p>
-                    <p class="text-charcoal"><span class="text-stone">Confidential Reserve:</span> <strong x-text="currency + ' ' + Number(reservePrice).toLocaleString()"></strong></p>
+                    <p class="text-charcoal"><span class="text-stone">Artist Expected Target Price:</span> <strong class="text-bronze" x-text="currency + ' ' + Number(expectedPrice || 0).toLocaleString()"></strong></p>
+                    <p class="text-charcoal"><span class="text-stone">Suggested Opening Bid:</span> <strong x-text="currency + ' ' + Number(startingBid || 0).toLocaleString()"></strong></p>
+                    <p class="text-charcoal"><span class="text-stone">Confidential Reserve:</span> <strong x-text="currency + ' ' + Number(reservePrice || 0).toLocaleString()"></strong></p>
                     <p class="text-charcoal"><span class="text-stone">Preferred Duration:</span> <span x-text="durationDays + ' Days'"></span></p>
                 </div>
             </div>
@@ -464,11 +666,11 @@ var $dSub = $draftSubmission ?? []; %>
                 </button>
 
                 <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                    <button type="submit" name="submission_mode" value="draft" class="border border-obsidian text-obsidian px-6 py-4 text-xs uppercase tracking-widest hover:bg-alabaster transition">
-                        Save as Studio Draft
+                    <button type="button" :disabled="submitting" @click="submitDossier('draft')" class="border border-obsidian text-obsidian px-6 py-4 text-xs uppercase tracking-widest hover:bg-alabaster transition">
+                        <span x-text="submitting && submissionMode === 'draft' ? 'Saving Draft...' : 'Save as Studio Draft'">Save as Studio Draft</span>
                     </button>
-                    <button type="submit" name="submission_mode" value="submit" class="bg-obsidian text-ivory px-8 py-4 text-xs uppercase tracking-widest font-semibold hover:bg-bronze transition">
-                        Submit for Curatorial Approval
+                    <button type="button" :disabled="submitting" @click="submitDossier('submitted')" :class="submitting ? 'opacity-70 cursor-wait bg-bronze' : 'hover:bg-bronze'" class="bg-obsidian text-ivory px-8 py-4 text-xs uppercase tracking-widest font-semibold transition">
+                        <span x-text="submitting && submissionMode === 'submitted' ? 'Submitting Artwork Dossier...' : 'Submit for Curatorial Approval'">Submit for Curatorial Approval</span>
                     </button>
                 </div>
             </div>

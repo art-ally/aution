@@ -1,13 +1,39 @@
 <div class="max-w-4xl mx-auto px-4 sm:px-8 py-12" x-data="{
     previewPhoto: '<%- e($profile?.['profile_photo']) %>',
+    photoUrl: '<%- e($profile?.['profile_photo']) %>',
     photoData: '',
     handleProfilePhoto(e) {
-        const file = e.target.files[0];
+        const self = this;
+        const inputEl = e.target;
+        const file = inputEl.files[0];
         if (!file) return;
-        this.previewPhoto = URL.createObjectURL(file);
         const reader = new FileReader();
         reader.onload = (ev) => {
-            this.photoData = ev.target.result;
+            const rawDataUrl = ev.target.result;
+            self.previewPhoto = rawDataUrl;
+            self.photoData = rawDataUrl;
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    const maxDim = 600;
+                    let w = img.width || 400;
+                    let h = img.height || 400;
+                    if (w > maxDim || h > maxDim) {
+                        if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+                        else { w = Math.round((w * maxDim) / h); h = maxDim; }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const compressed = canvas.toDataURL('image/jpeg', 0.82);
+                    self.previewPhoto = compressed;
+                    self.photoData = compressed;
+                    inputEl.value = '';
+                } catch (_) {}
+            };
+            img.src = rawDataUrl;
         };
         reader.readAsDataURL(file);
     }
@@ -42,7 +68,7 @@
                     </div>
                     <div>
                         <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Or Portrait Image URL</label>
-                        <input type="text" name="profile_photo_url" x-model="previewPhoto" value="<%- e($profile?.['profile_photo']) %>" class="w-full bg-white border border-hairline px-3 py-2 text-xs">
+                        <input type="text" name="profile_photo_url" x-model="photoUrl" @input="previewPhoto = photoUrl" value="<%- e($profile?.['profile_photo']) %>" class="w-full bg-white border border-hairline px-3 py-2 text-xs">
                     </div>
                 </div>
             </div>

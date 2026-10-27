@@ -44,6 +44,37 @@ const TABLES = [
   'authentication_invoices',
 ];
 
+// Ordered so parent foreign-key tables are always upserted before child tables
+const ORDERED_RELATIONAL_TABLES = [
+  'platform_settings',
+  'roles',
+  'categories',
+  'users',
+  'artist_profiles',
+  'buyer_profiles',
+  'artworks',
+  'artwork_images',
+  'artwork_documents',
+  'artwork_submissions',
+  'auctions',
+  'bids',
+  'watchlists',
+  'followed_artists',
+  'orders',
+  'order_items',
+  'payments',
+  'commissions',
+  'seller_payouts',
+  'notifications',
+  'email_verifications',
+  'password_reset_tokens',
+  'newsletter_subscribers',
+  'editorial_articles',
+  'reports',
+  'audit_logs',
+  'authentication_invoices',
+];
+
 function normalizeSupabasePgUrl(rawUrl) {
   const s = String(rawUrl || '').trim();
   if (!s) return DEFAULT_SUPABASE_PG_URL;
@@ -62,14 +93,23 @@ function formatUtcNow() {
 
 class DatabaseEngine {
   constructor() {
-    this.data = { _meta: { sequences: {} } };
+    this.data = { _meta: { sequences: {}, version: 1, updated_at_ms: 0 } };
     this.supabase = null;
     this.pgPool = null;
     this.pgSchemaInitialized = false;
+    this.pgSchemaInitPromise = null;
     this.pgTableColumns = {};
     this.pgNetworkBackoffUntil = 0;
     this.supabaseEnabled = false;
     this.lastSupabaseSync = 0;
+    this.initialSyncCompleted = false;
+
+    this._inTransaction = false;
+    this._diskDirty = false;
+    this.hasPendingSync = false;
+    this.pendingRelationalOps = [];
+    this._flushTimer = null;
+    this._flushInFlight = null;
 
     const pgConnectionString = normalizeSupabasePgUrl(
       process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || DEFAULT_SUPABASE_PG_URL
@@ -82,7 +122,7 @@ class DatabaseEngine {
           ssl: { rejectUnauthorized: false },
           max: 5,
           idleTimeoutMillis: 15000,
-          connectionTimeoutMillis: 8000,
+          connectionTimeoutMillis: 5000,
         });
         this.pgPool.on('error', (err) => {
           console.warn('[ArtAlly DB] PostgreSQL background pool notice:', err.message);
@@ -127,6 +167,27 @@ class DatabaseEngine {
     return DatabaseEngine.instance;
   }
 
+  normalizeDataStructure(parsed) {
+    if (!parsed || typeof parsed !== 'object') {
+      parsed = { _meta: { sequences: {}, version: 1, updated_at_ms: 0 } };
+    }
+    if (!parsed._meta) parsed._meta = { sequences: {}, version: 1, updated_at_ms: 0 };
+    if (!parsed._meta.sequences) parsed._meta.sequences = {};
+    if (typeof parsed._meta.version !== 'number') parsed._meta.version = 1;
+    if (typeof parsed._meta.updated_at_ms !== 'number') parsed._meta.updated_at_ms = 0;
+
+    for (const t of TABLES) {
+      if (!Array.isArray(parsed[t])) {
+        parsed[t] = [];
+      }
+      const maxId = parsed[t].reduce((max, r) => Math.max(max, Number(r?.id || 0)), 0);
+      if (!parsed._meta.sequences[t] || parsed._meta.sequences[t] < maxId) {
+        parsed._meta.sequences[t] = maxId;
+      }
+    }
+    return parsed;
+  }
+
   loadFromDisk() {
     try {
       if (IS_VERCEL && !fs.existsSync(RUNTIME_STORE_PATH) && fs.existsSync(SEED_STORE_PATH)) {
@@ -138,12 +199,7 @@ class DatabaseEngine {
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed && typeof parsed === 'object') {
-            this.data = parsed;
-            if (!this.data._meta) this.data._meta = { sequences: {} };
-            if (!this.data._meta.sequences) this.data._meta.sequences = {};
-            for (const t of TABLES) {
-              if (!Array.isArray(this.data[t])) this.data[t] = [];
-            }
+            this.data = this.normalizeDataStructure(parsed);
             return;
           }
         }
@@ -152,74 +208,213 @@ class DatabaseEngine {
       console.error('[ArtAlly DB] Failed loading store from disk:', err.message);
     }
 
-    this.data = { _meta: { sequences: {} } };
-    for (const t of TABLES) {
-      this.data[t] = [];
-      this.data._meta.sequences[t] = 0;
+    this.data = this.normalizeDataStructure({});
+  }
+
+  markMutated() {
+    if (!this.data._meta) this.data._meta = { sequences: {}, version: 1, updated_at_ms: 0 };
+    this.data._meta.version = Number(this.data._meta.version || 0) + 1;
+    this.data._meta.updated_at_ms = Date.now();
+    this._diskDirty = true;
+    this.hasPendingSync = true;
+  }
+
+  writeDiskNow() {
+    if (!this._diskDirty) return;
+    try {
+      const json = JSON.stringify(this.data, null, 2);
+      fs.writeFileSync(RUNTIME_STORE_PATH, json, 'utf8');
+      this._diskDirty = false;
+    } catch (err) {
+      console.error('[ArtAlly DB] Disk write warning:', err.message);
     }
   }
 
   saveToDisk() {
-    try {
-      const json = JSON.stringify(this.data, null, 4);
-      fs.writeFileSync(RUNTIME_STORE_PATH, json, 'utf8');
-    } catch (err) {
-      console.error('[ArtAlly DB] Disk write warning:', err.message);
+    this.markMutated();
+    if (this._inTransaction) {
+      return;
     }
+    this.writeDiskNow();
     if (this.supabaseEnabled) {
-      this.pushToSupabaseAsync();
+      this.scheduleFlush();
     }
   }
 
-  async ensurePgSchema() {
-    if (!this.pgPool || this.pgSchemaInitialized) return true;
-    if (Date.now() < this.pgNetworkBackoffUntil) return false;
-    try {
-      await this.pgPool.query(`
-        CREATE TABLE IF NOT EXISTS public.artally_store (
-          id BIGINT PRIMARY KEY DEFAULT 1,
-          store_data JSONB NOT NULL DEFAULT '{}'::jsonb,
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-      `);
-      if (fs.existsSync(SCHEMA_SQL_PATH)) {
-        const sql = fs.readFileSync(SCHEMA_SQL_PATH, 'utf8');
-        await this.pgPool.query(sql);
-      }
-      await this.pgPool.query(`
-        ALTER TABLE public.artist_profiles ADD COLUMN IF NOT EXISTS is_seeded BOOLEAN NOT NULL DEFAULT false;
-        ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS ends_at VARCHAR(80) NULL;
-        ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS payment_method VARCHAR(40) NOT NULL DEFAULT 'bank_and_crypto';
-        ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_currency VARCHAR(120) NULL;
-        ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_network VARCHAR(120) NULL;
-        ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_wallet_address VARCHAR(255) NULL;
-        ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_memo VARCHAR(255) NULL;
-        ALTER TABLE public.authentication_invoices ALTER COLUMN payment_account_name DROP NOT NULL;
-        ALTER TABLE public.authentication_invoices ALTER COLUMN payment_bank_name DROP NOT NULL;
-        ALTER TABLE public.authentication_invoices ALTER COLUMN payment_account_number DROP NOT NULL;
-      `);
+  scheduleFlush() {
+    if (this._flushTimer) return;
+    this._flushTimer = setTimeout(() => {
+      this._flushTimer = null;
+      this.flush().catch(() => {});
+    }, 25);
+  }
 
-      // Cache column metadata for all public tables so relational upserts match exact columns
-      const colRes = await this.pgPool.query(`
-        SELECT table_name, column_name, data_type
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-      `);
-      this.pgTableColumns = {};
-      for (const row of colRes.rows) {
-        if (!this.pgTableColumns[row.table_name]) {
-          this.pgTableColumns[row.table_name] = {};
-        }
-        this.pgTableColumns[row.table_name][row.column_name] = row.data_type;
-      }
-
-      this.pgSchemaInitialized = true;
-      return true;
-    } catch (err) {
-      console.warn('[ArtAlly DB] Schema initialization warning:', err.message);
-      this.pgNetworkBackoffUntil = Date.now() + 30000;
-      return false;
+  /**
+   * Flushes all pending disk writes, atomic store_data snapshot, and ordered relational
+   * table changes to Supabase PostgreSQL. Safe to await before HTTP redirects.
+   */
+  async flush() {
+    if (this._flushTimer) {
+      clearTimeout(this._flushTimer);
+      this._flushTimer = null;
     }
+    this.writeDiskNow();
+
+    if (!this.supabaseEnabled) {
+      this.hasPendingSync = false;
+      this.pendingRelationalOps = [];
+      return true;
+    }
+
+    if (this._flushInFlight) {
+      await this._flushInFlight;
+      if (!this.hasPendingSync && this.pendingRelationalOps.length === 0) {
+        return true;
+      }
+    }
+
+    const runFlush = async () => {
+      this.writeDiskNow();
+      const opsToRun = this.pendingRelationalOps.splice(0, this.pendingRelationalOps.length);
+      this.hasPendingSync = false;
+
+      // 1. Push the authoritative JSON store snapshot first (single fast query)
+      const storeOk = await this.pushToSupabaseAsync();
+
+      // 2. Execute relational table upserts/deletes in foreign-key dependency order
+      if (opsToRun.length > 0 && this.pgPool && Date.now() >= this.pgNetworkBackoffUntil) {
+        try {
+          const schemaOk = await this.ensurePgSchema();
+          if (schemaOk) {
+            const tableOrderMap = {};
+            ORDERED_RELATIONAL_TABLES.forEach((t, idx) => {
+              tableOrderMap[t] = idx;
+            });
+
+            // Deduplicate operations by (op, table, id) and sort parent tables first
+            const dedupedMap = new Map();
+            for (const item of opsToRun) {
+              const key = `${item.op}:${item.table}:${item.id}`;
+              dedupedMap.set(key, item);
+            }
+            const sortedOps = Array.from(dedupedMap.values()).sort((a, b) => {
+              if (a.op === 'delete' && b.op !== 'delete') return 1;
+              if (a.op !== 'delete' && b.op === 'delete') return -1;
+              const orderA = tableOrderMap[a.table] ?? 999;
+              const orderB = tableOrderMap[b.table] ?? 999;
+              if (a.op === 'delete' && b.op === 'delete') return orderB - orderA;
+              return orderA - orderB;
+            });
+
+            for (const item of sortedOps) {
+              if (item.op === 'upsert' && item.row) {
+                await this.upsertRelationalRowToPg(item.table, item.row);
+              } else if (item.op === 'delete' && item.id !== undefined) {
+                await this.deleteRelationalRowFromPg(item.table, item.id);
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      this.lastSupabaseSync = Date.now();
+      return storeOk;
+    };
+
+    this._flushInFlight = runFlush().finally(() => {
+      this._flushInFlight = null;
+    });
+
+    return this._flushInFlight;
+  }
+
+  async ensurePgSchema() {
+    if (!this.pgPool) return false;
+    if (this.pgSchemaInitialized) return true;
+    if (Date.now() < this.pgNetworkBackoffUntil) return false;
+    if (this.pgSchemaInitPromise) return this.pgSchemaInitPromise;
+
+    this.pgSchemaInitPromise = (async () => {
+      try {
+        // Fast path: check if schema and columns already exist in public schema (1 single query)
+        const colRes = await this.pgPool.query(`
+          SELECT table_name, column_name, data_type
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+        `);
+
+        const cols = {};
+        for (const row of colRes.rows) {
+          if (!cols[row.table_name]) cols[row.table_name] = {};
+          cols[row.table_name][row.column_name] = row.data_type;
+        }
+
+        const hasCoreTables =
+          cols.artally_store &&
+          cols.users &&
+          cols.artist_profiles &&
+          cols.artworks &&
+          cols.artwork_submissions &&
+          cols.auctions &&
+          cols.authentication_invoices &&
+          cols.authentication_invoices.crypto_wallet_address;
+
+        if (hasCoreTables) {
+          this.pgTableColumns = cols;
+          this.pgSchemaInitialized = true;
+          return true;
+        }
+
+        // Full migration path: only executed if tables or columns are missing
+        await this.pgPool.query(`
+          CREATE TABLE IF NOT EXISTS public.artally_store (
+            id BIGINT PRIMARY KEY DEFAULT 1,
+            store_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );
+        `);
+        if (fs.existsSync(SCHEMA_SQL_PATH)) {
+          const sql = fs.readFileSync(SCHEMA_SQL_PATH, 'utf8');
+          await this.pgPool.query(sql);
+        }
+        await this.pgPool.query(`
+          ALTER TABLE public.artist_profiles ADD COLUMN IF NOT EXISTS is_seeded BOOLEAN NOT NULL DEFAULT false;
+          ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS ends_at VARCHAR(80) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS payment_method VARCHAR(40) NOT NULL DEFAULT 'bank_and_crypto';
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_currency VARCHAR(120) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_network VARCHAR(120) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_wallet_address VARCHAR(255) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_memo VARCHAR(255) NULL;
+          ALTER TABLE public.authentication_invoices ALTER COLUMN payment_account_name DROP NOT NULL;
+          ALTER TABLE public.authentication_invoices ALTER COLUMN payment_bank_name DROP NOT NULL;
+          ALTER TABLE public.authentication_invoices ALTER COLUMN payment_account_number DROP NOT NULL;
+        `);
+
+        const refreshedColRes = await this.pgPool.query(`
+          SELECT table_name, column_name, data_type
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+        `);
+        this.pgTableColumns = {};
+        for (const row of refreshedColRes.rows) {
+          if (!this.pgTableColumns[row.table_name]) {
+            this.pgTableColumns[row.table_name] = {};
+          }
+          this.pgTableColumns[row.table_name][row.column_name] = row.data_type;
+        }
+
+        this.pgSchemaInitialized = true;
+        return true;
+      } catch (err) {
+        console.warn('[ArtAlly DB] Schema initialization warning:', err.message);
+        this.pgNetworkBackoffUntil = Date.now() + 15000;
+        return false;
+      } finally {
+        this.pgSchemaInitPromise = null;
+      }
+    })();
+
+    return this.pgSchemaInitPromise;
   }
 
   async upsertRelationalRowToPg(table, row) {
@@ -273,41 +468,156 @@ class DatabaseEngine {
     }
   }
 
+  async _reconcileRelationalTablesFromPg(storeData) {
+    if (!this.pgPool) return false;
+    const coreTables = [
+      'users',
+      'artist_profiles',
+      'artworks',
+      'artwork_images',
+      'artwork_submissions',
+      'auctions',
+      'authentication_invoices',
+      'notifications',
+    ];
+    let recoveredAny = false;
+    try {
+      const results = await Promise.all(
+        coreTables.map((t) =>
+          this.pgPool
+            .query(`SELECT * FROM public."${t}" ORDER BY id ASC`)
+            .then((r) => ({ table: t, rows: r.rows || [] }))
+            .catch(() => ({ table: t, rows: [] }))
+        )
+      );
+
+      for (const { table, rows } of results) {
+        if (!Array.isArray(storeData[table])) storeData[table] = [];
+        const existingIds = new Set(storeData[table].map((r) => Number(r.id)));
+        for (const pgRow of rows) {
+          const rowId = Number(pgRow.id);
+          if (rowId > 0 && !existingIds.has(rowId)) {
+            const normalizedRow = { ...pgRow, id: rowId };
+            for (const [k, v] of Object.entries(normalizedRow)) {
+              if (v instanceof Date) {
+                normalizedRow[k] = v.toISOString().replace('T', ' ').slice(0, 19);
+              }
+            }
+            if (table === 'users' && typeof normalizedRow.roles === 'string') {
+              try {
+                normalizedRow.roles = JSON.parse(normalizedRow.roles);
+              } catch (_) {
+                normalizedRow.roles = [normalizedRow.role || 'buyer'];
+              }
+            }
+            storeData[table].push(normalizedRow);
+            existingIds.add(rowId);
+            recoveredAny = true;
+          }
+        }
+        const maxId = storeData[table].reduce((m, r) => Math.max(m, Number(r?.id || 0)), 0);
+        if (!storeData._meta.sequences[table] || storeData._meta.sequences[table] < maxId) {
+          storeData._meta.sequences[table] = maxId;
+        }
+      }
+    } catch (_) {}
+    return recoveredAny;
+  }
+
+  async _pullStoreFromPg() {
+    if (!this.pgPool || Date.now() < this.pgNetworkBackoffUntil) return false;
+
+    try {
+      let res;
+      try {
+        res = await this.pgPool.query(
+          'SELECT store_data, updated_at FROM public.artally_store WHERE id = 1 LIMIT 1'
+        );
+      } catch (queryErr) {
+        if (queryErr.code === '42P01') {
+          await this.ensurePgSchema();
+          res = await this.pgPool.query(
+            'SELECT store_data, updated_at FROM public.artally_store WHERE id = 1 LIMIT 1'
+          );
+        } else {
+          throw queryErr;
+        }
+      }
+
+      // Never overwrite if local mutations occurred while the query was in flight
+      if (this.hasPendingSync || this._flushInFlight) {
+        return true;
+      }
+
+      if (
+        res.rows.length > 0 &&
+        res.rows[0].store_data &&
+        Object.keys(res.rows[0].store_data).length > 0
+      ) {
+        const remoteData = this.normalizeDataStructure(res.rows[0].store_data);
+        const recovered = await this._reconcileRelationalTablesFromPg(remoteData);
+
+        if (this.hasPendingSync || this._flushInFlight) {
+          return true;
+        }
+
+        const localUpdatedMs = Number(this.data._meta?.updated_at_ms || 0);
+        const remoteUpdatedMs = Number(remoteData._meta?.updated_at_ms || 0);
+
+        // If local store has newer un-pushed timestamp, push local to remote instead of overwriting
+        if (!recovered && localUpdatedMs > 0 && localUpdatedMs > remoteUpdatedMs) {
+          await this.pushToSupabaseAsync();
+          for (const ap of this.data.artist_profiles || []) {
+            await this.upsertRelationalRowToPg('artist_profiles', ap);
+          }
+          this.initialSyncCompleted = true;
+          return true;
+        }
+
+        this.data = remoteData;
+        this.initialSyncCompleted = true;
+        try {
+          fs.writeFileSync(RUNTIME_STORE_PATH, JSON.stringify(this.data, null, 2), 'utf8');
+        } catch (_) {}
+        if (recovered) {
+          await this.pushToSupabaseAsync();
+        }
+        return true;
+      } else {
+        await this.pushToSupabaseAsync();
+        this.initialSyncCompleted = true;
+        return true;
+      }
+    } catch (err) {
+      this.pgNetworkBackoffUntil = Date.now() + 15000;
+      return false;
+    }
+  }
+
   async syncFromSupabaseIfConfigured(force = false) {
     if (!this.supabaseEnabled) return false;
+
+    // If we have local mutations waiting to be pushed, flush them first so they are never lost!
+    if (this.hasPendingSync || this._flushInFlight) {
+      await this.flush();
+      return true;
+    }
+
     const now = Date.now();
-    if (!force && now - this.lastSupabaseSync < 5000) {
+    const syncIntervalMs = IS_VERCEL ? 2500 : 12000;
+    if (!force && this.initialSyncCompleted && now - this.lastSupabaseSync < syncIntervalMs) {
       return true;
     }
     this.lastSupabaseSync = now;
 
-    if (this.pgPool && Date.now() >= this.pgNetworkBackoffUntil) {
-      try {
-        const schemaOk = await this.ensurePgSchema();
-        if (schemaOk) {
-          const res = await this.pgPool.query(
-            'SELECT store_data, updated_at FROM public.artally_store WHERE id = 1 LIMIT 1'
-          );
-          if (res.rows.length > 0 && res.rows[0].store_data && Object.keys(res.rows[0].store_data).length > 0) {
-            this.data = res.rows[0].store_data;
-            if (!this.data._meta) this.data._meta = { sequences: {} };
-            if (!this.data._meta.sequences) this.data._meta.sequences = {};
-            for (const t of TABLES) {
-              if (!Array.isArray(this.data[t])) this.data[t] = [];
-            }
-            try {
-              fs.writeFileSync(RUNTIME_STORE_PATH, JSON.stringify(this.data, null, 4), 'utf8');
-            } catch (_) {}
-            return true;
-          } else {
-            await this.pushToSupabaseAsync();
-            return true;
-          }
-        }
-      } catch (err) {
-        this.pgNetworkBackoffUntil = Date.now() + 30000;
-      }
+    // On local server after initial sync, refresh in the background so page navigations are instant
+    if (!IS_VERCEL && !force && this.initialSyncCompleted) {
+      this._pullStoreFromPg().catch(() => {});
+      return true;
     }
+
+    const ok = await this._pullStoreFromPg();
+    if (ok) return true;
 
     if (this.supabase) {
       try {
@@ -318,10 +628,13 @@ class DatabaseEngine {
           .maybeSingle();
 
         if (!error && data && data.store_data && Object.keys(data.store_data).length > 0) {
-          this.data = data.store_data;
-          try {
-            fs.writeFileSync(RUNTIME_STORE_PATH, JSON.stringify(this.data, null, 4), 'utf8');
-          } catch (_) {}
+          if (!this.hasPendingSync && !this._flushInFlight) {
+            this.data = this.normalizeDataStructure(data.store_data);
+            this.initialSyncCompleted = true;
+            try {
+              fs.writeFileSync(RUNTIME_STORE_PATH, JSON.stringify(this.data, null, 2), 'utf8');
+            } catch (_) {}
+          }
           return true;
         }
       } catch (_) {}
@@ -335,19 +648,32 @@ class DatabaseEngine {
 
     if (this.pgPool && Date.now() >= this.pgNetworkBackoffUntil) {
       try {
-        const schemaOk = await this.ensurePgSchema();
-        if (schemaOk) {
+        const payload = JSON.stringify(this.data);
+        try {
           await this.pgPool.query(
             `INSERT INTO public.artally_store (id, store_data, updated_at)
              VALUES (1, $1::jsonb, NOW())
              ON CONFLICT (id) DO UPDATE
              SET store_data = EXCLUDED.store_data, updated_at = NOW()`,
-            [JSON.stringify(this.data)]
+            [payload]
           );
-          return true;
+        } catch (queryErr) {
+          if (queryErr.code === '42P01') {
+            await this.ensurePgSchema();
+            await this.pgPool.query(
+              `INSERT INTO public.artally_store (id, store_data, updated_at)
+               VALUES (1, $1::jsonb, NOW())
+               ON CONFLICT (id) DO UPDATE
+               SET store_data = EXCLUDED.store_data, updated_at = NOW()`,
+              [payload]
+            );
+          } else {
+            throw queryErr;
+          }
         }
+        return true;
       } catch (err) {
-        this.pgNetworkBackoffUntil = Date.now() + 30000;
+        this.pgNetworkBackoffUntil = Date.now() + 15000;
       }
     }
 
@@ -375,40 +701,9 @@ class DatabaseEngine {
     const schemaOk = await this.ensurePgSchema();
     const storeOk = await this.pushToSupabaseAsync();
 
-    // Order tables so parent foreign keys (users, categories) are inserted before child tables
-    const orderedTables = [
-      'platform_settings',
-      'roles',
-      'categories',
-      'users',
-      'artist_profiles',
-      'buyer_profiles',
-      'artworks',
-      'artwork_images',
-      'artwork_documents',
-      'artwork_submissions',
-      'auctions',
-      'bids',
-      'watchlists',
-      'followed_artists',
-      'orders',
-      'order_items',
-      'payments',
-      'commissions',
-      'seller_payouts',
-      'notifications',
-      'email_verifications',
-      'password_reset_tokens',
-      'newsletter_subscribers',
-      'editorial_articles',
-      'reports',
-      'audit_logs',
-      'authentication_invoices',
-    ];
-
     const tableSummary = {};
     if (schemaOk && this.pgPool) {
-      for (const t of orderedTables) {
+      for (const t of ORDERED_RELATIONAL_TABLES) {
         const rows = Array.isArray(this.data[t]) ? this.data[t] : [];
         let syncedCount = 0;
         for (const row of rows) {
@@ -432,6 +727,13 @@ class DatabaseEngine {
    * default categories, roles, and platform settings.
    */
   async clearAllBackendAndDemoData(preserveAdminUser = null) {
+    if (this._flushTimer) {
+      clearTimeout(this._flushTimer);
+      this._flushTimer = null;
+    }
+    this.pendingRelationalOps = [];
+    this.hasPendingSync = false;
+
     const existingUsers = Array.isArray(this.data.users) ? this.data.users : [];
     const existingAdmins = existingUsers.filter(
       (u) =>
@@ -500,10 +802,17 @@ class DatabaseEngine {
             },
           ];
 
+    const nextVersion = Number(this.data._meta?.version || 0) + 1;
+    this.data = {
+      _meta: {
+        sequences: {},
+        version: nextVersion,
+        updated_at_ms: Date.now(),
+      },
+    };
+
     for (const t of TABLES) {
       this.data[t] = [];
-      if (!this.data._meta) this.data._meta = { sequences: {} };
-      if (!this.data._meta.sequences) this.data._meta.sequences = {};
       this.data._meta.sequences[t] = 0;
     }
 
@@ -523,11 +832,12 @@ class DatabaseEngine {
     this.data._meta.sequences.platform_settings = 1;
 
     try {
-      const json = JSON.stringify(this.data, null, 4);
+      const json = JSON.stringify(this.data, null, 2);
       fs.writeFileSync(RUNTIME_STORE_PATH, json, 'utf8');
       if (RUNTIME_STORE_PATH !== SEED_STORE_PATH) {
         fs.writeFileSync(SEED_STORE_PATH, json, 'utf8');
       }
+      this._diskDirty = false;
     } catch (err) {
       console.error('[ArtAlly DB] Clear disk write warning:', err.message);
     }
@@ -572,17 +882,26 @@ class DatabaseEngine {
     }
 
     await this.pushToSupabaseAsync();
+    this.lastSupabaseSync = Date.now();
     return cleanAdmin;
   }
 
   transaction(callback) {
     const snapshot = JSON.parse(JSON.stringify(this.data));
+    const prevOpsLen = this.pendingRelationalOps.length;
+    const wasInTx = this._inTransaction;
+    this._inTransaction = true;
     try {
       const result = callback(this);
-      this.saveToDisk();
+      this._inTransaction = wasInTx;
+      if (!wasInTx) {
+        this.saveToDisk();
+      }
       return result;
     } catch (err) {
+      this._inTransaction = wasInTx;
       this.data = snapshot;
+      this.pendingRelationalOps.length = prevOpsLen;
       throw err;
     }
   }
@@ -617,12 +936,18 @@ class DatabaseEngine {
   }
 
   /**
-   * Queries the user directly from the Supabase PostgreSQL database (`public.users`)
-   * case-insensitively by email when connected, falling back to the local store if offline.
+   * Queries the user directly from the local store first, or from Supabase PostgreSQL (`public.users`)
+   * case-insensitively by email when not yet in local cache.
    */
   async findUserByEmailFromDb(email) {
     const cleanEmail = String(email || '').trim();
     if (!cleanEmail) return null;
+
+    // Check in-memory store first (already synced)
+    const localMatch = this.findBy('users', 'email', cleanEmail);
+    if (localMatch) {
+      return localMatch;
+    }
 
     if (this.pgPool && Date.now() >= this.pgNetworkBackoffUntil) {
       try {
@@ -633,7 +958,6 @@ class DatabaseEngine {
         );
         if (res.rows && res.rows.length > 0) {
           const dbUser = res.rows[0];
-          // Ensure local cache stays synchronized with the database row
           if (!Array.isArray(this.data.users)) this.data.users = [];
           const existingIdx = this.data.users.findIndex((u) => Number(u.id) === Number(dbUser.id));
           if (existingIdx >= 0) {
@@ -641,13 +965,18 @@ class DatabaseEngine {
             return this.data.users[existingIdx];
           } else {
             this.data.users.push(dbUser);
+            const maxUserId = this.data.users.reduce((m, u) => Math.max(m, Number(u.id || 0)), 0);
+            if (!this.data._meta.sequences.users || this.data._meta.sequences.users < maxUserId) {
+              this.data._meta.sequences.users = maxUserId;
+            }
+            this.saveToDisk();
             return dbUser;
           }
         }
       } catch (_) {}
     }
 
-    return this.findBy('users', 'email', cleanEmail);
+    return null;
   }
 
   where(table, predicate) {
@@ -659,10 +988,11 @@ class DatabaseEngine {
     if (!Array.isArray(this.data[table])) {
       this.data[table] = [];
     }
-    if (!this.data._meta) this.data._meta = { sequences: {} };
+    if (!this.data._meta) this.data._meta = { sequences: {}, version: 1, updated_at_ms: 0 };
     if (!this.data._meta.sequences) this.data._meta.sequences = {};
 
-    let seq = Number(this.data._meta.sequences[table] || 0) + 1;
+    const maxExistingId = this.data[table].reduce((max, r) => Math.max(max, Number(r?.id || 0)), 0);
+    let seq = Math.max(Number(this.data._meta.sequences[table] || 0), maxExistingId) + 1;
     const copy = { ...record };
     if (copy.id !== undefined && copy.id !== null) {
       const idNum = Number(copy.id);
@@ -679,10 +1009,10 @@ class DatabaseEngine {
     copy.updated_at = copy.updated_at || now;
 
     this.data[table].push(copy);
-    this.saveToDisk();
     if (this.pgPool) {
-      this.upsertRelationalRowToPg(table, copy).catch(() => {});
+      this.pendingRelationalOps.push({ op: 'upsert', table, id: copy.id, row: copy });
     }
+    this.saveToDisk();
     return copy;
   }
 
@@ -700,10 +1030,10 @@ class DatabaseEngine {
           updated_at: formatUtcNow(),
         };
         this.data[table][idx] = updated;
-        this.saveToDisk();
         if (this.pgPool) {
-          this.upsertRelationalRowToPg(table, updated).catch(() => {});
+          this.pendingRelationalOps.push({ op: 'upsert', table, id: updated.id, row: updated });
         }
+        this.saveToDisk();
         return updated;
       }
     }
@@ -718,10 +1048,10 @@ class DatabaseEngine {
       const row = this.data[table][idx];
       if (String(row.id ?? '') === String(id)) {
         this.data[table].splice(idx, 1);
-        this.saveToDisk();
         if (this.pgPool) {
-          this.deleteRelationalRowFromPg(table, id).catch(() => {});
+          this.pendingRelationalOps.push({ op: 'delete', table, id: row.id });
         }
+        this.saveToDisk();
         return true;
       }
     }

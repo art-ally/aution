@@ -6,6 +6,7 @@
     buyerCodeError: '',
     portraitPreview: '',
     portraitData: '',
+    submitting: false,
     verifyBuyerCode() {
         if (this.buyerCodeInput.trim().toUpperCase() === this.expectedBuyerCode.trim().toUpperCase() && this.buyerCodeInput.trim() !== '') {
             this.buyerUnlocked = true;
@@ -16,12 +17,37 @@
         }
     },
     handlePortraitChange(e) {
-        const file = e.target.files[0];
+        const self = this;
+        const inputEl = e.target;
+        const file = inputEl.files[0];
         if (!file) return;
-        this.portraitPreview = URL.createObjectURL(file);
         const reader = new FileReader();
         reader.onload = (ev) => {
-            this.portraitData = ev.target.result;
+            const rawDataUrl = ev.target.result;
+            self.portraitPreview = rawDataUrl;
+            self.portraitData = rawDataUrl;
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    const maxDim = 600;
+                    let w = img.width || 400;
+                    let h = img.height || 400;
+                    if (w > maxDim || h > maxDim) {
+                        if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+                        else { w = Math.round((w * maxDim) / h); h = maxDim; }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const compressed = canvas.toDataURL('image/jpeg', 0.82);
+                    self.portraitPreview = compressed;
+                    self.portraitData = compressed;
+                    inputEl.value = '';
+                } catch (_) {}
+            };
+            img.src = rawDataUrl;
         };
         reader.readAsDataURL(file);
     }
@@ -98,7 +124,7 @@
         </div>
 
         <!-- MAIN REGISTRATION FORM (Always shown for Artists, or for Buyers after Verification Code is unlocked) -->
-        <form x-show="role === 'artist' || (role === 'buyer' && buyerUnlocked)" action="/register" method="POST" enctype="multipart/form-data" class="space-y-5 text-xs">
+        <form x-show="role === 'artist' || (role === 'buyer' && buyerUnlocked)" @submit="if (submitting) { $event.preventDefault(); return; } submitting = true" action="/register" method="POST" enctype="multipart/form-data" class="space-y-5 text-xs">
             <%- csrf_field() %>
             <input type="hidden" name="account_type" :value="role">
             <input type="hidden" name="buyer_verification_code" :value="buyerCodeInput">
@@ -193,8 +219,9 @@
                 </label>
             </div>
 
-            <button type="submit" class="w-full bg-obsidian text-ivory py-4 text-xs uppercase tracking-widest font-semibold hover:bg-bronze transition">
-                <span x-text="role === 'artist' ? 'Complete Artist Registration & Enter Studio' : 'Complete Verified Collector Registration'">Complete Artist Registration &amp; Enter Studio</span>
+            <button type="submit" :disabled="submitting" :class="submitting ? 'opacity-70 cursor-wait bg-bronze' : 'hover:bg-bronze'" class="w-full bg-obsidian text-ivory py-4 text-xs uppercase tracking-widest font-semibold transition">
+                <span x-show="!submitting" x-text="role === 'artist' ? 'Complete Artist Registration & Enter Studio' : 'Complete Verified Collector Registration'">Complete Artist Registration &amp; Enter Studio</span>
+                <span x-show="submitting" x-cloak>Creating Studio Account &amp; Loading Dashboard...</span>
             </button>
         </form>
     </div>

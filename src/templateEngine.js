@@ -255,23 +255,61 @@ function createTemplateContext(data = {}, reqContext = {}) {
   return ctx;
 }
 
-function renderTemplateFile(templateName, data = {}, reqContext = {}) {
+const compiledTemplateCache = new Map();
+
+function getCompiledTemplate(templateName) {
   const cleanName = templateName.replace(/\./g, '/');
   const ejsFile = path.join(VIEWS_PATH, `${cleanName}.ejs`);
   const phpFile = path.join(VIEWS_PATH, `${cleanName}.php`);
 
-  let ejsSource = '';
-  if (fs.existsSync(ejsFile)) {
-    ejsSource = fs.readFileSync(ejsFile, 'utf8');
-  } else if (fs.existsSync(phpFile)) {
-    const phpSource = fs.readFileSync(phpFile, 'utf8');
-    ejsSource = convertPhpTemplateToEjs(phpSource);
-  } else {
-    throw new Error(`View [${templateName}] not found.`);
+  let targetFile = null;
+  let isPhp = false;
+
+  const cached = compiledTemplateCache.get(cleanName);
+  if (cached) {
+    try {
+      const stat = fs.statSync(cached.filePath);
+      if (stat.mtimeMs === cached.mtimeMs) {
+        return cached.fn;
+      }
+      targetFile = cached.filePath;
+      isPhp = cached.isPhp;
+    } catch (_) {
+      compiledTemplateCache.delete(cleanName);
+    }
   }
 
+  if (!targetFile) {
+    if (fs.existsSync(ejsFile)) {
+      targetFile = ejsFile;
+      isPhp = false;
+    } else if (fs.existsSync(phpFile)) {
+      targetFile = phpFile;
+      isPhp = true;
+    } else {
+      throw new Error(`View [${templateName}] not found.`);
+    }
+  }
+
+  const stat = fs.statSync(targetFile);
+  const rawSource = fs.readFileSync(targetFile, 'utf8');
+  const ejsSource = isPhp ? convertPhpTemplateToEjs(rawSource) : rawSource;
+  const compiledFn = ejs.compile(ejsSource, { rmWhitespace: false });
+
+  compiledTemplateCache.set(cleanName, {
+    filePath: targetFile,
+    isPhp,
+    mtimeMs: stat.mtimeMs,
+    fn: compiledFn,
+  });
+
+  return compiledFn;
+}
+
+function renderTemplateFile(templateName, data = {}, reqContext = {}) {
+  const compiledFn = getCompiledTemplate(templateName);
   const ctx = createTemplateContext(data, reqContext);
-  return ejs.render(ejsSource, ctx, { rmWhitespace: false });
+  return compiledFn(ctx);
 }
 
 function renderView(res, templateName, data = {}, layout = 'layouts/main') {
