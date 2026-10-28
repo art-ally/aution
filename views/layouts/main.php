@@ -355,7 +355,7 @@ $isArtistDashboard = ($currentPath === '/artist' || str_starts_with($currentPath
 
         <div class="border-t border-charcoal py-6 px-4 sm:px-8 text-[11px] text-stone">
             <div class="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-                <p>© <?= gmdate('Y') ?> <?= e($brandName) ?> International Fine Art Auctioneers. All rights reserved.</p>
+                <p>© 2020 <?= e($brandName) ?> International Fine Art Auctioneers. All rights reserved.</p>
                 <div class="flex items-center space-x-6">
                     <a href="/sitemap.xml" class="hover:text-ivory transition">XML Sitemap</a>
                     <a href="/terms" class="hover:text-ivory transition">Conditions of Business</a>
