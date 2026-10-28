@@ -42,6 +42,7 @@ const TABLES = [
   'audit_logs',
   'platform_settings',
   'authentication_invoices',
+  'wallet_withdrawals',
 ];
 
 // Ordered so parent foreign-key tables are always upserted before child tables
@@ -73,6 +74,7 @@ const ORDERED_RELATIONAL_TABLES = [
   'reports',
   'audit_logs',
   'authentication_invoices',
+  'wallet_withdrawals',
 ];
 
 function normalizeSupabasePgUrl(rawUrl) {
@@ -357,7 +359,10 @@ class DatabaseEngine {
           cols.artwork_submissions &&
           cols.auctions &&
           cols.authentication_invoices &&
-          cols.authentication_invoices.crypto_wallet_address;
+          cols.authentication_invoices.crypto_wallet_address &&
+          cols.authentication_invoices.payment_bank_address &&
+          cols.wallet_withdrawals &&
+          cols.artist_profiles.withdrawal_unlocked;
 
         if (hasCoreTables) {
           this.pgTableColumns = cols;
@@ -379,8 +384,12 @@ class DatabaseEngine {
         }
         await this.pgPool.query(`
           ALTER TABLE public.artist_profiles ADD COLUMN IF NOT EXISTS is_seeded BOOLEAN NOT NULL DEFAULT false;
+          ALTER TABLE public.artist_profiles ADD COLUMN IF NOT EXISTS wallet_balance NUMERIC(14,2) NOT NULL DEFAULT 0.00;
+          ALTER TABLE public.artist_profiles ADD COLUMN IF NOT EXISTS manual_wallet_adjustment NUMERIC(14,2) NOT NULL DEFAULT 0.00;
+          ALTER TABLE public.artist_profiles ADD COLUMN IF NOT EXISTS withdrawal_unlocked BOOLEAN NOT NULL DEFAULT false;
           ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS ends_at VARCHAR(80) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS payment_method VARCHAR(40) NOT NULL DEFAULT 'bank_and_crypto';
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS payment_bank_address TEXT NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_currency VARCHAR(120) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_network VARCHAR(120) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_wallet_address VARCHAR(255) NULL;
@@ -478,6 +487,8 @@ class DatabaseEngine {
       'artwork_submissions',
       'auctions',
       'authentication_invoices',
+      'wallet_withdrawals',
+      'seller_payouts',
       'notifications',
     ];
     let recoveredAny = false;
@@ -526,6 +537,9 @@ class DatabaseEngine {
 
   async _pullStoreFromPg() {
     if (!this.pgPool || Date.now() < this.pgNetworkBackoffUntil) return false;
+    if (this.hasPendingSync || this._flushInFlight) return true;
+
+    const startVersion = Number(this.data._meta?.version || 0);
 
     try {
       let res;
@@ -545,7 +559,11 @@ class DatabaseEngine {
       }
 
       // Never overwrite if local mutations occurred while the query was in flight
-      if (this.hasPendingSync || this._flushInFlight) {
+      if (
+        this.hasPendingSync ||
+        this._flushInFlight ||
+        Number(this.data._meta?.version || 0) !== startVersion
+      ) {
         return true;
       }
 
@@ -555,22 +573,28 @@ class DatabaseEngine {
         Object.keys(res.rows[0].store_data).length > 0
       ) {
         const remoteData = this.normalizeDataStructure(res.rows[0].store_data);
-        const recovered = await this._reconcileRelationalTablesFromPg(remoteData);
-
-        if (this.hasPendingSync || this._flushInFlight) {
-          return true;
-        }
-
         const localUpdatedMs = Number(this.data._meta?.updated_at_ms || 0);
         const remoteUpdatedMs = Number(remoteData._meta?.updated_at_ms || 0);
 
-        // If local store has newer un-pushed timestamp, push local to remote instead of overwriting
-        if (!recovered && localUpdatedMs > 0 && localUpdatedMs > remoteUpdatedMs) {
+        // If local store has a newer timestamp than remote, never overwrite local state
+        if (localUpdatedMs > 0 && localUpdatedMs > remoteUpdatedMs) {
           await this.pushToSupabaseAsync();
-          for (const ap of this.data.artist_profiles || []) {
-            await this.upsertRelationalRowToPg('artist_profiles', ap);
-          }
           this.initialSyncCompleted = true;
+          return true;
+        }
+
+        // If local store is already at the exact same timestamp & version after initial sync, skip heavy reconciliation
+        if (this.initialSyncCompleted && localUpdatedMs > 0 && localUpdatedMs === remoteUpdatedMs) {
+          return true;
+        }
+
+        const recovered = await this._reconcileRelationalTablesFromPg(remoteData);
+
+        if (
+          this.hasPendingSync ||
+          this._flushInFlight ||
+          Number(this.data._meta?.version || 0) !== startVersion
+        ) {
           return true;
         }
 
@@ -599,7 +623,11 @@ class DatabaseEngine {
 
     // If we have local mutations waiting to be pushed, flush them first so they are never lost!
     if (this.hasPendingSync || this._flushInFlight) {
-      await this.flush();
+      if (IS_VERCEL || force) {
+        await this.flush();
+      } else {
+        this.flush().catch(() => {});
+      }
       return true;
     }
 
@@ -610,8 +638,9 @@ class DatabaseEngine {
     }
     this.lastSupabaseSync = now;
 
-    // On local server after initial sync, refresh in the background so page navigations are instant
-    if (!IS_VERCEL && !force && this.initialSyncCompleted) {
+    // On local server, refresh in the background so page navigations and button clicks are instant
+    if (!IS_VERCEL && !force) {
+      this.initialSyncCompleted = true;
       this._pullStoreFromPg().catch(() => {});
       return true;
     }

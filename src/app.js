@@ -28,6 +28,14 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.json({ limit: '50mb' }));
 app.use(cookieParser());
@@ -53,7 +61,11 @@ function decodeSessionCookie(rawCookie) {
     .createHmac('sha256', SESSION_SECRET)
     .update(payloadB64)
     .digest('base64url');
-  if (sig !== expectedSig) return {};
+  const sigBuf = Buffer.from(String(sig));
+  const expectedBuf = Buffer.from(String(expectedSig));
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+    return {};
+  }
   try {
     return JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')) || {};
   } catch (_) {
@@ -106,8 +118,14 @@ app.use(async (req, res, next) => {
   req.sessionData = session;
 
   const saveSession = () => {
+    const isSecureCookie =
+      IS_VERCEL ||
+      process.env.NODE_ENV === 'production' ||
+      req.secure ||
+      req.get('x-forwarded-proto') === 'https';
     res.cookie(SESSION_COOKIE, encodeSessionCookie(req.sessionData), {
       httpOnly: true,
+      secure: Boolean(isSecureCookie),
       sameSite: 'lax',
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -254,6 +272,25 @@ app.use(async (req, res, next) => {
     }
     sendRendered();
   };
+
+  // Validate same-origin on state-changing POST requests
+  if (
+    req.method === 'POST' &&
+    !req.path.startsWith('/api/auctions/sync') &&
+    !req.path.startsWith('/api/verify-buyer-code')
+  ) {
+    const originHeader = req.get('origin');
+    const hostHeader = req.get('host');
+    if (originHeader && hostHeader) {
+      try {
+        const originHost = new URL(originHeader).host;
+        if (originHost && originHost.toLowerCase() !== hostHeader.toLowerCase()) {
+          req.setFlash('error', 'Cross-origin form submission blocked for security.');
+          return res.redirect('/');
+        }
+      } catch (_) {}
+    }
+  }
 
   next();
 });
@@ -884,35 +921,27 @@ app.post('/login', async (req, res) => {
 });
 
 app.post('/login/demo', (req, res) => {
-  const db = DatabaseEngine.getInstance();
-  const role = req.body.demo_role || 'buyer';
-  const email =
-    role === 'admin'
-      ? 'S-cakar@arcor.de'
-      : role === 'artist'
-      ? 'soren@ateliernoir.art'
-      : 'collector@ateliernoir.art';
-  const user = db.findBy('users', 'email', email);
-  if (user) {
-    req.loginUser(user);
-    req.setFlash('success', `Signed in as ${user.name} (${String(role).toUpperCase()} Account).`);
-    if (role === 'admin') return res.redirect('/admin/dashboard');
-    if (role === 'artist') return res.redirect('/artist/dashboard');
-    return res.redirect('/buyer/dashboard');
-  }
+  req.setFlash('error', 'Quick demo login has been disabled for platform security. Please sign in with your credentials.');
   res.redirect('/login');
+});
+
+app.post('/api/verify-buyer-code', (req, res) => {
+  const db = DatabaseEngine.getInstance();
+  const settings = db.find('platform_settings', 1) || {};
+  const expectedCode = String(settings.buyer_verification_code || 'NOIR-BUYER-2026').trim();
+  const submittedCode = String(req.body.code || '').trim();
+  const valid =
+    Boolean(submittedCode) &&
+    submittedCode.toLowerCase() === expectedCode.toLowerCase();
+  res.json({ valid });
 });
 
 app.get('/register', (req, res) => {
   if (req.getCurrentUser()) return res.redirect('/');
-  const db = DatabaseEngine.getInstance();
-  const settings = db.find('platform_settings', 1) || {};
-  const buyerVerificationCode = String(settings.buyer_verification_code || 'NOIR-BUYER-2026');
   const selectedRole = req.query.role === 'buyer' ? 'buyer' : 'artist';
   res.renderPage('auth/register', {
     pageTitle: 'Artist Studio & Verified Collector Registration — ArtAlly',
     selectedRole,
-    buyerVerificationCode,
   });
 });
 
@@ -921,6 +950,7 @@ app.post('/register', upload.single('profile_photo_file'), (req, res) => {
   const name = String(req.body.name || '').trim();
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
+  const passwordConfirmation = String(req.body.password_confirmation ?? password);
   const country = String(req.body.country || '').trim();
   const city = String(req.body.city || '').trim();
   const accountType = req.body.account_type === 'buyer' ? 'buyer' : 'artist';
@@ -939,6 +969,11 @@ app.post('/register', upload.single('profile_photo_file'), (req, res) => {
       );
       return res.redirect('/register?role=buyer');
     }
+  }
+
+  if (password !== passwordConfirmation) {
+    req.setFlash('error', 'Passwords do not match. Please enter the same password twice.');
+    return res.redirect(`/register?role=${accountType}`);
   }
 
   if (!name || !email.includes('@') || password.length < 8 || !country || !termsAccepted) {
@@ -1106,17 +1141,18 @@ app.post('/forgot-password', (req, res) => {
       token,
       expires_at: helpers.gmdate('Y-m-d H:i:s', helpers.strtotime('+1 hour')),
     });
-    req.sessionData.demo_reset_token = token;
-    req.sessionData.demo_reset_email = email;
   }
 
-  req.setFlash('success', 'Password recovery link generated. You may proceed to reset your password below.');
-  res.redirect(`/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`);
+  req.setFlash(
+    'success',
+    'If an account is registered for that email address, a password recovery token has been issued. Please enter the recovery token sent to you or provided by ArtAlly Administration.'
+  );
+  res.redirect(`/reset-password?email=${encodeURIComponent(email)}`);
 });
 
 app.get('/reset-password', (req, res) => {
-  const token = String(req.query.token || req.sessionData.demo_reset_token || '').trim();
-  const email = String(req.query.email || req.sessionData.demo_reset_email || '').trim();
+  const token = String(req.query.token || '').trim();
+  const email = String(req.query.email || '').trim();
   res.renderPage('auth/reset-password', {
     pageTitle: 'Set New Password — ArtAlly',
     token,
@@ -1129,16 +1165,24 @@ app.post('/reset-password', (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const token = String(req.body.token || '').trim();
   const password = String(req.body.password || '');
+  const passwordConfirmation = String(req.body.password_confirmation ?? password);
+
+  if (password !== passwordConfirmation) {
+    req.setFlash('error', 'Passwords do not match. Please enter the same password twice.');
+    return res.redirect(`/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`);
+  }
 
   if (password.length < 8) {
     req.setFlash('error', 'New password must be at least 8 characters long.');
     return res.redirect(`/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`);
   }
 
-  const record = db.findBy('password_reset_tokens', 'token', token);
+  const record = token ? db.findBy('password_reset_tokens', 'token', token) : null;
   const user = db.findBy('users', 'email', email);
+  const nowStr = formatUtcNow();
+  const isExpired = record?.expires_at && String(record.expires_at) < nowStr;
 
-  if (!record || !user || String(record.email || '').toLowerCase() !== email) {
+  if (!record || isExpired || !user || String(record.email || '').toLowerCase() !== email) {
     req.setFlash('error', 'Invalid or expired password recovery token.');
     return res.redirect('/forgot-password');
   }
@@ -1191,11 +1235,65 @@ function ensureArtistProfile(db, user, markActive = false) {
   return profile;
 }
 
+function computeArtistWalletState(db, artistId, existingProfile = null) {
+  const uid = Number(artistId || 0);
+  const user = uid > 0 ? db.find('users', uid) : null;
+  const profile = existingProfile || db.findBy('artist_profiles', 'user_id', uid) || null;
+  const payouts = db.where('seller_payouts', (p) => Number(p.artist_id) === uid);
+  const completedPayoutsTotal = payouts.reduce(
+    (acc, p) => acc + ((p.status || '') === 'completed' ? Number(p.net_payout_amount || 0) : 0),
+    0
+  );
+  const pendingPayoutsTotal = payouts.reduce(
+    (acc, p) => acc + ((p.status || '') === 'pending' ? Number(p.net_payout_amount || 0) : 0),
+    0
+  );
+  const manualAdjustment = Number(profile?.manual_wallet_adjustment || 0);
+  const withdrawals = db
+    .where('wallet_withdrawals', (w) => Number(w.artist_id) === uid)
+    .sort((a, b) => Number(b.id) - Number(a.id));
+
+  const processingWithdrawalsTotal = withdrawals.reduce(
+    (acc, w) => acc + ((w.status || '') === 'processing' ? Number(w.amount || 0) : 0),
+    0
+  );
+  const completedWithdrawalsTotal = withdrawals.reduce(
+    (acc, w) => acc + ((w.status || '') === 'completed' ? Number(w.amount || 0) : 0),
+    0
+  );
+
+  const totalDisbursed = Math.max(0, Math.round((completedPayoutsTotal + manualAdjustment) * 100) / 100);
+  const availableBalance = Math.max(
+    0,
+    Math.round((totalDisbursed - processingWithdrawalsTotal - completedWithdrawalsTotal) * 100) / 100
+  );
+  const withdrawalUnlocked = Boolean(
+    profile?.withdrawal_unlocked !== undefined
+      ? profile.withdrawal_unlocked
+      : user?.withdrawal_unlocked
+  );
+
+  if (profile && Number(profile.wallet_balance ?? -1) !== availableBalance) {
+    db.update('artist_profiles', profile.id, { wallet_balance: availableBalance });
+  }
+
+  return {
+    available_balance: availableBalance,
+    total_disbursed: totalDisbursed,
+    pending_payouts_total: pendingPayoutsTotal,
+    processing_withdrawals_total: processingWithdrawalsTotal,
+    completed_withdrawals_total: completedWithdrawalsTotal,
+    withdrawal_unlocked: withdrawalUnlocked,
+    withdrawals,
+  };
+}
+
 app.get('/artist/dashboard', (req, res) => {
   const user = requireRole(req, res, 'artist');
   if (!user) return;
   const db = DatabaseEngine.getInstance();
   const profile = ensureArtistProfile(db, user);
+  const walletState = computeArtistWalletState(db, Number(user.id), profile);
 
   const artworks = db.where('artworks', (a) => Number(a.artist_id) === Number(user.id));
   const artistArtworkIds = new Set(artworks.map((a) => Number(a.id)));
@@ -1270,10 +1368,9 @@ app.get('/artist/dashboard', (req, res) => {
       (acc, p) => acc + ((p.status || '') === 'pending' ? Number(p.net_payout_amount || 0) : 0),
       0
     ),
-    completed_payouts: payouts.reduce(
-      (acc, p) => acc + ((p.status || '') === 'completed' ? Number(p.net_payout_amount || 0) : 0),
-      0
-    ),
+    completed_payouts: walletState.total_disbursed,
+    wallet_balance: walletState.available_balance,
+    processing_withdrawals: walletState.processing_withdrawals_total,
   };
 
   res.renderPage('artist/dashboard', {
@@ -1281,6 +1378,8 @@ app.get('/artist/dashboard', (req, res) => {
     user,
     profile,
     stats,
+    walletState,
+    walletWithdrawals: walletState.withdrawals,
     submissions,
     artworks,
     auctions,
@@ -1838,6 +1937,8 @@ app.get('/artist/sales', (req, res) => {
   const user = requireRole(req, res, 'artist');
   if (!user) return;
   const db = DatabaseEngine.getInstance();
+  const profile = ensureArtistProfile(db, user);
+  const walletState = computeArtistWalletState(db, Number(user.id), profile);
   const orders = db
     .where('orders', (o) => Number(o.artist_id) === Number(user.id))
     .map((ord) => ({
@@ -1847,11 +1948,147 @@ app.get('/artist/sales', (req, res) => {
   const payouts = db.where('seller_payouts', (p) => Number(p.artist_id) === Number(user.id));
 
   res.renderPage('artist/sales', {
-    pageTitle: 'Sales Ledgers & Seller Payouts — ArtAlly',
+    pageTitle: 'Sales Ledgers, Wallet & Seller Payouts — ArtAlly',
     user,
+    profile,
+    walletState,
+    walletWithdrawals: walletState.withdrawals,
     orders,
     payouts,
   });
+});
+
+app.post('/artist/wallet/withdraw', (req, res) => {
+  const user = requireRole(req, res, 'artist');
+  if (!user) return;
+  const db = DatabaseEngine.getInstance();
+  const profile = ensureArtistProfile(db, user);
+  const walletState = computeArtistWalletState(db, Number(user.id), profile);
+  const returnTo = String(req.body.return_to || '/artist/dashboard#artist-wallet').trim();
+  const safeReturnTo = returnTo.startsWith('/artist/') ? returnTo : '/artist/dashboard#artist-wallet';
+
+  if (!walletState.withdrawal_unlocked) {
+    req.setFlash(
+      'error',
+      'Withdrawal Locked: Your wallet withdrawal option is currently locked by default. Please wait for ArtAlly Administration to grant withdrawal access from the backend.'
+    );
+    return res.redirect(safeReturnTo);
+  }
+
+  if (walletState.available_balance <= 0) {
+    req.setFlash('error', 'Insufficient available wallet balance to initiate a withdrawal.');
+    return res.redirect(safeReturnTo);
+  }
+
+  const requestedAmount = Number(req.body.amount || walletState.available_balance);
+  const amount = Math.round(Math.min(walletState.available_balance, Math.max(0, requestedAmount)) * 100) / 100;
+  if (amount <= 0) {
+    req.setFlash('error', 'Please enter a valid withdrawal amount up to your available wallet balance.');
+    return res.redirect(safeReturnTo);
+  }
+
+  const payoutMethod = req.body.payout_method === 'crypto' ? 'crypto' : 'bank_wire';
+  const bankAccountName = String(req.body.bank_account_name || '').trim();
+  const bankName = String(req.body.bank_name || '').trim();
+  const bankAddress = String(req.body.bank_address || '').trim();
+  const bankAccountNumber = String(req.body.bank_account_number || '').trim();
+  const bankRoutingSwift = String(req.body.bank_routing_swift || '').trim();
+
+  const cryptoCurrency = String(req.body.crypto_currency || '').trim();
+  const cryptoNetwork = String(req.body.crypto_network || '').trim();
+  const cryptoWalletAddress = String(req.body.crypto_wallet_address || '').trim();
+  const cryptoMemo = String(req.body.crypto_memo || '').trim();
+  const artistNotes = String(req.body.artist_notes || '').trim();
+
+  if (payoutMethod === 'bank_wire') {
+    if (!bankAccountName || !bankName || !bankAccountNumber) {
+      req.setFlash(
+        'error',
+        'Please complete all required Bank Wire fields: Beneficiary / Account Holder Name, Bank Name, and Account Number / IBAN.'
+      );
+      return res.redirect(safeReturnTo);
+    }
+  } else {
+    if (!cryptoCurrency || !cryptoNetwork || !cryptoWalletAddress) {
+      req.setFlash(
+        'error',
+        'Please complete all required Cryptocurrency fields: Cryptocurrency / Asset, Blockchain Network, and Receiving Wallet Address.'
+      );
+      return res.redirect(safeReturnTo);
+    }
+  }
+
+  const refCode = `WD-${helpers.gmdate('Y')}-${Math.floor(10000 + Math.random() * 90000)}`;
+  const withdrawal = db.insert('wallet_withdrawals', {
+    reference_code: refCode,
+    artist_id: Number(user.id),
+    artist_name: profile.display_name || user.name,
+    artist_email: user.email || '',
+    amount,
+    currency: 'USD',
+    payout_method: payoutMethod,
+    bank_account_name: bankAccountName,
+    bank_name: bankName,
+    bank_address: bankAddress,
+    bank_account_number: bankAccountNumber,
+    bank_routing_swift: bankRoutingSwift,
+    crypto_currency: cryptoCurrency,
+    crypto_network: cryptoNetwork,
+    crypto_wallet_address: cryptoWalletAddress,
+    crypto_memo: cryptoMemo,
+    artist_notes: artistNotes,
+    status: 'processing',
+    estimated_timeframe: '2 to 7 business days',
+    processed_by: null,
+    processed_at: null,
+  });
+
+  computeArtistWalletState(db, Number(user.id), profile);
+
+  const methodSummary =
+    payoutMethod === 'crypto'
+      ? `Cryptocurrency (${cryptoCurrency} on ${cryptoNetwork} · Wallet: ${cryptoWalletAddress})`
+      : `Bank Wire (${bankName} · Account: ${bankAccountNumber}${bankAddress ? ` · Address: ${bankAddress}` : ''})`;
+
+  db.insert('notifications', {
+    user_id: Number(user.id),
+    type: 'withdrawal_processing',
+    title: `⟳ Withdrawal Processing: ${helpers.format_money_exact(amount)} (${refCode})`,
+    message: `Your withdrawal request of ${helpers.format_money_exact(
+      amount
+    )} via ${methodSummary} has been received and is now processing. Please allow 2 to 7 business days for completion.`,
+    action_url: '/artist/dashboard#artist-wallet',
+    read_at: null,
+  });
+
+  db.insert('notifications', {
+    user_id: 1,
+    type: 'artist_withdrawal_submitted',
+    title: `💸 Artist Withdrawal Request: ${helpers.format_money_exact(amount)} (${refCode})`,
+    message: `${profile.display_name || user.name} submitted a withdrawal request of ${helpers.format_money_exact(
+      amount
+    )} via ${methodSummary}.`,
+    action_url: '/admin/dashboard#payouts',
+    read_at: null,
+  });
+
+  logAudit(
+    db,
+    user,
+    'ARTIST_WALLET_WITHDRAWAL_REQUESTED',
+    'wallet_withdrawal',
+    withdrawal.id,
+    `${profile.display_name || user.name} requested withdrawal ${refCode} of $${amount.toFixed(2)} via ${methodSummary}.`,
+    req.ip
+  );
+
+  req.setFlash(
+    'success',
+    `Withdrawal Processing (${refCode}): Your withdrawal request of ${helpers.format_money_exact(
+      amount
+    )} has been submitted to ArtAlly Treasury. It will take 2 to 7 business days to complete.`
+  );
+  res.redirect(safeReturnTo);
 });
 
 app.get('/certificates/:id', (req, res) => {
@@ -2383,11 +2620,20 @@ function handleAdminDashboard(req, res) {
 
   const allArtistProfiles = db.all('artist_profiles');
   const artistProfiles = allArtistProfiles
-    .filter(
-      (ap) =>
+    .filter((ap) => {
+      const apUser = db.find('users', Number(ap.user_id));
+      if (
+        apUser &&
+        (apUser.role || '') === 'admin' &&
+        !activeArtistUserIds.has(Number(ap.user_id || 0))
+      ) {
+        return false;
+      }
+      return (
         (realUserIds.includes(Number(ap.user_id || 0)) && !ap.is_seeded) ||
         activeArtistUserIds.has(Number(ap.user_id || 0))
-    )
+      );
+    })
     .map((ap) => {
       const apWorks = db
         .where('artworks', (a) => Number(a.artist_id) === Number(ap.user_id) && (!a.is_seeded || !ap.is_seeded))
@@ -2398,10 +2644,13 @@ function handleAdminDashboard(req, res) {
           auction: db.findBy('auctions', 'artwork_id', Number(w.id)),
           images: db.where('artwork_images', (img) => Number(img.artwork_id) === Number(w.id)),
         }));
+      const walletState = computeArtistWalletState(db, Number(ap.user_id), ap);
       return {
         ...ap,
         user: db.find('users', Number(ap.user_id)) || {},
         artworks: apWorks,
+        wallet_state: walletState,
+        withdrawals: walletState.withdrawals,
       };
     });
 
@@ -2447,11 +2696,20 @@ function handleAdminDashboard(req, res) {
   const payouts = db
     .all('seller_payouts')
     .filter((p) => !p.is_seeded)
-    .map((po) => ({
-      ...po,
-      artist: db.find('users', Number(po.artist_id)) || {},
-      order: db.find('orders', Number(po.order_id)) || {},
-    }));
+    .map((po) => {
+      const artistProfile = db.findBy('artist_profiles', 'user_id', Number(po.artist_id)) || {};
+      return {
+        ...po,
+        artist: db.find('users', Number(po.artist_id)) || {},
+        artist_profile: artistProfile,
+        wallet_state: computeArtistWalletState(db, Number(po.artist_id), artistProfile),
+        order: db.find('orders', Number(po.order_id)) || {},
+      };
+    });
+
+  const walletWithdrawals = db
+    .all('wallet_withdrawals')
+    .sort((a, b) => Number(b.id) - Number(a.id));
 
   const auditLogs = db.all('audit_logs').sort((a, b) => Number(b.id) - Number(a.id));
   const reports = db.all('reports');
@@ -2499,6 +2757,7 @@ function handleAdminDashboard(req, res) {
     auctions,
     orders,
     payouts,
+    walletWithdrawals,
     authInvoices,
     allArtistsList,
     allArtworksList,
@@ -3497,14 +3756,21 @@ app.post('/admin/payouts/approve', (req, res) => {
     paid_at: formatUtcNow(),
   });
 
+  const artistProfile = db.findBy('artist_profiles', 'user_id', Number(payout.artist_id));
+  const updatedWallet = computeArtistWalletState(db, Number(payout.artist_id), artistProfile);
+
   db.insert('notifications', {
     user_id: Number(payout.artist_id),
     type: 'payout_completed',
-    title: `Seller Payout Disbursed (${helpers.format_money_exact(payout.net_payout_amount)})`,
+    title: `💰 Payout Disbursed to Your Studio Wallet (${helpers.format_money_exact(
+      payout.net_payout_amount
+    )})`,
     message: `Your net proceeds of ${helpers.format_money_exact(
       payout.net_payout_amount
-    )} have been released via wire transfer (Ref: ${ref}).`,
-    action_url: '/artist/sales',
+    )} have been authorized and credited directly to your ArtAlly Studio Wallet (Ref: ${ref}). Available Wallet Balance: ${helpers.format_money_exact(
+      updatedWallet.available_balance
+    )}.`,
+    action_url: '/artist/dashboard#artist-wallet',
     read_at: null,
   });
 
@@ -3514,10 +3780,233 @@ app.post('/admin/payouts/approve', (req, res) => {
     'SELLER_PAYOUT_RELEASED',
     'seller_payout',
     payoutId,
-    `Approved & disbursed net artist payout of $${Number(payout.net_payout_amount).toFixed(2)} (Ref: ${ref}).`,
+    `Authorized wire payout & credited $${Number(payout.net_payout_amount).toFixed(
+      2
+    )} to Artist #${payout.artist_id} Studio Wallet (Ref: ${ref}).`,
     req.ip
   );
-  req.setFlash('success', `Seller payout #${payoutId} marked as completed (Ref: ${ref}).`);
+  req.setFlash(
+    'success',
+    `Authorized Wire Payout #${payoutId} (${helpers.format_money_exact(
+      payout.net_payout_amount
+    )}) — Disbursed amount is now live in the Artist's Studio Wallet (Ref: ${ref}).`
+  );
+  res.redirect('/admin/dashboard#payouts');
+});
+
+app.post('/admin/artists/wallet-access', (req, res) => {
+  const admin = requireRole(req, res, 'admin');
+  if (!admin) return;
+  const db = DatabaseEngine.getInstance();
+
+  const actionType = String(req.body.action_type || 'toggle_access').trim();
+  const returnAnchor = String(req.body.return_anchor || '#payouts').trim();
+  const applyToAll = String(req.body.apply_to_all || '') === '1';
+
+  const artistUserId = Number(req.body.artist_id || 0);
+  const profileId = Number(req.body.artist_profile_id || 0);
+  let profile =
+    (profileId > 0 ? db.find('artist_profiles', profileId) : null) ||
+    (artistUserId > 0 ? db.findBy('artist_profiles', 'user_id', artistUserId) : null);
+
+  // If artistUserId was passed for an artist who didn't have a profile row yet, create one
+  if (!profile && artistUserId > 0) {
+    const targetUser = db.find('users', artistUserId);
+    if (targetUser) {
+      profile = ensureArtistProfile(db, targetUser);
+    }
+  }
+
+  // Fallback: if a stale form submitted the deleted admin profile_id or if only one real artist exists
+  const realArtistProfiles = db.where('artist_profiles', (ap) => {
+    const u = db.find('users', Number(ap.user_id));
+    return !ap.is_seeded && (!u || (u.role || '') !== 'admin');
+  });
+
+  if (
+    (!profile || Number(profile.user_id) === Number(admin.id)) &&
+    realArtistProfiles.length > 0
+  ) {
+    profile = realArtistProfiles[0];
+  }
+
+  if (!profile && !applyToAll) {
+    req.setFlash('error', 'Artist profile not found.');
+    return res.redirect('/admin/dashboard#payouts');
+  }
+
+  if (actionType === 'unlock' || actionType === 'lock' || actionType === 'toggle_access') {
+    const nextUnlocked =
+      actionType === 'unlock'
+        ? true
+        : actionType === 'lock'
+        ? false
+        : !Boolean(profile?.withdrawal_unlocked);
+
+    const targetProfiles =
+      applyToAll && realArtistProfiles.length > 0
+        ? realArtistProfiles
+        : profile
+        ? db.where('artist_profiles', (ap) => Number(ap.user_id) === Number(profile.user_id) || Number(ap.id) === Number(profile.id))
+        : [];
+
+    for (const tp of targetProfiles) {
+      db.update('artist_profiles', tp.id, {
+        withdrawal_unlocked: nextUnlocked,
+      });
+      if (tp.user_id) {
+        db.update('users', Number(tp.user_id), {
+          withdrawal_unlocked: nextUnlocked,
+        });
+      }
+      db.insert('notifications', {
+        user_id: Number(tp.user_id),
+        type: 'wallet_access_updated',
+        title: nextUnlocked
+          ? '🔓 Studio Wallet Withdrawal Access Granted'
+          : '🔒 Studio Wallet Withdrawal Access Locked',
+        message: nextUnlocked
+          ? 'ArtAlly Administration has unlocked your Studio Wallet withdrawal option. You may now click Withdraw on your Artist Page and submit your Crypto or Bank Wire details.'
+          : 'Your Studio Wallet withdrawal button has been locked by ArtAlly Administration.',
+        action_url: '/artist/dashboard#artist-wallet',
+        read_at: null,
+      });
+    }
+
+    const targetNames = targetProfiles.map((tp) => tp.display_name).join(', ') || profile?.display_name || 'Artist';
+
+    logAudit(
+      db,
+      admin,
+      nextUnlocked ? 'ARTIST_WITHDRAWAL_UNLOCKED' : 'ARTIST_WITHDRAWAL_LOCKED',
+      'artist_profile',
+      profile ? profile.id : 0,
+      `${nextUnlocked ? 'Unlocked' : 'Locked'} wallet withdrawal button for ${targetNames}.`,
+      req.ip
+    );
+
+    req.setFlash(
+      'success',
+      nextUnlocked
+        ? `🔓 Withdrawal access GRANTED for ${targetNames}. The artist can now click Withdraw and submit Crypto or Bank Wire details.`
+        : `🔒 Withdrawal access LOCKED for ${targetNames}.`
+    );
+    return res.redirect(`/admin/dashboard${returnAnchor}`);
+  }
+
+  if (actionType === 'credit_wallet' || actionType === 'set_balance') {
+    const currentWallet = computeArtistWalletState(db, Number(profile.user_id), profile);
+    const inputAmount = Math.max(0, Number(req.body.wallet_amount || 0));
+    const currentManual = Number(profile.manual_wallet_adjustment || 0);
+    const newManual =
+      actionType === 'credit_wallet'
+        ? currentManual + inputAmount
+        : currentManual + (inputAmount - currentWallet.available_balance);
+
+    const updatedProfile = db.update('artist_profiles', profile.id, {
+      manual_wallet_adjustment: Math.round(newManual * 100) / 100,
+    });
+    const newWalletState = computeArtistWalletState(db, Number(profile.user_id), updatedProfile);
+
+    if (inputAmount > 0) {
+      db.insert('notifications', {
+        user_id: Number(profile.user_id),
+        type: 'payout_completed',
+        title: `💰 Funds Disbursed to Studio Wallet (${helpers.format_money_exact(
+          newWalletState.available_balance
+        )})`,
+        message: `ArtAlly Treasury has updated your Studio Wallet balance to ${helpers.format_money_exact(
+          newWalletState.available_balance
+        )}.`,
+        action_url: '/artist/dashboard#artist-wallet',
+        read_at: null,
+      });
+    }
+
+    logAudit(
+      db,
+      admin,
+      'ARTIST_WALLET_BALANCE_UPDATED',
+      'artist_profile',
+      profile.id,
+      `Updated wallet balance for ${profile.display_name} to $${newWalletState.available_balance.toFixed(2)}.`,
+      req.ip
+    );
+    req.setFlash(
+      'success',
+      `Updated Studio Wallet balance for ${profile.display_name} to ${helpers.format_money_exact(
+        newWalletState.available_balance
+      )}.`
+    );
+    return res.redirect(`/admin/dashboard${returnAnchor}`);
+  }
+
+  res.redirect(`/admin/dashboard${returnAnchor}`);
+});
+
+app.post('/admin/withdrawals/status', (req, res) => {
+  const admin = requireRole(req, res, 'admin');
+  if (!admin) return;
+  const db = DatabaseEngine.getInstance();
+  const withdrawalId = Number(req.body.withdrawal_id || 0);
+  const newStatus = String(req.body.status || 'processing').trim();
+  const wd = db.find('wallet_withdrawals', withdrawalId);
+
+  if (!wd) {
+    req.setFlash('error', 'Withdrawal request not found.');
+    return res.redirect('/admin/dashboard#payouts');
+  }
+
+  if (!['processing', 'completed', 'rejected'].includes(newStatus)) {
+    return res.redirect('/admin/dashboard#payouts');
+  }
+
+  db.update('wallet_withdrawals', withdrawalId, {
+    status: newStatus,
+    processed_by: Number(admin.id),
+    processed_at: formatUtcNow(),
+  });
+
+  const artistProfile = db.findBy('artist_profiles', 'user_id', Number(wd.artist_id));
+  computeArtistWalletState(db, Number(wd.artist_id), artistProfile);
+
+  if (newStatus === 'completed') {
+    db.insert('notifications', {
+      user_id: Number(wd.artist_id),
+      type: 'withdrawal_completed',
+      title: `✓ Withdrawal Completed: ${helpers.format_money_exact(wd.amount)} (${wd.reference_code})`,
+      message: `Your withdrawal of ${helpers.format_money_exact(wd.amount)} (${
+        wd.reference_code
+      }) has been finalized and settled by ArtAlly Treasury.`,
+      action_url: '/artist/dashboard#artist-wallet',
+      read_at: null,
+    });
+  } else if (newStatus === 'rejected') {
+    db.insert('notifications', {
+      user_id: Number(wd.artist_id),
+      type: 'withdrawal_returned',
+      title: `↺ Withdrawal Returned to Studio Wallet (${wd.reference_code})`,
+      message: `Your withdrawal request (${wd.reference_code}) of ${helpers.format_money_exact(
+        wd.amount
+      )} was returned to your available Studio Wallet balance.`,
+      action_url: '/artist/dashboard#artist-wallet',
+      read_at: null,
+    });
+  }
+
+  logAudit(
+    db,
+    admin,
+    'ARTIST_WITHDRAWAL_STATUS_UPDATED',
+    'wallet_withdrawal',
+    withdrawalId,
+    `Updated withdrawal ${wd.reference_code} status to ${newStatus.toUpperCase()}.`,
+    req.ip
+  );
+  req.setFlash(
+    'success',
+    `Withdrawal ${wd.reference_code} marked as ${newStatus.toUpperCase()}.`
+  );
   res.redirect('/admin/dashboard#payouts');
 });
 
@@ -3648,6 +4137,7 @@ app.post('/admin/invoices/generate', (req, res) => {
   const paymentBankName = String(req.body.payment_bank_name || '').trim();
   const paymentAccountNumber = String(req.body.payment_account_number || '').trim();
   const paymentRoutingDetails = String(req.body.payment_routing_details || '').trim();
+  const paymentBankAddress = String(req.body.payment_bank_address || '').trim();
 
   const cryptoCurrency = String(req.body.crypto_currency || '').trim();
   const cryptoNetwork = String(req.body.crypto_network || '').trim();
@@ -3708,6 +4198,7 @@ app.post('/admin/invoices/generate', (req, res) => {
     payment_bank_name: paymentBankName,
     payment_account_number: paymentAccountNumber,
     payment_routing_details: paymentRoutingDetails,
+    payment_bank_address: paymentBankAddress,
     crypto_currency: cryptoCurrency,
     crypto_network: cryptoNetwork,
     crypto_wallet_address: cryptoWalletAddress,
@@ -3830,12 +4321,45 @@ app.post('/admin/database/clear-all', async (req, res) => {
   res.redirect('/admin/dashboard');
 });
 
+function canAccessAuthenticationInvoice(req, db, invoice) {
+  const user = req.getCurrentUser();
+  const adminUser = req.sessionData?.admin_user_id
+    ? db.find('users', Number(req.sessionData.admin_user_id))
+    : null;
+  if (adminUser && helpers.userHasRole(adminUser, 'admin')) return true;
+  if (!user) return false;
+  if (helpers.userHasRole(user, 'admin')) return true;
+  if (invoice.artist_id && Number(invoice.artist_id) === Number(user.id)) return true;
+  if (
+    invoice.artist_email &&
+    String(invoice.artist_email).trim().toLowerCase() === String(user.email || '').trim().toLowerCase()
+  ) {
+    return true;
+  }
+  const artistProfile = db.findBy('artist_profiles', 'user_id', Number(user.id));
+  const artistNameLower = String(invoice.artist_name || '').trim().toLowerCase();
+  if (
+    artistNameLower &&
+    (artistNameLower === String(user.name || '').trim().toLowerCase() ||
+      artistNameLower === String(artistProfile?.display_name || '').trim().toLowerCase())
+  ) {
+    return true;
+  }
+  return false;
+}
+
 app.get('/invoices/:id', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
   const db = DatabaseEngine.getInstance();
   const invoiceId = Number(req.params.id || 0);
   const invoice = db.find('authentication_invoices', invoiceId);
   if (!invoice) {
     return res.renderPage('pages/404', { pageTitle: 'Invoice Not Found — ArtAlly' }, 404);
+  }
+  if (!canAccessAuthenticationInvoice(req, db, invoice)) {
+    req.setFlash('error', 'Access denied. Authentication invoices are private to the issuing administrator and the designated artist.');
+    return res.redirect('/');
   }
 
   res.renderPage('public/authentication-invoice', {
@@ -3845,11 +4369,17 @@ app.get('/invoices/:id', (req, res) => {
 });
 
 app.get('/invoices/:id/download', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
   const db = DatabaseEngine.getInstance();
   const invoiceId = Number(req.params.id || 0);
   const invoice = db.find('authentication_invoices', invoiceId);
   if (!invoice) {
     return res.renderPage('pages/404', { pageTitle: 'Invoice Not Found — ArtAlly' }, 404);
+  }
+  if (!canAccessAuthenticationInvoice(req, db, invoice)) {
+    req.setFlash('error', 'Access denied. Authentication invoices are private to the issuing administrator and the designated artist.');
+    return res.redirect('/');
   }
 
   const safeNum = String(invoice.invoice_number || `INV-${invoiceId}`).replace(/[^a-zA-Z0-9_-]/g, '-');
@@ -3968,6 +4498,7 @@ app.get('/invoices/:id/download', (req, res) => {
                   ${invoice.payment_bank_name ? `<div><p class="bank-item-label">Bank / Financial Institution</p><p class="bank-item-val">${helpers.e(invoice.payment_bank_name)}</p></div>` : ''}
                   ${invoice.payment_account_number ? `<div><p class="bank-item-label">Account Number / IBAN</p><p class="bank-item-val" style="color:#C6A664;">${helpers.e(invoice.payment_account_number)}</p></div>` : ''}
                   ${invoice.payment_routing_details ? `<div><p class="bank-item-label">Routing / SWIFT / BIC / Sort Code</p><p class="bank-item-val">${helpers.e(invoice.payment_routing_details)}</p></div>` : ''}
+                  ${invoice.payment_bank_address ? `<div style="grid-column: 1 / -1;"><p class="bank-item-label">Bank Address / Branch Location</p><p class="bank-item-val">${helpers.e(invoice.payment_bank_address)}</p></div>` : ''}
                 </div>
               </div>`
             : ''

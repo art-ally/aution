@@ -18,6 +18,9 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
+            <a href="#artist-wallet" class="border border-bronze bg-[#181615] text-bronzeLight px-5 py-3.5 text-xs uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition">
+                💰 Wallet Balance: <%- format_money_exact(Number($walletState?.['available_balance'] ?? 0)) %>
+            </a>
             <a href="/artist/submit" class="bg-obsidian text-ivory px-6 py-3.5 text-xs uppercase tracking-widest font-semibold hover:bg-bronze transition">
                 + Upload &amp; Submit New Artwork
             </a>
@@ -31,6 +34,316 @@
                 </button>
             </form>
         </div>
+    </div>
+
+    <!-- Artist Studio Treasury Wallet & Withdrawal Center -->
+    <% var $walletBal = Number($walletState?.['available_balance'] ?? 0);
+       var $walletDisbursed = Number($walletState?.['total_disbursed'] ?? 0);
+       var $walletPending = Number($walletState?.['pending_payouts_total'] ?? 0);
+       var $walletProcessing = Number($walletState?.['processing_withdrawals_total'] ?? 0);
+       var $withdrawUnlocked = Boolean($walletState?.['withdrawal_unlocked'] ?? false);
+       var $withdrawalsList = $walletWithdrawals ?? []; %>
+    <div id="artist-wallet" class="bg-[#181615] text-ivory border-2 border-bronze p-6 sm:p-8 mb-10 space-y-6 shadow-sm" x-data="{
+        showWithdrawForm: false,
+        payoutMethod: 'bank_wire'
+    }">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b border-white/15 pb-6">
+            <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="bg-bronze text-white text-[10px] uppercase tracking-widest px-3 py-1 font-bold">
+                        🏛 Artist Studio Treasury &amp; Disbursed Proceeds Wallet
+                    </span>
+                    <% if ($withdrawUnlocked) { %>
+                        <span class="bg-[#1A2E22] border border-bronze/60 text-ivory text-[10px] uppercase tracking-widest px-3 py-1 font-semibold">
+                            🔓 Withdrawal Access Granted by Administration
+                        </span>
+                    <% } else { %>
+                        <span class="bg-white/10 border border-white/25 text-stone text-[10px] uppercase tracking-widest px-3 py-1 font-semibold">
+                            🔒 Withdraw Locked by Default (Awaiting Backend Authorization)
+                        </span>
+                    <% } %>
+                </div>
+                <h2 class="font-serif text-3xl sm:text-4xl text-ivory">Your Available Wallet Balance</h2>
+                <p class="text-xs text-stone max-w-2xl">
+                    When ArtAlly Administration clicks <strong>Authorize Wire Payout</strong> on your sold works, the disbursed proceeds are credited directly to your Studio Wallet below. Once withdrawal access is granted from the backend, click <strong>Withdraw Funds</strong> to remit via <strong>Bank Wire</strong> or <strong>Cryptocurrency</strong>.
+                </p>
+            </div>
+
+            <div class="bg-obsidian border border-bronze p-5 sm:p-6 min-w-[280px] flex flex-col justify-between space-y-4">
+                <div>
+                    <span class="block text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">Available Wallet Balance</span>
+                    <span class="font-serif text-4xl font-bold text-white block mt-1">
+                        <%- format_money_exact($walletBal) %> <span class="text-xs font-mono text-bronzeLight">USD</span>
+                    </span>
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-stone mt-2 pt-2 border-t border-white/10">
+                        <span>Total Disbursed: <strong class="text-ivory"><%- format_money_exact($walletDisbursed) %></strong></span>
+                        <span>Pending Release: <strong class="text-ivory"><%- format_money_exact($walletPending) %></strong></span>
+                    </div>
+                </div>
+
+                <% if ($withdrawUnlocked) { %>
+                    <button
+                        type="button"
+                        @click="showWithdrawForm = !showWithdrawForm"
+                        onclick="var panel = document.getElementById('artist-withdraw-form-panel'); if (panel && !window.Alpine) { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; }"
+                        class="w-full bg-bronze text-white py-3.5 px-5 text-xs uppercase tracking-widest font-semibold hover:bg-bronzeDark transition text-center shadow-sm"
+                    >
+                        <span x-text="showWithdrawForm ? '✕ Close Withdrawal Form' : '🔓 Withdraw Funds Now →'">🔓 Withdraw Funds Now →</span>
+                    </button>
+                    <p class="text-[10px] text-bronzeLight leading-relaxed">
+                        ✓ Withdrawal access is unlocked by Administration. Click above to enter your Bank Wire or Cryptocurrency details.
+                    </p>
+                <% } else { %>
+                    <button
+                        type="button"
+                        disabled
+                        title="Withdrawal button is locked by default until unlocked by ArtAlly Administration from the backend"
+                        class="w-full bg-white/10 border border-white/25 text-stone py-3.5 px-4 text-[11px] uppercase tracking-widest font-semibold cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                        <span>🔒 Withdraw Funds (Locked by Backend)</span>
+                    </button>
+                    <p class="text-[10px] text-stone leading-relaxed">
+                        * Your Withdraw button is locked by default for security. Once Administration grants withdrawal access from the backend, you can enter your Crypto or Bank Wire details here.
+                    </p>
+                <% } %>
+            </div>
+        </div>
+
+        <!-- Interactive Withdrawal Form (Shown when Unlocked & Artist clicks Withdraw) -->
+        <% if ($withdrawUnlocked) { %>
+        <div id="artist-withdraw-form-panel" x-show="showWithdrawForm" style="display: none;" class="bg-obsidian border border-bronze p-6 space-y-5 text-xs">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/15 pb-4">
+                <div>
+                    <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">Official Studio Treasury Remittance</p>
+                    <h3 class="font-serif text-2xl text-white mt-0.5">Submit Withdrawal Details (Bank Wire or Cryptocurrency)</h3>
+                </div>
+                <span class="text-[11px] font-mono text-bronzeLight">
+                    Max Available: <%- format_money_exact($walletBal) %> USD
+                </span>
+            </div>
+
+            <form action="/artist/wallet/withdraw" method="POST" class="space-y-5">
+                <%- csrf_field() %>
+                <input type="hidden" name="return_to" value="/artist/dashboard#artist-wallet">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-bronzeLight font-semibold mb-1.5">Amount to Withdraw (USD) *</label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="1"
+                            max="<%- $walletBal %>"
+                            name="amount"
+                            value="<%- $walletBal %>"
+                            required
+                            class="w-full bg-white/10 border border-bronze px-4 py-3 text-base font-mono font-bold text-white"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-bronzeLight font-semibold mb-1.5">Select Receiving Payout Method *</label>
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <button
+                                type="button"
+                                @click="payoutMethod = 'bank_wire'"
+                                :class="payoutMethod === 'bank_wire' ? 'bg-bronze text-white border-bronze' : 'bg-white/5 text-stone border-white/20 hover:border-white/50'"
+                                class="py-3 px-3 border text-[11px] uppercase tracking-widest font-semibold transition"
+                            >
+                                🏛 Bank Wire Transfer
+                            </button>
+                            <button
+                                type="button"
+                                @click="payoutMethod = 'crypto'"
+                                :class="payoutMethod === 'crypto' ? 'bg-bronze text-white border-bronze' : 'bg-white/5 text-stone border-white/20 hover:border-white/50'"
+                                class="py-3 px-3 border text-[11px] uppercase tracking-widest font-semibold transition"
+                            >
+                                ₿ Cryptocurrency
+                            </button>
+                        </div>
+                        <input type="hidden" name="payout_method" :value="payoutMethod">
+                    </div>
+                </div>
+
+                <!-- Option 1: Bank Wire Details -->
+                <div x-show="payoutMethod === 'bank_wire'" class="border border-white/15 bg-white/5 p-5 space-y-4">
+                    <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
+                        🏛 Receiving Bank Wire Account Details
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Beneficiary / Account Holder Name *</label>
+                            <input type="text" name="bank_account_name" :required="payoutMethod === 'bank_wire'" value="<%- e($profile?.['display_name'] ?? $user?.['name'] ?? '') %>" placeholder="Full Legal or Studio Account Name" class="w-full bg-white/10 border border-white/20 px-3.5 py-2.5 text-white placeholder-white/40">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Bank / Financial Institution Name *</label>
+                            <input type="text" name="bank_name" :required="payoutMethod === 'bank_wire'" placeholder="e.g., UBS, Chase, Barclays, Deutsche Bank" class="w-full bg-white/10 border border-white/20 px-3.5 py-2.5 text-white placeholder-white/40">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Account Number / IBAN *</label>
+                            <input type="text" name="bank_account_number" :required="payoutMethod === 'bank_wire'" placeholder="Account Number or IBAN" class="w-full bg-white/10 border border-bronze px-3.5 py-2.5 font-mono text-bronzeLight placeholder-white/40">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Routing / SWIFT / BIC Code *</label>
+                            <input type="text" name="bank_routing_swift" placeholder="SWIFT / BIC / ABA Routing Number" class="w-full bg-white/10 border border-white/20 px-3.5 py-2.5 font-mono text-white placeholder-white/40">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Bank Address / Branch Location</label>
+                        <input type="text" name="bank_address" placeholder="Street Address, City, Postal Code & Country of Bank Branch" class="w-full bg-white/10 border border-white/20 px-3.5 py-2.5 text-white placeholder-white/40">
+                    </div>
+                </div>
+
+                <!-- Option 2: Cryptocurrency Details -->
+                <div x-show="payoutMethod === 'crypto'" x-cloak class="border border-bronze/60 bg-bronze/10 p-5 space-y-4">
+                    <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
+                        ₿ Receiving Cryptocurrency Wallet Details
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Cryptocurrency / Coin *</label>
+                            <input type="text" name="crypto_currency" :required="payoutMethod === 'crypto'" list="artist_crypto_coins" placeholder="e.g., USDT (Tether), USDC, BTC, ETH" class="w-full bg-white/10 border border-white/20 px-3.5 py-2.5 text-white placeholder-white/40">
+                            <datalist id="artist_crypto_coins">
+                                <option value="USDT (Tether)">
+                                <option value="USDC (USD Coin)">
+                                <option value="BTC (Bitcoin)">
+                                <option value="ETH (Ethereum)">
+                                <option value="SOL (Solana)">
+                            </datalist>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Blockchain Network *</label>
+                            <input type="text" name="crypto_network" :required="payoutMethod === 'crypto'" list="artist_crypto_networks" placeholder="e.g., ERC-20, TRC-20, Bitcoin Mainnet, BEP-20" class="w-full bg-white/10 border border-white/20 px-3.5 py-2.5 text-white placeholder-white/40">
+                            <datalist id="artist_crypto_networks">
+                                <option value="ERC-20 (Ethereum)">
+                                <option value="TRC-20 (Tron)">
+                                <option value="Bitcoin Mainnet">
+                                <option value="BEP-20 (BNB Smart Chain)">
+                                <option value="Solana (SPL)">
+                            </datalist>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Receiving Crypto Wallet Address *</label>
+                        <input type="text" name="crypto_wallet_address" :required="payoutMethod === 'crypto'" placeholder="Paste your exact receiving wallet address (0x... / T... / bc1q...)" class="w-full bg-white/10 border border-bronze px-3.5 py-2.5 font-mono text-bronzeLight placeholder-white/40">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Destination Tag / Memo (Optional)</label>
+                        <input type="text" name="crypto_memo" placeholder="Optional Memo or Tag if required by your exchange" class="w-full bg-white/10 border border-white/20 px-3.5 py-2.5 font-mono text-white placeholder-white/40">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Additional Remittance Notes (Optional)</label>
+                    <input type="text" name="artist_notes" placeholder="Any special clearing instructions for ArtAlly Treasury..." class="w-full bg-white/10 border border-white/20 px-3.5 py-2.5 text-white placeholder-white/40">
+                </div>
+
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-white/15">
+                    <p class="text-[11px] text-stone">
+                        ⏱ Standard clearing &amp; settlement timeframe: <strong class="text-bronzeLight">2 to 7 business days</strong> to complete.
+                    </p>
+                    <button type="submit" class="bg-bronze text-white px-8 py-3.5 text-xs uppercase tracking-widest font-semibold hover:bg-bronzeDark transition">
+                        ✓ Confirm &amp; Submit Withdrawal →
+                    </button>
+                </div>
+            </form>
+        </div>
+        <% } %>
+
+        <!-- Withdrawal Processing & History Status Section -->
+        <% if (!empty($withdrawalsList)) { %>
+        <div class="space-y-3 pt-2 border-t border-white/15">
+            <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
+                Your Submitted Withdrawal Requests &amp; Settlement Status
+            </p>
+            <% for (const $wd of Object.values($withdrawalsList || [])) { %>
+                <% var $wdStatus = $wd?.['status'] ?? 'processing'; %>
+                <div class="border <%- $wdStatus === 'processing' ? 'border-bronze bg-bronze/15' : ($wdStatus === 'completed' ? 'border-[#2D6A4F] bg-[#1A2E22]/60' : 'border-white/20 bg-white/5') %> p-5 space-y-3 text-xs">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="space-y-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-mono text-xs font-bold text-white bg-obsidian px-2.5 py-1 border border-bronze/50">
+                                    <%- e($wd?.['reference_code']) %>
+                                </span>
+                                <% if ($wdStatus === 'processing') { %>
+                                    <span class="bg-bronze text-white text-[10px] uppercase tracking-widest px-3 py-1 font-bold">
+                                        ⟳ WITHDRAWAL PROCESSING — TAKES 2 TO 7 BUSINESS DAYS TO COMPLETE
+                                    </span>
+                                <% } else if ($wdStatus === 'completed') { %>
+                                    <span class="bg-[#1A2E22] text-ivory border border-bronze/50 text-[10px] uppercase tracking-widest px-3 py-1 font-bold">
+                                        ✓ WITHDRAWAL COMPLETED
+                                    </span>
+                                <% } else { %>
+                                    <span class="bg-red-900/60 text-white text-[10px] uppercase tracking-widest px-3 py-1 font-semibold">
+                                        ↺ RETURNED TO WALLET
+                                    </span>
+                                <% } %>
+                                <span class="text-[11px] text-stone">Submitted: <%- e($wd?.['created_at']) %> UTC</span>
+                            </div>
+
+                            <% if ($wdStatus === 'processing') { %>
+                                <p class="text-sm text-ivory font-medium pt-1">
+                                    <strong>Withdrawal Processing:</strong> Your withdrawal request of <strong><%- format_money_exact(Number($wd?.['amount'] ?? 0)) %></strong> has been transmitted to ArtAlly Treasury &amp; Clearing. It will take <strong>2 to 7 business days</strong> to complete.
+                                </p>
+                            <% } %>
+                        </div>
+
+                        <div class="text-left sm:text-right whitespace-nowrap">
+                            <span class="block text-[10px] uppercase tracking-widest text-stone">Withdrawal Amount</span>
+                            <span class="font-serif text-2xl font-bold text-bronzeLight">
+                                <%- format_money_exact(Number($wd?.['amount'] ?? 0)) %> <span class="text-xs font-mono">USD</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Submitted Bank Wire or Crypto Details -->
+                    <div class="bg-obsidian/80 border border-white/10 p-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-[11px]">
+                        <% if (($wd?.['payout_method'] ?? 'bank_wire') === 'crypto') { %>
+                            <div>
+                                <span class="block text-[9px] uppercase tracking-widest text-stone">Method &amp; Coin</span>
+                                <strong class="font-mono text-bronzeLight">₿ <%- e($wd?.['crypto_currency']) %></strong>
+                            </div>
+                            <div>
+                                <span class="block text-[9px] uppercase tracking-widest text-stone">Blockchain Network</span>
+                                <strong class="font-mono text-white"><%- e($wd?.['crypto_network']) %></strong>
+                            </div>
+                            <div class="sm:col-span-2">
+                                <span class="block text-[9px] uppercase tracking-widest text-stone">Receiving Wallet Address</span>
+                                <strong class="font-mono text-white break-all"><%- e($wd?.['crypto_wallet_address']) %></strong>
+                                <% if (!empty($wd?.['crypto_memo'])) { %>
+                                    <span class="block text-[10px] text-stone">Memo: <%- e($wd?.['crypto_memo']) %></span>
+                                <% } %>
+                            </div>
+                        <% } else { %>
+                            <div>
+                                <span class="block text-[9px] uppercase tracking-widest text-stone">Beneficiary Name</span>
+                                <strong class="font-mono text-white">🏛 <%- e($wd?.['bank_account_name']) %></strong>
+                            </div>
+                            <div>
+                                <span class="block text-[9px] uppercase tracking-widest text-stone">Bank Name</span>
+                                <strong class="font-mono text-white"><%- e($wd?.['bank_name']) %></strong>
+                            </div>
+                            <div>
+                                <span class="block text-[9px] uppercase tracking-widest text-stone">Account No. / IBAN</span>
+                                <strong class="font-mono text-bronzeLight break-all"><%- e($wd?.['bank_account_number']) %></strong>
+                            </div>
+                            <div>
+                                <span class="block text-[9px] uppercase tracking-widest text-stone">Routing / SWIFT</span>
+                                <strong class="font-mono text-white"><%- e($wd?.['bank_routing_swift'] || '—') %></strong>
+                            </div>
+                            <% if (!empty($wd?.['bank_address'])) { %>
+                            <div class="sm:col-span-2 lg:col-span-4">
+                                <span class="block text-[9px] uppercase tracking-widest text-stone">Bank Address</span>
+                                <strong class="font-mono text-white"><%- e($wd?.['bank_address']) %></strong>
+                            </div>
+                            <% } %>
+                        <% } %>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+        <% } %>
     </div>
 
     <!-- Live Bid Alert Banner (Displayed when Admin updates Bid Price on any Artist Artwork) -->
@@ -160,6 +473,12 @@
                                         <span class="block text-[10px] uppercase tracking-widest text-stone">Routing / SWIFT</span>
                                         <strong class="font-mono text-white"><%- e($inv?.['payment_routing_details'] || $inv?.['invoice_number']) %></strong>
                                     </div>
+                                    <% if (!empty($inv?.['payment_bank_address'])) { %>
+                                    <div class="sm:col-span-2 lg:col-span-4">
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">Bank Address / Branch Location</span>
+                                        <strong class="font-mono text-white"><%- e($inv?.['payment_bank_address']) %></strong>
+                                    </div>
+                                    <% } %>
                                 </div>
                             </div>
                             <% } %>
@@ -223,11 +542,15 @@
             <p class="text-[10px] uppercase tracking-widest text-stone">Gross Hammer Sales</p>
             <p class="font-serif text-3xl font-semibold text-obsidian mt-1"><%- format_money($stats?.['total_sales_volume']) %></p>
         </div>
-        <div class="bg-white border border-hairline p-6">
-            <p class="text-[10px] uppercase tracking-widest text-stone">Disbursed / Pending Payout</p>
-            <p class="font-serif text-2xl font-semibold text-bronze mt-1">
-                <%- format_money($stats?.['completed_payouts']) %>
-                <span class="text-xs text-stone block font-sans">Pending: <%- format_money($stats?.['pending_payouts']) %></span>
+        <div class="bg-[#181615] text-ivory border border-bronze p-6">
+            <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">Studio Wallet Balance</p>
+            <p class="font-serif text-2xl font-semibold text-white mt-1">
+                <%- format_money($stats?.['wallet_balance'] ?? $stats?.['completed_payouts'] ?? 0) %>
+                <% if (Number($stats?.['processing_withdrawals'] ?? 0) > 0) { %>
+                    <span class="text-xs text-bronzeLight block font-sans">Processing Withdrawal: <%- format_money($stats?.['processing_withdrawals']) %> (2–7 Business Days)</span>
+                <% } else { %>
+                    <span class="text-xs text-stone block font-sans">Pending Wire: <%- format_money($stats?.['pending_payouts']) %></span>
+                <% } %>
             </p>
         </div>
     </div>

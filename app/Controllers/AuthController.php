@@ -69,24 +69,7 @@ class AuthController
 
     public function quickDemoLogin(): void
     {
-        $role = $_POST['demo_role'] ?? 'buyer';
-        $email = match ($role) {
-            'admin' => 'admin@ateliernoir.art',
-            'artist' => 'soren@ateliernoir.art',
-            default => 'collector@ateliernoir.art',
-        };
-        $user = $this->db->findBy('users', 'email', $email);
-        if ($user) {
-            Auth::login($user);
-            flash('success', 'Signed in as ' . $user['name'] . ' (' . strtoupper($role) . ' Account).');
-            if ($role === 'admin') {
-                redirect('/admin/dashboard');
-            }
-            if ($role === 'artist') {
-                redirect('/artist/dashboard');
-            }
-            redirect('/buyer/dashboard');
-        }
+        flash('error', 'Quick demo login has been disabled for platform security. Please sign in with your credentials.');
         redirect('/login');
     }
 
@@ -110,6 +93,7 @@ class AuthController
         $name = trim((string)($_POST['name'] ?? ''));
         $email = strtolower(trim((string)($_POST['email'] ?? '')));
         $password = (string)($_POST['password'] ?? '');
+        $passwordConfirmation = (string)($_POST['password_confirmation'] ?? $password);
         $country = trim((string)($_POST['country'] ?? ''));
         $city = trim((string)($_POST['city'] ?? ''));
         $accountType = ($_POST['account_type'] ?? 'artist') === 'buyer' ? 'buyer' : 'artist';
@@ -126,6 +110,11 @@ class AuthController
                 flash('error', 'Verification Code Required: This registration portal is open for Artists only. To access the Collector/Buyer path, you must enter a valid Buyer Verification Code issued by Administration.');
                 redirect('/register?role=buyer');
             }
+        }
+
+        if ($password !== $passwordConfirmation) {
+            flash('error', 'Passwords do not match. Please enter the same password twice.');
+            redirect('/register?role=' . $accountType);
         }
 
         if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 8 || $country === '' || !$termsAccepted) {
@@ -279,18 +268,16 @@ class AuthController
                 'token' => $token,
                 'expires_at' => gmdate('Y-m-d H:i:s', strtotime('+1 hour')),
             ]);
-            Session::set('demo_reset_token', $token);
-            Session::set('demo_reset_email', $email);
         }
 
-        flash('success', 'Password recovery link generated. You may proceed to reset your password below.');
-        redirect('/reset-password?token=' . urlencode($token) . '&email=' . urlencode($email));
+        flash('success', 'If an account is registered for that email address, a password recovery token has been issued.');
+        redirect('/reset-password?email=' . urlencode($email));
     }
 
     public function showResetPassword(): void
     {
-        $token = trim((string)($_GET['token'] ?? Session::get('demo_reset_token', '')));
-        $email = trim((string)($_GET['email'] ?? Session::get('demo_reset_email', '')));
+        $token = trim((string)($_GET['token'] ?? ''));
+        $email = trim((string)($_GET['email'] ?? ''));
         view('auth/reset-password', [
             'pageTitle' => 'Set New Password — ArtAlly',
             'token' => $token,
@@ -303,16 +290,23 @@ class AuthController
         $email = strtolower(trim((string)($_POST['email'] ?? '')));
         $token = trim((string)($_POST['token'] ?? ''));
         $password = (string)($_POST['password'] ?? '');
+        $passwordConfirmation = (string)($_POST['password_confirmation'] ?? $password);
+
+        if ($password !== $passwordConfirmation) {
+            flash('error', 'Passwords do not match. Please enter the same password twice.');
+            redirect('/reset-password?token=' . urlencode($token) . '&email=' . urlencode($email));
+        }
 
         if (strlen($password) < 8) {
             flash('error', 'New password must be at least 8 characters long.');
             redirect('/reset-password?token=' . urlencode($token) . '&email=' . urlencode($email));
         }
 
-        $record = $this->db->findBy('password_reset_tokens', 'token', $token);
+        $record = $token !== '' ? $this->db->findBy('password_reset_tokens', 'token', $token) : null;
         $user = $this->db->findBy('users', 'email', $email);
+        $isExpired = !empty($record['expires_at']) && (string)$record['expires_at'] < gmdate('Y-m-d H:i:s');
 
-        if (!$record || !$user || strtolower((string)$record['email']) !== $email) {
+        if (!$record || $isExpired || !$user || strtolower((string)$record['email']) !== $email) {
             flash('error', 'Invalid or expired password recovery token.');
             redirect('/forgot-password');
         }

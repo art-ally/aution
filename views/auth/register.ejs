@@ -1,19 +1,55 @@
 <div class="max-w-3xl mx-auto px-4 sm:px-8 py-16" x-data="{
     role: '<%- e($selectedRole ?? 'artist') %>',
     buyerCodeInput: '',
-    expectedBuyerCode: '<%- e($buyerVerificationCode ?? 'NOIR-BUYER-2026') %>',
     buyerUnlocked: false,
     buyerCodeError: '',
+    verifyingBuyerCode: false,
     portraitPreview: '',
     portraitData: '',
+    password: '',
+    passwordConfirmation: '',
+    passwordMismatchError: '',
     submitting: false,
-    verifyBuyerCode() {
-        if (this.buyerCodeInput.trim().toUpperCase() === this.expectedBuyerCode.trim().toUpperCase() && this.buyerCodeInput.trim() !== '') {
-            this.buyerUnlocked = true;
-            this.buyerCodeError = '';
-        } else {
+    validateAndSubmit(e) {
+        if (this.submitting) {
+            e.preventDefault();
+            return;
+        }
+        if (this.password !== this.passwordConfirmation) {
+            e.preventDefault();
+            this.passwordMismatchError = 'Passwords do not match. Please type the exact same password in both fields.';
+            return;
+        }
+        this.passwordMismatchError = '';
+        this.submitting = true;
+    },
+    async verifyBuyerCode() {
+        const code = this.buyerCodeInput.trim();
+        if (!code) {
             this.buyerUnlocked = false;
-            this.buyerCodeError = 'Invalid Buyer Verification Code. Please obtain an official Collector Verification Code from ArtAlly Administration, or register as an Artist.';
+            this.buyerCodeError = 'Please enter a valid Buyer Verification Code issued by ArtAlly Administration.';
+            return;
+        }
+        this.verifyingBuyerCode = true;
+        try {
+            const resp = await fetch('/api/verify-buyer-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
+            });
+            const data = await resp.json();
+            if (data && data.valid) {
+                this.buyerUnlocked = true;
+                this.buyerCodeError = '';
+            } else {
+                this.buyerUnlocked = false;
+                this.buyerCodeError = 'Invalid Buyer Verification Code. Please obtain an official Collector Verification Code from ArtAlly Administration, or register as an Artist.';
+            }
+        } catch (_) {
+            this.buyerUnlocked = false;
+            this.buyerCodeError = 'Unable to verify code right now. Please try again.';
+        } finally {
+            this.verifyingBuyerCode = false;
         }
     },
     handlePortraitChange(e) {
@@ -124,7 +160,7 @@
         </div>
 
         <!-- MAIN REGISTRATION FORM (Always shown for Artists, or for Buyers after Verification Code is unlocked) -->
-        <form x-show="role === 'artist' || (role === 'buyer' && buyerUnlocked)" @submit="if (submitting) { $event.preventDefault(); return; } submitting = true" action="/register" method="POST" enctype="multipart/form-data" class="space-y-5 text-xs">
+        <form x-show="role === 'artist' || (role === 'buyer' && buyerUnlocked)" @submit="validateAndSubmit($event)" action="/register" method="POST" enctype="multipart/form-data" class="space-y-5 text-xs">
             <%- csrf_field() %>
             <input type="hidden" name="account_type" :value="role">
             <input type="hidden" name="buyer_verification_code" :value="buyerCodeInput">
@@ -149,17 +185,32 @@
                 </div>
             </div>
 
+            <div>
+                <label class="block uppercase tracking-widest text-stone mb-2">Email Address *</label>
+                <input type="email" name="email" required placeholder="name@example.com" class="w-full bg-ivory border border-hairline px-4 py-3.5 text-sm focus:outline-none focus:border-bronze">
+            </div>
+
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                    <label class="block uppercase tracking-widest text-stone mb-2">Email Address *</label>
-                    <input type="email" name="email" required placeholder="name@example.com" class="w-full bg-ivory border border-hairline px-4 py-3.5 text-sm focus:outline-none focus:border-bronze">
+                    <label class="block uppercase tracking-widest text-stone mb-2">Password (Min. 8 Characters) *</label>
+                    <input type="password" name="password" x-model="password" @input="if (passwordMismatchError && password === passwordConfirmation) passwordMismatchError = ''" required minlength="8" placeholder="••••••••••••" class="w-full bg-ivory border border-hairline px-4 py-3.5 text-sm focus:outline-none focus:border-bronze">
                 </div>
 
                 <div>
-                    <label class="block uppercase tracking-widest text-stone mb-2">Password (Min. 8 Characters) *</label>
-                    <input type="password" name="password" required minlength="8" placeholder="••••••••••••" class="w-full bg-ivory border border-hairline px-4 py-3.5 text-sm focus:outline-none focus:border-bronze">
+                    <label class="block uppercase tracking-widest text-stone mb-2">Confirm Password (Retype Password) *</label>
+                    <input type="password" name="password_confirmation" x-model="passwordConfirmation" @input="if (passwordMismatchError && password === passwordConfirmation) passwordMismatchError = ''" required minlength="8" placeholder="••••••••••••" :class="(passwordConfirmation.length > 0 && password !== passwordConfirmation) ? 'border-red-700' : 'border-hairline'" class="w-full bg-ivory border px-4 py-3.5 text-sm focus:outline-none focus:border-bronze">
+                    <template x-if="passwordConfirmation.length > 0 && password !== passwordConfirmation">
+                        <p class="text-[11px] text-red-700 mt-1.5 font-medium">Passwords do not match yet.</p>
+                    </template>
+                    <template x-if="passwordConfirmation.length >= 8 && password === passwordConfirmation">
+                        <p class="text-[11px] text-[#1A2E22] mt-1.5 font-medium">✓ Passwords match.</p>
+                    </template>
                 </div>
             </div>
+
+            <template x-if="passwordMismatchError">
+                <div class="bg-[#FDF2F2] border border-red-800 text-red-900 px-4 py-3 text-xs font-medium" x-text="passwordMismatchError"></div>
+            </template>
 
             <!-- Artist Profile Fields (Shown when Artist Path selected) -->
             <div x-show="role === 'artist'" x-transition class="space-y-4 pt-3 border-t border-hairline">

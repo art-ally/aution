@@ -94,7 +94,7 @@
                             <p class="text-xs text-stone">
                                 <%- e($inv?.['service_type']) %>
                                 <% if (!empty($inv?.['payment_account_number'])) { %>
-                                    · Bank: <strong class="text-obsidian"><%- e($inv?.['payment_bank_name']) %> (<%- e($inv?.['payment_account_name']) %> · <%- e($inv?.['payment_account_number']) %>)</strong>
+                                    · Bank: <strong class="text-obsidian"><%- e($inv?.['payment_bank_name']) %> (<%- e($inv?.['payment_account_name']) %> · <%- e($inv?.['payment_account_number']) %><%- !empty($inv?.['payment_bank_address']) ? ' · ' + e($inv?.['payment_bank_address']) : '' %>)</strong>
                                 <% } %>
                                 <% if (!empty($inv?.['crypto_wallet_address'])) { %>
                                     · Crypto: <strong class="text-obsidian"><%- e($inv?.['crypto_currency'] || 'Crypto') %> (<%- e($inv?.['crypto_network'] || 'Mainnet') %> · <span class="font-mono"><%- e($inv?.['crypto_wallet_address']) %></span>)</strong>

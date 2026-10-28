@@ -14,8 +14,12 @@
                 <input type="text" name="token" value="<?= e($token) ?>" required class="w-full bg-ivory border border-hairline px-4 py-3 text-sm font-mono">
             </div>
             <div>
-                <label class="block uppercase tracking-widest text-stone mb-2">New Password (Min. 8 Characters)</label>
+                <label class="block uppercase tracking-widest text-stone mb-2">New Password (Min. 8 Characters) *</label>
                 <input type="password" name="password" minlength="8" required class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
+            </div>
+            <div>
+                <label class="block uppercase tracking-widest text-stone mb-2">Confirm New Password *</label>
+                <input type="password" name="password_confirmation" minlength="8" required class="w-full bg-ivory border border-hairline px-4 py-3 text-sm">
             </div>
             <button type="submit" class="w-full bg-obsidian text-ivory py-3.5 text-xs uppercase tracking-widest hover:bg-bronze transition">
                 Update Password

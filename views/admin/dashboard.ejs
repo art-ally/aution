@@ -258,6 +258,10 @@
                                 <input type="text" name="payment_routing_details" placeholder="SWIFT / Routing Code" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs font-mono text-white placeholder-white/40">
                             </div>
                         </div>
+                        <div>
+                            <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Bank Address / Branch Location</label>
+                            <input type="text" name="payment_bank_address" placeholder="e.g., Rue de la Corraterie 11, 1204 Geneva, Switzerland" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                        </div>
                     </div>
 
                     <!-- Cryptocurrency Payment Details Block -->
@@ -362,6 +366,9 @@
                                                 <span class="text-[9px] uppercase tracking-widest bg-obsidian text-ivory px-1.5 py-0.5 mr-1">Bank</span>
                                                 <strong class="text-obsidian"><%- e($invRow?.['payment_bank_name']) %></strong>
                                                 <div class="text-charcoal"><%- e($invRow?.['payment_account_name']) %> · <%- e($invRow?.['payment_account_number']) %></div>
+                                                <% if (!empty($invRow?.['payment_bank_address'])) { %>
+                                                    <div class="text-[10px] text-stone font-sans"><%- e($invRow?.['payment_bank_address']) %></div>
+                                                <% } %>
                                             </div>
                                         <% } %>
                                         <% if (!empty($invRow?.['crypto_wallet_address']) || !empty($invRow?.['crypto_currency'])) { %>
@@ -540,6 +547,74 @@
                                     <input type="hidden" name="user_id" value="<%- Number($ap?.['user_id']) %>">
                                     <button type="submit" class="px-3.5 py-2.5 bg-white border border-red-800 text-red-800 text-[11px] uppercase tracking-widest hover:bg-red-800 hover:text-white transition">
                                         Delete Artist
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Artist Studio Wallet & Backend Withdrawal Access Control Bar -->
+                        <% var $apWallet = $ap?.['wallet_state'] ?? {};
+                           var $apBal = Number($apWallet?.['available_balance'] ?? 0);
+                           var $apProc = Number($apWallet?.['processing_withdrawals_total'] ?? 0);
+                           var $apUnlocked = Boolean($apWallet?.['withdrawal_unlocked'] ?? $ap?.['withdrawal_unlocked'] ?? false); %>
+                        <div class="bg-[#181615] text-ivory border border-bronze p-4 sm:p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4 text-xs">
+                            <div class="space-y-1">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="bg-bronze text-white text-[9px] uppercase tracking-widest px-2.5 py-0.5 font-bold">
+                                        💰 Artist Studio Wallet &amp; Withdrawal Gate
+                                    </span>
+                                    <% if ($apUnlocked) { %>
+                                        <span class="bg-[#1A2E22] border border-bronze/50 text-ivory text-[9px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                                            🔓 Withdraw Button: UNLOCKED (Artist Can Withdraw)
+                                        </span>
+                                    <% } else { %>
+                                        <span class="bg-white/10 border border-white/25 text-stone text-[9px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                                            🔒 Withdraw Button: LOCKED BY DEFAULT
+                                        </span>
+                                    <% } %>
+                                </div>
+                                <p class="text-stone text-[11px]">
+                                    Available Wallet Balance: <strong class="font-mono text-base text-bronzeLight"><%- format_money_exact($apBal) %></strong>
+                                    <% if ($apProc > 0) { %>
+                                        · <span class="text-white">Withdrawal Processing (2–7 Days): <strong class="font-mono text-bronzeLight"><%- format_money_exact($apProc) %></strong></span>
+                                    <% } %>
+                                </p>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-2.5">
+                                <!-- Explicit Unlock & Lock Withdraw Buttons (Backend Control) -->
+                                <form action="/admin/artists/wallet-access" method="POST" class="inline-flex items-center gap-2">
+                                    <%- csrf_field() %>
+                                    <input type="hidden" name="artist_profile_id" value="<%- Number($ap?.['id']) %>">
+                                    <input type="hidden" name="artist_id" value="<%- Number($ap?.['user_id']) %>">
+                                    <input type="hidden" name="return_anchor" value="#artists">
+                                    <button
+                                        type="submit"
+                                        name="action_type"
+                                        value="unlock"
+                                        class="px-3.5 py-2 text-[10px] uppercase tracking-widest font-semibold transition <%- $apUnlocked ? 'bg-[#1A2E22] border-2 border-bronze text-ivory shadow-sm' : 'bg-white/10 border border-bronze text-ivory hover:bg-[#1A2E22]' %>"
+                                    >
+                                        <%- $apUnlocked ? '✓ 🔓 Withdraw UNLOCKED' : '🔓 Unlock Withdraw' %>
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        name="action_type"
+                                        value="lock"
+                                        class="px-3.5 py-2 text-[10px] uppercase tracking-widest font-semibold transition <%- !$apUnlocked ? 'bg-red-900/80 border-2 border-red-400 text-white shadow-sm' : 'bg-white/10 border border-white/30 text-stone hover:bg-red-900 hover:text-white' %>"
+                                    >
+                                        <%- !$apUnlocked ? '✓ 🔒 Withdraw LOCKED' : '🔒 Lock Withdraw' %>
+                                    </button>
+                                </form>
+
+                                <!-- Direct Wallet Balance Credit / Adjustment -->
+                                <form action="/admin/artists/wallet-access" method="POST" class="flex items-center gap-1.5">
+                                    <%- csrf_field() %>
+                                    <input type="hidden" name="artist_profile_id" value="<%- Number($ap?.['id']) %>">
+                                    <input type="hidden" name="artist_id" value="<%- Number($ap?.['user_id']) %>">
+                                    <input type="hidden" name="return_anchor" value="#artists">
+                                    <input type="number" step="0.01" min="0" name="wallet_amount" value="<%- $apBal %>" placeholder="Wallet $" class="w-28 bg-white/10 border border-white/25 px-2.5 py-1.5 text-xs font-mono text-white">
+                                    <button type="submit" name="action_type" value="set_balance" class="bg-bronze text-white px-3 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronzeDark transition">
+                                        Set Wallet $
                                     </button>
                                 </form>
                             </div>
@@ -934,53 +1009,142 @@
         <% } %>
     </section>
 
-    <!-- SECTION 4: Orders, Commissions & Seller Payout Approvals -->
-    <section id="payouts" class="bg-white border border-hairline p-8 space-y-6">
-        <div class="border-b border-hairline pb-4">
-            <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Financial Operations</p>
-            <h2 class="font-serif text-3xl text-obsidian">Real Seller Commissions &amp; Artist Payout Release</h2>
+    <!-- SECTION 4: Orders, Commissions, Artist Wallet Disbursement & Withdrawal Governance -->
+    <section id="payouts" class="bg-white border border-hairline p-8 space-y-8">
+        <div class="border-b border-hairline pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Financial Operations &amp; Studio Wallet Governance</p>
+                <h2 class="font-serif text-3xl text-obsidian">Authorize Wire Payouts to Artist Wallet &amp; Manage Withdrawals</h2>
+            </div>
+            <p class="text-xs text-stone max-w-md">
+                Clicking <strong>Authorize Wire Payout</strong> disburses the net amount directly into the Artist's Studio Wallet. Unlock the artist's <strong>Withdraw</strong> button when ready so they can submit their Crypto or Bank Wire details.
+            </p>
         </div>
 
+        <!-- Direct Artist Wallet & Withdraw Button Lock / Unlock Control Panel -->
+        <% if (!empty($artistProfiles)) { %>
+            <div class="bg-[#181615] text-ivory border border-bronze p-5 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/15 pb-3">
+                    <div>
+                        <span class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">Backend Artist Wallet Access Control</span>
+                        <h3 class="font-serif text-xl text-white">Unlock or Lock Artist Wallet Withdraw Button</h3>
+                    </div>
+                    <span class="text-[11px] text-stone">Locked by default. Unlocking enables the artist's Withdraw button &amp; Crypto / Bank Wire form immediately.</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <% for (const $wAp of Object.values($artistProfiles || [])) { %>
+                        <% var $wSt = $wAp?.['wallet_state'] ?? {};
+                           var $wBal = Number($wSt?.['available_balance'] ?? 0);
+                           var $wUnl = Boolean($wSt?.['withdrawal_unlocked'] ?? $wAp?.['withdrawal_unlocked'] ?? false); %>
+                        <div class="bg-obsidian border border-white/15 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <strong class="text-white text-sm"><%- e($wAp?.['display_name']) %></strong>
+                                    <span class="px-2 py-0.5 text-[9px] uppercase tracking-widest font-semibold <%- $wUnl ? 'bg-[#1A2E22] text-ivory border border-bronze/50' : 'bg-red-900/60 text-white border border-red-400/40' %>">
+                                        <%- $wUnl ? '🔓 UNLOCKED' : '🔒 LOCKED' %>
+                                    </span>
+                                </div>
+                                <p class="text-[11px] text-stone mt-1">
+                                    Wallet Balance: <strong class="font-mono text-bronzeLight"><%- format_money_exact($wBal) %></strong>
+                                </p>
+                            </div>
+                            <form action="/admin/artists/wallet-access" method="POST" class="inline-flex items-center gap-2">
+                                <%- csrf_field() %>
+                                <input type="hidden" name="artist_profile_id" value="<%- Number($wAp?.['id']) %>">
+                                <input type="hidden" name="artist_id" value="<%- Number($wAp?.['user_id']) %>">
+                                <input type="hidden" name="return_anchor" value="#payouts">
+                                <button
+                                    type="submit"
+                                    name="action_type"
+                                    value="unlock"
+                                    class="px-3 py-2 text-[10px] uppercase tracking-widest font-semibold transition <%- $wUnl ? 'bg-[#1A2E22] border-2 border-bronze text-ivory' : 'bg-white/10 border border-bronze text-ivory hover:bg-[#1A2E22]' %>"
+                                >
+                                    <%- $wUnl ? '✓ 🔓 Unlocked' : '🔓 Unlock Withdraw' %>
+                                </button>
+                                <button
+                                    type="submit"
+                                    name="action_type"
+                                    value="lock"
+                                    class="px-3 py-2 text-[10px] uppercase tracking-widest font-semibold transition <%- !$wUnl ? 'bg-red-900/80 border-2 border-red-400 text-white' : 'bg-white/10 border border-white/30 text-stone hover:bg-red-900 hover:text-white' %>"
+                                >
+                                    <%- !$wUnl ? '✓ 🔒 Locked' : '🔒 Lock Withdraw' %>
+                                </button>
+                            </form>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+        <% } %>
+
         <% if (empty($payouts)) { %>
-            <p class="text-xs text-stone py-4">No real artist payouts are pending yet.</p>
+            <p class="text-xs text-stone py-4">No real artist payouts are pending yet. When an auction is marked SOLD, its payout row appears here so you can click <strong>Authorize Wire Payout</strong> to credit the artist's wallet.</p>
         <% } else { %>
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-xs border-collapse">
                     <thead>
                         <tr class="border-b border-hairline text-[10px] uppercase tracking-widest text-stone">
                             <th class="py-3 pr-4">Reference</th>
-                            <th class="py-3 pr-4">Artist</th>
+                            <th class="py-3 pr-4">Artist &amp; Wallet Balance</th>
                             <th class="py-3 pr-4">Gross Hammer</th>
                             <th class="py-3 pr-4">House Commission</th>
                             <th class="py-3 pr-4">Net Artist Payout</th>
-                            <th class="py-3 pr-4">Status</th>
-                            <th class="py-3 text-right">Authorization</th>
+                            <th class="py-3 pr-4">Disbursement Status</th>
+                            <th class="py-3 pr-4">Withdraw Button Gate</th>
+                            <th class="py-3 text-right">Wire Authorization</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-hairline">
                         <% for (const $po of Object.values($payouts || [])) { %>
+                            <% var $poWallet = $po?.['wallet_state'] ?? {};
+                               var $poUnlocked = Boolean($poWallet?.['withdrawal_unlocked'] ?? false); %>
                             <tr>
                                 <td class="py-4 pr-4 font-mono font-semibold"><%- e($po?.['payout_reference']) %></td>
-                                <td class="py-4 pr-4"><%- e($po?.['artist']?.['name'] ?? 'Artist') %></td>
-                                <td class="py-4 pr-4"><%- format_money_exact($po?.['gross_sale_amount']) %></td>
+                                <td class="py-4 pr-4">
+                                    <strong class="text-obsidian block"><%- e($po?.['artist']?.['name'] ?? 'Artist') %></strong>
+                                    <span class="text-[11px] font-mono text-bronze">Wallet: <%- format_money_exact(Number($poWallet?.['available_balance'] ?? 0)) %></span>
+                                </td>
+                                <td class="py-4 pr-4"><%- format_money_exact($po?.['gross_sale_amount'] ?? $po?.['gross_amount'] ?? 0) %></td>
                                 <td class="py-4 pr-4 text-stone"><%- format_money_exact($po?.['commission_deducted']) %></td>
                                 <td class="py-4 pr-4 font-serif text-lg font-semibold text-bronze"><%- format_money_exact($po?.['net_payout_amount']) %></td>
                                 <td class="py-4 pr-4">
                                     <span class="px-2 py-0.5 text-[10px] uppercase tracking-widest font-semibold <%- ($po?.['status'] ?? '') === 'completed' ? 'bg-[#1A2E22] text-ivory' : 'bg-alabaster text-obsidian border border-hairline' %>">
-                                        <%- e(strtoupper($po?.['status'])) %>
+                                        <%- ($po?.['status'] ?? '') === 'completed' ? '✓ IN ARTIST WALLET' : e(strtoupper($po?.['status'])) %>
                                     </span>
+                                </td>
+                                <td class="py-4 pr-4">
+                                    <form action="/admin/artists/wallet-access" method="POST" class="inline-flex items-center gap-1.5">
+                                        <%- csrf_field() %>
+                                        <input type="hidden" name="artist_id" value="<%- Number($po?.['artist_id']) %>">
+                                        <input type="hidden" name="return_anchor" value="#payouts">
+                                        <button
+                                            type="submit"
+                                            name="action_type"
+                                            value="unlock"
+                                            class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-semibold transition <%- $poUnlocked ? 'bg-[#1A2E22] text-ivory border border-bronze' : 'border border-obsidian bg-ivory text-obsidian hover:bg-[#1A2E22] hover:text-ivory' %>"
+                                        >
+                                            <%- $poUnlocked ? '✓ 🔓 Unlocked' : '🔓 Unlock' %>
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            name="action_type"
+                                            value="lock"
+                                            class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-semibold transition <%- !$poUnlocked ? 'bg-red-800 text-white border border-red-900' : 'border border-hairline bg-alabaster text-charcoal hover:bg-red-800 hover:text-white' %>"
+                                        >
+                                            <%- !$poUnlocked ? '✓ 🔒 Locked' : '🔒 Lock' %>
+                                        </button>
+                                    </form>
                                 </td>
                                 <td class="py-4 text-right">
                                     <% if (($po?.['status'] ?? '') !== 'completed') { %>
                                         <form action="/admin/payouts/approve" method="POST" class="inline">
                                             <%- csrf_field() %>
                                             <input type="hidden" name="payout_id" value="<%- Number($po?.['id']) %>">
-                                            <button type="submit" class="bg-bronze text-white px-4 py-2 text-[10px] uppercase tracking-widest hover:bg-bronzeDark transition">
-                                                Authorize Wire Payout
+                                            <button type="submit" class="bg-bronze text-white px-4 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronzeDark transition">
+                                                Authorize Wire Payout → Credit Wallet
                                             </button>
                                         </form>
                                     <% } else { %>
-                                        <span class="text-stone text-[11px]">Disbursed <%- e($po?.['paid_at'] ?? '') %></span>
+                                        <span class="text-[#1A2E22] font-semibold text-[11px]">✓ Credited to Wallet (<%- e(substr($po?.['paid_at'] ?? '', 0, 10)) %>)</span>
                                     <% } %>
                                 </td>
                             </tr>
@@ -989,6 +1153,131 @@
                 </table>
             </div>
         <% } %>
+
+        <!-- Submitted Artist Withdrawal Requests (Crypto & Bank Wire Details from Artist) -->
+        <div id="withdrawals" class="border-t border-hairline pt-6 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                    <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Incoming Artist Remittance Instructions</p>
+                    <h3 class="font-serif text-2xl text-obsidian">Submitted Artist Wallet Withdrawal Requests (<%- count($walletWithdrawals || []) %>)</h3>
+                </div>
+                <span class="text-xs text-stone">Displays all Cryptocurrency and Bank Wire details entered by artists when they click Withdraw.</span>
+            </div>
+
+            <% if (empty($walletWithdrawals)) { %>
+                <p class="text-xs text-stone italic">No artist withdrawal requests have been submitted yet. Once you unlock an artist's Withdraw button and they submit their Crypto or Bank Wire details, their full remittance details will appear here.</p>
+            <% } else { %>
+                <div class="overflow-x-auto border border-hairline">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-obsidian text-ivory uppercase tracking-widest text-[10px]">
+                                <th class="py-3 px-4">Withdrawal Ref</th>
+                                <th class="py-3 px-4">Artist</th>
+                                <th class="py-3 px-4">Amount</th>
+                                <th class="py-3 px-4">Method &amp; Artist Submitted Payment Details (Crypto / Bank Wire)</th>
+                                <th class="py-3 px-4">Status</th>
+                                <th class="py-3 px-4 text-right">Admin Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-hairline">
+                            <% for (const $wd of Object.values($walletWithdrawals || [])) { %>
+                                <% var $wStat = $wd?.['status'] ?? 'processing'; %>
+                                <tr class="hover:bg-ivory/60 align-top">
+                                    <td class="py-4 px-4 font-mono font-semibold text-obsidian whitespace-nowrap">
+                                        <%- e($wd?.['reference_code']) %>
+                                        <div class="text-[10px] text-stone font-sans">Submitted: <%- e($wd?.['created_at']) %></div>
+                                    </td>
+                                    <td class="py-4 px-4">
+                                        <div class="font-semibold text-obsidian"><%- e($wd?.['artist_name']) %></div>
+                                        <div class="text-[11px] text-stone"><%- e($wd?.['artist_email']) %></div>
+                                    </td>
+                                    <td class="py-4 px-4 font-serif text-lg font-bold text-bronze whitespace-nowrap">
+                                        <%- format_money_exact(Number($wd?.['amount'] ?? 0), $wd?.['currency'] ?? 'USD') %>
+                                    </td>
+                                    <td class="py-4 px-4 font-mono text-[11px] space-y-1">
+                                        <% if (($wd?.['payout_method'] ?? 'bank_wire') === 'crypto') { %>
+                                            <div>
+                                                <span class="bg-bronze text-white text-[9px] uppercase tracking-widest px-2 py-0.5 font-bold mr-1">₿ CRYPTO</span>
+                                                <strong class="text-obsidian"><%- e($wd?.['crypto_currency']) %></strong>
+                                                <span class="text-stone">· Network: <strong class="text-obsidian"><%- e($wd?.['crypto_network']) %></strong></span>
+                                            </div>
+                                            <div class="text-charcoal break-all">
+                                                <strong>Wallet Address:</strong> <span class="bg-ivory border border-hairline px-1.5 py-0.5 select-all"><%- e($wd?.['crypto_wallet_address']) %></span>
+                                            </div>
+                                            <% if (!empty($wd?.['crypto_memo'])) { %>
+                                                <div class="text-stone"><strong>Memo / Tag:</strong> <%- e($wd?.['crypto_memo']) %></div>
+                                            <% } %>
+                                        <% } else { %>
+                                            <div>
+                                                <span class="bg-obsidian text-ivory text-[9px] uppercase tracking-widest px-2 py-0.5 font-bold mr-1">🏛 BANK WIRE</span>
+                                                <strong class="text-obsidian"><%- e($wd?.['bank_name']) %></strong>
+                                                <span class="text-stone">· Beneficiary: <strong class="text-obsidian"><%- e($wd?.['bank_account_name']) %></strong></span>
+                                            </div>
+                                            <div class="text-charcoal">
+                                                <strong>Account / IBAN:</strong> <span class="bg-ivory border border-hairline px-1.5 py-0.5 select-all"><%- e($wd?.['bank_account_number']) %></span>
+                                                <% if (!empty($wd?.['bank_routing_swift'])) { %>
+                                                    · <strong>Routing / SWIFT:</strong> <%- e($wd?.['bank_routing_swift']) %>
+                                                <% } %>
+                                            </div>
+                                            <% if (!empty($wd?.['bank_address'])) { %>
+                                                <div class="text-stone font-sans"><strong>Bank Address:</strong> <%- e($wd?.['bank_address']) %></div>
+                                            <% } %>
+                                        <% } %>
+                                        <% if (!empty($wd?.['artist_notes'])) { %>
+                                            <div class="text-stone font-sans italic">Note: "<%- e($wd?.['artist_notes']) %>"</div>
+                                        <% } %>
+                                    </td>
+                                    <td class="py-4 px-4 whitespace-nowrap">
+                                        <% if ($wStat === 'processing') { %>
+                                            <span class="bg-bronze/20 text-bronze border border-bronze text-[10px] uppercase tracking-widest px-2.5 py-1 font-semibold block text-center">
+                                                ⟳ Processing (2–7 Days)
+                                            </span>
+                                        <% } else if ($wStat === 'completed') { %>
+                                            <span class="bg-[#1A2E22] text-ivory text-[10px] uppercase tracking-widest px-2.5 py-1 font-semibold block text-center">
+                                                ✓ Completed
+                                            </span>
+                                        <% } else { %>
+                                            <span class="bg-red-100 text-red-800 text-[10px] uppercase tracking-widest px-2.5 py-1 font-semibold block text-center">
+                                                ↺ Returned to Wallet
+                                            </span>
+                                        <% } %>
+                                    </td>
+                                    <td class="py-4 px-4 text-right space-x-1 whitespace-nowrap">
+                                        <% if ($wStat === 'processing') { %>
+                                            <form action="/admin/withdrawals/status" method="POST" class="inline">
+                                                <%- csrf_field() %>
+                                                <input type="hidden" name="withdrawal_id" value="<%- Number($wd?.['id']) %>">
+                                                <input type="hidden" name="status" value="completed">
+                                                <button type="submit" class="bg-[#1A2E22] text-ivory px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                                                    ✓ Mark Completed
+                                                </button>
+                                            </form>
+                                            <form action="/admin/withdrawals/status" method="POST" class="inline" onsubmit="return confirm('Return this withdrawal amount back to the artist wallet?');">
+                                                <%- csrf_field() %>
+                                                <input type="hidden" name="withdrawal_id" value="<%- Number($wd?.['id']) %>">
+                                                <input type="hidden" name="status" value="rejected">
+                                                <button type="submit" class="border border-red-800 text-red-800 px-2.5 py-1.5 text-[10px] uppercase tracking-widest hover:bg-red-800 hover:text-white transition">
+                                                    ↺ Return
+                                                </button>
+                                            </form>
+                                        <% } else { %>
+                                            <form action="/admin/withdrawals/status" method="POST" class="inline">
+                                                <%- csrf_field() %>
+                                                <input type="hidden" name="withdrawal_id" value="<%- Number($wd?.['id']) %>">
+                                                <input type="hidden" name="status" value="processing">
+                                                <button type="submit" class="border border-hairline text-stone px-2.5 py-1 text-[10px] uppercase tracking-widest hover:border-obsidian hover:text-obsidian transition">
+                                                    Set Processing
+                                                </button>
+                                            </form>
+                                        <% } %>
+                                    </td>
+                                </tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } %>
+        </div>
     </section>
 
     <!-- SECTION 5: Platform Settings, Categories & Real User Management -->

@@ -198,6 +198,13 @@ var $isPaid = ($inv['status'] || 'unpaid') === 'paid';
                                 <p style="font-family: var(--font-mono); font-size: 0.92rem; color: #FFFFFF;"><%- e($inv['payment_routing_details']) %></p>
                             </div>
                             <% } %>
+
+                            <% if (!empty($inv['payment_bank_address'])) { %>
+                            <div style="grid-column: 1 / -1;">
+                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Bank Address / Branch Location</p>
+                                <p style="font-family: var(--font-mono); font-size: 0.92rem; color: #FFFFFF;"><%- e($inv['payment_bank_address']) %></p>
+                            </div>
+                            <% } %>
                         </div>
                     </div>
                     <% } %>

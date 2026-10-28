@@ -2,10 +2,45 @@
     <div class="border-b border-hairline pb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
             <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-1">Financial Settlement &amp; Disbursements</p>
-            <h1 class="font-serif text-4xl text-obsidian">Completed Sales, Commissions &amp; Seller Payouts</h1>
+            <h1 class="font-serif text-4xl text-obsidian">Studio Wallet, Completed Sales &amp; Seller Payouts</h1>
         </div>
-        <a href="/artist/dashboard" class="text-xs uppercase tracking-widest text-stone hover:text-obsidian">← Studio Dashboard</a>
+        <a href="/artist/dashboard#artist-wallet" class="bg-obsidian text-bronzeLight border border-bronze px-5 py-3 text-xs uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition">
+            💰 Available Wallet Balance: <%- format_money_exact(Number($walletState?.['available_balance'] ?? 0)) %> — Manage &amp; Withdraw →
+        </a>
     </div>
+
+    <% if (!empty($walletWithdrawals)) { %>
+    <div class="bg-[#181615] text-ivory border-2 border-bronze p-8 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/15 pb-3">
+            <h2 class="font-serif text-2xl text-ivory">Submitted Wallet Withdrawals</h2>
+            <span class="text-xs text-bronzeLight uppercase tracking-widest font-semibold">Processing Timeframe: 2 to 7 Business Days</span>
+        </div>
+        <div class="space-y-3 text-xs">
+            <% for (const $wd of Object.values($walletWithdrawals || [])) { %>
+                <div class="border border-bronze/50 bg-obsidian p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div class="space-y-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="font-mono font-bold text-white"><%- e($wd?.['reference_code']) %></span>
+                            <span class="px-2.5 py-0.5 text-[10px] uppercase tracking-widest font-bold <%- ($wd?.['status'] ?? 'processing') === 'completed' ? 'bg-[#1A2E22] text-ivory' : 'bg-bronze text-white' %>">
+                                <%- ($wd?.['status'] ?? 'processing') === 'processing' ? '⟳ WITHDRAWAL PROCESSING (2–7 BUSINESS DAYS)' : e(strtoupper($wd?.['status'])) %>
+                            </span>
+                        </div>
+                        <p class="text-stone">
+                            <% if (($wd?.['payout_method'] ?? 'bank_wire') === 'crypto') { %>
+                                ₿ Crypto: <strong class="text-white"><%- e($wd?.['crypto_currency']) %> (<%- e($wd?.['crypto_network']) %>)</strong> · Wallet: <span class="font-mono text-bronzeLight"><%- e($wd?.['crypto_wallet_address']) %></span>
+                            <% } else { %>
+                                🏛 Bank Wire: <strong class="text-white"><%- e($wd?.['bank_name']) %></strong> · Account: <span class="font-mono text-bronzeLight"><%- e($wd?.['bank_account_number']) %></span>
+                            <% } %>
+                        </p>
+                    </div>
+                    <div class="text-right">
+                        <span class="font-serif text-2xl font-bold text-bronzeLight"><%- format_money_exact(Number($wd?.['amount'] ?? 0)) %></span>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+    <% } %>
 
     <!-- Seller Payouts Table -->
     <div class="bg-white border border-hairline p-8">
