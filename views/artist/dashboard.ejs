@@ -55,11 +55,11 @@
                     </span>
                     <% if ($withdrawUnlocked) { %>
                         <span class="bg-[#1A2E22] border border-bronze/60 text-ivory text-[10px] uppercase tracking-widest px-3 py-1 font-semibold">
-                            🔓 Withdrawal Access Granted by Administration
+                            Withdrawal Access Granted by Administration
                         </span>
                     <% } else { %>
                         <span class="bg-white/10 border border-white/25 text-stone text-[10px] uppercase tracking-widest px-3 py-1 font-semibold">
-                            🔒 Withdraw Locked by Default (Awaiting Backend Authorization)
+                            Withdraw Locked by Default (Awaiting Backend Authorization)
                         </span>
                     <% } %>
                 </div>
@@ -88,7 +88,7 @@
                         onclick="var panel = document.getElementById('artist-withdraw-form-panel'); if (panel && !window.Alpine) { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; }"
                         class="w-full bg-bronze text-white py-3.5 px-5 text-xs uppercase tracking-widest font-semibold hover:bg-bronzeDark transition text-center shadow-sm"
                     >
-                        <span x-text="showWithdrawForm ? '✕ Close Withdrawal Form' : '🔓 Withdraw Funds Now →'">🔓 Withdraw Funds Now →</span>
+                        <span x-text="showWithdrawForm ? '✕ Close Withdrawal Form' : 'Withdraw Funds Now →'">Withdraw Funds Now →</span>
                     </button>
                     <p class="text-[10px] text-bronzeLight leading-relaxed">
                         ✓ Withdrawal access is unlocked by Administration. Click above to enter your Bank Wire or Cryptocurrency details.
