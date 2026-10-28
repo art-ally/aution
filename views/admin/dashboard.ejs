@@ -172,10 +172,10 @@
                     </div>
                 </div>
 
-                <!-- Column 2: Authentication Service & Fee To Be Paid -->
+                <!-- Column 2: Authentication Service & Billing Summary -->
                 <div class="border border-hairline p-6 bg-ivory space-y-4">
                     <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold border-b border-hairline pb-2">
-                        2. Authentication Service &amp; Fee To Be Paid
+                        2. Service Tier, Currency &amp; 15% VAT Summary
                     </p>
                     <div>
                         <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Authentication &amp; Evaluation Service Tier</label>
@@ -186,37 +186,49 @@
                             <option value="Comprehensive Curatorial Vetting, AI Authentication & 72-Hour Saleroom Clearance">Comprehensive Curatorial Vetting, AI Authentication &amp; 72-Hour Saleroom Clearance</option>
                         </select>
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Fee To Be Paid *</label>
-                            <input type="number" step="0.01" min="1" name="fee_amount" required placeholder="350.00" class="w-full border border-bronze bg-white px-3 py-2 text-base font-semibold text-obsidian">
-                        </div>
+                    <div class="grid grid-cols-3 gap-2.5">
                         <div>
                             <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Currency</label>
-                            <select name="currency" class="w-full border border-hairline bg-white px-3 py-2 text-sm text-obsidian">
+                            <select id="inv_currency_select" name="currency" onchange="recalcGeneratorBreakdown()" class="w-full border border-hairline bg-white px-2.5 py-2 text-xs text-obsidian">
                                 <option value="USD">USD ($)</option>
                                 <option value="EUR">EUR (€)</option>
                                 <option value="GBP">GBP (£)</option>
                                 <option value="CHF">CHF (Fr.)</option>
                             </select>
                         </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Payment Due Date</label>
-                            <input type="date" name="due_date" value="<%- gmdate('Y-m-d', strtotime('+3 days')) %>" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Due Date</label>
+                            <input type="date" name="due_date" value="<%- gmdate('Y-m-d', strtotime('+3 days')) %>" class="w-full border border-hairline bg-white px-2 py-2 text-xs text-obsidian">
                         </div>
                         <div>
-                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Payment Status</label>
-                            <select name="status" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
-                                <option value="unpaid">Unpaid — Awaiting Remittance</option>
-                                <option value="paid">Paid &amp; Verified</option>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Status</label>
+                            <select name="status" class="w-full border border-hairline bg-white px-2 py-2 text-xs text-obsidian">
+                                <option value="unpaid">Unpaid</option>
+                                <option value="paid">Paid</option>
                             </select>
                         </div>
                     </div>
-                    <div class="bg-white border border-hairline p-3.5 text-[11px] text-stone leading-relaxed">
-                        <strong class="text-obsidian block mb-1">Automatic Artist Delivery &amp; Printout:</strong>
-                        Generating this invoice will immediately open the official printable invoice view (<code class="text-obsidian">window.print()</code>) and attach a downloadable copy on the Artist’s Studio Dashboard and Artist Profile Page.
+
+                    <!-- Live Auto-Calculated Breakdown Box -->
+                    <div class="bg-[#181615] text-ivory border border-bronze p-4 space-y-2 font-mono text-xs">
+                        <div class="flex justify-between items-center text-stone text-[11px]">
+                            <span>Active Descriptions (<span id="gen_item_count">5</span>):</span>
+                            <span id="gen_subtotal_display" class="text-white font-semibold">$9,500.00</span>
+                        </div>
+                        <div class="flex justify-between items-center text-bronzeLight text-[11px]">
+                            <span>Fixed VAT (15%):</span>
+                            <span id="gen_vat_display" class="font-semibold">$1,425.00</span>
+                        </div>
+                        <div class="border-t border-white/20 pt-2 flex justify-between items-center text-sm font-bold">
+                            <span class="text-ivory uppercase tracking-wider text-xs">Total Due:</span>
+                            <span id="gen_total_display" class="text-bronzeLight text-base">$10,925.00</span>
+                        </div>
+                        <input type="hidden" id="inv_fee_amount_hidden" name="fee_amount" value="10925.00">
+                    </div>
+
+                    <div class="bg-white border border-hairline p-3 text-[11px] text-stone leading-relaxed">
+                        <strong class="text-obsidian block mb-0.5">Add / Remove Descriptions Anytime:</strong>
+                        Use Section 4 below to edit the amount for each description, remove descriptions you do not want to charge for, or add them back anytime. Only descriptions in the active list are charged.
                     </div>
                 </div>
 
@@ -311,9 +323,129 @@
                 </div>
             </div>
 
+            <!-- Section 4: Itemized Forensic & Authentication Breakdown (Editable Amounts + Add/Remove + Fixed 15% VAT) -->
+            <% var $presetList = Array.isArray($defaultAuthLineItems) && $defaultAuthLineItems.length > 0 ? $defaultAuthLineItems : [
+                {
+                    key: 'forensics',
+                    title: 'Comprehensive Digital Image & Substrate Forensics',
+                    description: '- Microscopic pixel and layer analysis of uncompressed raw uploads.\n- Error Level Analysis (ELA) to rule out digital tampering or forgery.\n- Signature forensics and brushwork conformity mapping via high-res macro imaging.',
+                    amount: 3500.00
+                },
+                {
+                    key: 'metadata',
+                    title: 'Metadata & Chronological Verification Bundle',
+                    description: '- EXIF/Metadata validation (GPS, device tracking, and timeline audit).\n- Digital authenticity mapping to verify historical and medium accuracy.',
+                    amount: 2500.00
+                },
+                {
+                    key: 'provenance',
+                    title: 'Provenance & Chain-of-Title Document Forensic Review',
+                    description: '- Exhaustive legal and historical verification of uploaded bills of sale.\n- Global database search (Art Loss Register) to guarantee clean title.',
+                    amount: 1000.00
+                },
+                {
+                    key: 'passport',
+                    title: 'Digital Art Passport & Secure Marketplace Verification',
+                    description: '- Generation of a tamper-proof cryptographic digital passport/COA.',
+                    amount: 1000.00
+                },
+                {
+                    key: 'dod_surcharge',
+                    title: 'Department of Defense (DoD) Standard Task Surcharge',
+                    description: '- Secure military-grade data encryption formatting for digital assets.\n- Immutable digital ledger logging for chain-of-custody security.',
+                    amount: 1500.00
+                }
+            ]; %>
+            <div class="border-2 border-bronze bg-[#141215] text-ivory p-6 space-y-5">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/15 pb-4">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
+                            4. Invoice Description Breakdown &amp; Editable Amounts (Fixed 15% VAT Included)
+                        </p>
+                        <h3 class="font-serif text-2xl text-white mt-0.5">
+                            Active Invoice Description List (Add, Remove, or Edit Any Amount)
+                        </h3>
+                        <p class="text-xs text-stone mt-1">
+                            Only the descriptions included in the list below will appear and be charged on the invoice. Remove any item with <strong>✕ Remove</strong>, or add it back anytime using the buttons below.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="resetAllDefaultGeneratorItems()" class="px-3 py-1.5 border border-bronze text-bronzeLight text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition">
+                            ↺ Restore All 5 Default Descriptions
+                        </button>
+                        <button type="button" onclick="addGeneratorLineItem({ key: 'custom', title: 'Custom Forensic / Curatorial Verification Item', description: '- Specialized forensic verification and authentication protocol.', amount: 500.00 })" class="px-3 py-1.5 bg-bronze text-white text-[10px] uppercase tracking-widest font-semibold hover:bg-white hover:text-obsidian transition">
+                            + Add Custom Description
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick-Add / Re-Add Preset Buttons -->
+                <div class="bg-white/5 border border-white/10 p-3.5 space-y-2">
+                    <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
+                        Quick-Add / Re-Add Standard Breakdown Descriptions to Invoice:
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <% for (const $preset of $presetList) { %>
+                            <button type="button"
+                                onclick='addGeneratorLineItem(<%- JSON.stringify($preset) %>)'
+                                class="px-2.5 py-1.5 bg-[#1E1B1A] border border-bronze/60 text-ivory text-[11px] font-mono hover:bg-bronze hover:text-white transition">
+                                + <%- e($preset.title) %> ($<%- Number($preset.amount).toLocaleString('en-US', { minimumFractionDigits: 2 }) %>)
+                            </button>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Header Bar like Uploaded Image -->
+                <div class="hidden sm:grid sm:grid-cols-12 gap-4 px-4 py-2 border-b border-white/20 font-mono text-xs uppercase tracking-widest text-bronzeLight font-bold">
+                    <div class="sm:col-span-8">DESCRIPTION</div>
+                    <div class="sm:col-span-3 text-right">AMOUNT (EDITABLE)</div>
+                    <div class="sm:col-span-1 text-right">ACTION</div>
+                </div>
+
+                <!-- Active Line Items Container -->
+                <div id="generator_line_items_container" class="space-y-3">
+                    <% for (const $item of $presetList) { %>
+                        <div class="generator-item-row bg-white/5 border border-white/15 p-4 grid grid-cols-1 sm:grid-cols-12 gap-4 items-start" data-key="<%- e($item.key) %>">
+                            <input type="hidden" name="item_key[]" value="<%- e($item.key) %>">
+                            <div class="sm:col-span-8 space-y-2">
+                                <label class="block text-[9px] uppercase tracking-widest text-bronzeLight font-semibold">Description Title *</label>
+                                <input type="text" name="item_title[]" required value="<%- e($item.title) %>" class="w-full bg-[#0F0E0D] border border-white/25 px-3 py-2 text-sm font-mono font-bold text-white">
+                                <label class="block text-[9px] uppercase tracking-widest text-stone font-semibold">Breakdown Bullet Points (Shown under Title on Invoice)</label>
+                                <textarea name="item_description[]" rows="3" class="w-full bg-[#0F0E0D] border border-white/15 px-3 py-2 text-xs font-mono text-stone leading-relaxed"><%- e($item.description) %></textarea>
+                            </div>
+                            <div class="sm:col-span-3">
+                                <label class="block text-[9px] uppercase tracking-widest text-bronzeLight font-semibold sm:text-right mb-1">Amount *</label>
+                                <input type="number" step="0.01" min="0" name="item_amount[]" required value="<%- Number($item.amount).toFixed(2) %>" oninput="recalcGeneratorBreakdown()" class="w-full bg-[#0F0E0D] border-2 border-bronze px-3 py-2.5 text-base font-mono font-bold text-bronzeLight text-right">
+                            </div>
+                            <div class="sm:col-span-1 flex sm:justify-end pt-5">
+                                <button type="button" onclick="removeGeneratorLineItem(this)" class="px-2.5 py-2 bg-red-950/60 border border-red-600/70 text-red-200 text-[10px] uppercase tracking-widest font-semibold hover:bg-red-700 hover:text-white transition" title="Remove this description from invoice">
+                                    ✕ Remove
+                                </button>
+                            </div>
+                        </div>
+                    <% } %>
+                </div>
+
+                <!-- Totals Footer Bar (Matches Picture + Fixed 15% VAT) -->
+                <div class="border-t-2 border-dashed border-white/30 pt-4 space-y-2 font-mono">
+                    <div class="flex justify-between items-center text-sm text-stone px-2">
+                        <span>SUBTOTAL (<span id="gen_footer_count">5</span> ACTIVE DESCRIPTION ITEMS)</span>
+                        <span id="gen_footer_subtotal" class="text-white font-bold text-base">$9,500.00</span>
+                    </div>
+                    <div class="flex justify-between items-center text-sm text-bronzeLight px-2">
+                        <span>FIXED VAT (15%)</span>
+                        <span id="gen_footer_vat" class="font-bold text-base">$1,425.00</span>
+                    </div>
+                    <div class="border-t-2 border-dashed border-white/30 pt-3 flex justify-between items-center text-lg font-bold text-white px-2">
+                        <span>TOTAL DUE (INCL. 15% VAT)</span>
+                        <span id="gen_footer_total" class="text-2xl text-bronzeLight">$10,925.00</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="flex flex-wrap items-center justify-between gap-4 pt-2">
                 <p class="text-xs text-stone">
-                    * Once generated, the invoice opens in print mode and is automatically placed on the Artist’s page with a <strong>Download Invoice Copy</strong> button.
+                    * Once generated, the invoice opens in print mode and is automatically placed on the Artist’s page with a <strong>Download Invoice Copy</strong> button. You can also add/remove descriptions on any generated invoice anytime below.
                 </p>
                 <button type="submit" class="bg-bronze text-white px-8 py-3.5 text-xs uppercase tracking-widest font-semibold hover:bg-obsidian transition shadow-sm">
                     🖨 Generate &amp; Print Authentication Invoice →
@@ -382,8 +514,14 @@
                                             </div>
                                         <% } %>
                                     </td>
-                                    <td class="py-3.5 px-4 font-mono font-semibold text-obsidian text-sm">
-                                        <%- format_money_exact(Number($invRow?.['fee_amount'] ?? 0), $invRow?.['currency'] ?? 'USD') %>
+                                    <td class="py-3.5 px-4 font-mono text-obsidian">
+                                        <div class="font-semibold text-sm">
+                                            <%- format_money_exact(Number($invRow?.['fee_amount'] ?? 0), $invRow?.['currency'] ?? 'USD') %>
+                                        </div>
+                                        <% var $rowItems = Array.isArray($invRow?.['line_items']) ? $invRow['line_items'] : []; %>
+                                        <div class="text-[10px] text-stone">
+                                            <%- $rowItems.length %> item(s) · Sub: <%- format_money_exact(Number($invRow?.['subtotal_amount'] ?? 0), $invRow?.['currency'] ?? 'USD') %> + 15% VAT
+                                        </div>
                                     </td>
                                     <td class="py-3.5 px-4">
                                         <% if (($invRow?.['status'] ?? 'unpaid') === 'paid') { %>
@@ -393,6 +531,9 @@
                                         <% } %>
                                     </td>
                                     <td class="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                                        <a href="/invoices/<%- Number($invRow?.['id']) %>?edit=1" class="inline-block px-3 py-1.5 border border-bronze bg-bronze/10 text-bronze text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition" title="Add, remove, or edit descriptions and amounts on this invoice">
+                                            ✎ Edit Descriptions
+                                        </a>
                                         <a href="/invoices/<%- Number($invRow?.['id']) %>?print=1" target="_blank" class="inline-block px-3 py-1.5 bg-obsidian text-ivory text-[10px] uppercase tracking-widest hover:bg-bronze transition">
                                             🖨 Print / View
                                         </a>
@@ -458,6 +599,107 @@
         if (artistSelect && opt.getAttribute('data-artist-id')) {
             artistSelect.value = opt.getAttribute('data-artist-id');
         }
+    }
+
+    var DEFAULT_GEN_ITEMS = <%- JSON.stringify($presetList) %>;
+
+    function getCurrencySymbol() {
+        var sel = document.getElementById('inv_currency_select');
+        var cur = sel ? sel.value : 'USD';
+        if (cur === 'EUR') return '€';
+        if (cur === 'GBP') return '£';
+        if (cur === 'CHF') return 'CHF ';
+        return '$';
+    }
+
+    function formatGenMoney(val) {
+        var sym = getCurrencySymbol();
+        var num = Number(val || 0);
+        return sym + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function recalcGeneratorBreakdown() {
+        var container = document.getElementById('generator_line_items_container');
+        if (!container) return;
+        var amountInputs = container.querySelectorAll('input[name="item_amount[]"]');
+        var subtotal = 0;
+        var count = amountInputs.length;
+        amountInputs.forEach(function (inp) {
+            var v = parseFloat(inp.value);
+            if (!isNaN(v) && v > 0) subtotal += v;
+        });
+        subtotal = Math.round(subtotal * 100) / 100;
+        var vat = Math.round(subtotal * 0.15 * 100) / 100;
+        var total = Math.round((subtotal + vat) * 100) / 100;
+
+        var countEl1 = document.getElementById('gen_item_count');
+        var countEl2 = document.getElementById('gen_footer_count');
+        var subEl1 = document.getElementById('gen_subtotal_display');
+        var subEl2 = document.getElementById('gen_footer_subtotal');
+        var vatEl1 = document.getElementById('gen_vat_display');
+        var vatEl2 = document.getElementById('gen_footer_vat');
+        var totEl1 = document.getElementById('gen_total_display');
+        var totEl2 = document.getElementById('gen_footer_total');
+        var hiddenFee = document.getElementById('inv_fee_amount_hidden');
+
+        if (countEl1) countEl1.textContent = String(count);
+        if (countEl2) countEl2.textContent = String(count);
+        if (subEl1) subEl1.textContent = formatGenMoney(subtotal);
+        if (subEl2) subEl2.textContent = formatGenMoney(subtotal);
+        if (vatEl1) vatEl1.textContent = formatGenMoney(vat);
+        if (vatEl2) vatEl2.textContent = formatGenMoney(vat);
+        if (totEl1) totEl1.textContent = formatGenMoney(total);
+        if (totEl2) totEl2.textContent = formatGenMoney(total);
+        if (hiddenFee) hiddenFee.value = total.toFixed(2);
+    }
+
+    function removeGeneratorLineItem(btn) {
+        var container = document.getElementById('generator_line_items_container');
+        if (!container) return;
+        var rows = container.querySelectorAll('.generator-item-row');
+        if (rows.length <= 1) {
+            alert('At least 1 description must remain in the invoice description list.');
+            return;
+        }
+        var row = btn.closest('.generator-item-row');
+        if (row) row.remove();
+        recalcGeneratorBreakdown();
+    }
+
+    function addGeneratorLineItem(item) {
+        var container = document.getElementById('generator_line_items_container');
+        if (!container) return;
+        var div = document.createElement('div');
+        div.className = 'generator-item-row bg-white/5 border border-white/15 p-4 grid grid-cols-1 sm:grid-cols-12 gap-4 items-start';
+        div.setAttribute('data-key', item.key || 'custom');
+        div.innerHTML =
+            '<input type="hidden" name="item_key[]" value="' + String(item.key || 'custom').replace(/"/g, '&quot;') + '">' +
+            '<div class="sm:col-span-8 space-y-2">' +
+                '<label class="block text-[9px] uppercase tracking-widest text-bronzeLight font-semibold">Description Title *</label>' +
+                '<input type="text" name="item_title[]" required value="' + String(item.title || '').replace(/"/g, '&quot;') + '" class="w-full bg-[#0F0E0D] border border-white/25 px-3 py-2 text-sm font-mono font-bold text-white">' +
+                '<label class="block text-[9px] uppercase tracking-widest text-stone font-semibold">Breakdown Bullet Points (Shown under Title on Invoice)</label>' +
+                '<textarea name="item_description[]" rows="3" class="w-full bg-[#0F0E0D] border border-white/15 px-3 py-2 text-xs font-mono text-stone leading-relaxed"></textarea>' +
+            '</div>' +
+            '<div class="sm:col-span-3">' +
+                '<label class="block text-[9px] uppercase tracking-widest text-bronzeLight font-semibold sm:text-right mb-1">Amount *</label>' +
+                '<input type="number" step="0.01" min="0" name="item_amount[]" required value="' + Number(item.amount || 0).toFixed(2) + '" oninput="recalcGeneratorBreakdown()" class="w-full bg-[#0F0E0D] border-2 border-bronze px-3 py-2.5 text-base font-mono font-bold text-bronzeLight text-right">' +
+            '</div>' +
+            '<div class="sm:col-span-1 flex sm:justify-end pt-5">' +
+                '<button type="button" onclick="removeGeneratorLineItem(this)" class="px-2.5 py-2 bg-red-950/60 border border-red-600/70 text-red-200 text-[10px] uppercase tracking-widest font-semibold hover:bg-red-700 hover:text-white transition" title="Remove this description from invoice">✕ Remove</button>' +
+            '</div>';
+        var ta = div.querySelector('textarea[name="item_description[]"]');
+        if (ta) ta.value = item.description || '';
+        container.appendChild(div);
+        recalcGeneratorBreakdown();
+    }
+
+    function resetAllDefaultGeneratorItems() {
+        var container = document.getElementById('generator_line_items_container');
+        if (!container) return;
+        container.innerHTML = '';
+        DEFAULT_GEN_ITEMS.forEach(function (item) {
+            addGeneratorLineItem(item);
+        });
     }
     </script>
 

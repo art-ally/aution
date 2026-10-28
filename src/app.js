@@ -2717,7 +2717,8 @@ function handleAdminDashboard(req, res) {
   const settings = db.find('platform_settings', 1) || {};
   const authInvoices = db
     .all('authentication_invoices')
-    .sort((a, b) => Number(b.id) - Number(a.id));
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .map((inv) => normalizeInvoiceBreakdown(inv));
   const allArtistsList = allArtistProfiles.map((ap) => ({
     ...ap,
     user: db.find('users', Number(ap.user_id)) || {},
@@ -2759,6 +2760,7 @@ function handleAdminDashboard(req, res) {
     payouts,
     walletWithdrawals,
     authInvoices,
+    defaultAuthLineItems: DEFAULT_AUTHENTICATION_LINE_ITEMS,
     allArtistsList,
     allArtworksList,
     auditLogs: auditLogs.slice(0, 25),
@@ -4105,6 +4107,157 @@ app.post('/admin/users/toggle-status', (req, res) => {
 // 6. CURATORIAL & AI AUTHENTICATION INVOICE GENERATOR & DOWNLOAD ROUTES
 // ============================================================================
 
+const DEFAULT_AUTHENTICATION_LINE_ITEMS = [
+  {
+    key: 'forensics',
+    title: 'Comprehensive Digital Image & Substrate Forensics',
+    description:
+      '- Microscopic pixel and layer analysis of uncompressed raw uploads.\n- Error Level Analysis (ELA) to rule out digital tampering or forgery.\n- Signature forensics and brushwork conformity mapping via high-res macro imaging.',
+    amount: 3500.0,
+  },
+  {
+    key: 'metadata',
+    title: 'Metadata & Chronological Verification Bundle',
+    description:
+      '- EXIF/Metadata validation (GPS, device tracking, and timeline audit).\n- Digital authenticity mapping to verify historical and medium accuracy.',
+    amount: 2500.0,
+  },
+  {
+    key: 'provenance',
+    title: 'Provenance & Chain-of-Title Document Forensic Review',
+    description:
+      '- Exhaustive legal and historical verification of uploaded bills of sale.\n- Global database search (Art Loss Register) to guarantee clean title.',
+    amount: 1000.0,
+  },
+  {
+    key: 'passport',
+    title: 'Digital Art Passport & Secure Marketplace Verification',
+    description: '- Generation of a tamper-proof cryptographic digital passport/COA.',
+    amount: 1000.0,
+  },
+  {
+    key: 'dod_surcharge',
+    title: 'Department of Defense (DoD) Standard Task Surcharge',
+    description:
+      '- Secure military-grade data encryption formatting for digital assets.\n- Immutable digital ledger logging for chain-of-custody security.',
+    amount: 1500.0,
+  },
+];
+
+const FIXED_INVOICE_VAT_RATE = 15;
+
+function toArrayInput(val) {
+  if (Array.isArray(val)) return val;
+  if (val === undefined || val === null) return [];
+  return [val];
+}
+
+function parseInvoiceBreakdownFromBody(body) {
+  let rawItems = [];
+
+  if (body.line_items_json && typeof body.line_items_json === 'string') {
+    try {
+      const parsed = JSON.parse(body.line_items_json);
+      if (Array.isArray(parsed)) {
+        rawItems = parsed;
+      }
+    } catch (_) {}
+  }
+
+  if (rawItems.length === 0) {
+    const titles = toArrayInput(body.item_title || body['item_title[]']);
+    const descriptions = toArrayInput(body.item_description || body['item_description[]']);
+    const amounts = toArrayInput(body.item_amount || body['item_amount[]']);
+    const keys = toArrayInput(body.item_key || body['item_key[]']);
+
+    for (let i = 0; i < titles.length; i++) {
+      rawItems.push({
+        key: String(keys[i] || `custom_${i + 1}`).trim(),
+        title: String(titles[i] || '').trim(),
+        description: String(descriptions[i] || '').trim(),
+        amount: Number(amounts[i] || 0),
+      });
+    }
+  }
+
+  const lineItems = rawItems
+    .map((item, idx) => ({
+      key: String(item.key || `item_${idx + 1}`).trim(),
+      title: String(item.title || '').trim(),
+      description: String(item.description || '').trim(),
+      amount: Math.round(Math.max(0, Number(item.amount || 0)) * 100) / 100,
+    }))
+    .filter((item) => item.title.length > 0);
+
+  if (lineItems.length > 0) {
+    const subtotalAmount =
+      Math.round(lineItems.reduce((sum, item) => sum + Number(item.amount || 0), 0) * 100) / 100;
+    const vatRate = FIXED_INVOICE_VAT_RATE;
+    const vatAmount = Math.round(subtotalAmount * (vatRate / 100) * 100) / 100;
+    const feeAmount = Math.round((subtotalAmount + vatAmount) * 100) / 100;
+    return {
+      lineItems,
+      subtotalAmount,
+      vatRate,
+      vatAmount,
+      feeAmount,
+    };
+  }
+
+  // Fallback if a single fee_amount was submitted without breakdown items
+  const fallbackSubtotal = Math.max(0, Number(body.fee_amount || 0));
+  const vatRate = FIXED_INVOICE_VAT_RATE;
+  const vatAmount = Math.round(fallbackSubtotal * (vatRate / 100) * 100) / 100;
+  const feeAmount = Math.round((fallbackSubtotal + vatAmount) * 100) / 100;
+  return {
+    lineItems: [],
+    subtotalAmount: fallbackSubtotal,
+    vatRate,
+    vatAmount,
+    feeAmount,
+  };
+}
+
+function normalizeInvoiceBreakdown(inv) {
+  if (!inv || typeof inv !== 'object') return inv;
+  let lineItems = inv.line_items;
+  if (typeof lineItems === 'string') {
+    try {
+      lineItems = JSON.parse(lineItems);
+    } catch (_) {
+      lineItems = [];
+    }
+  }
+  if (!Array.isArray(lineItems) || lineItems.length === 0) {
+    lineItems = DEFAULT_AUTHENTICATION_LINE_ITEMS.map((item) => ({ ...item }));
+  }
+
+  const computedSubtotal =
+    Math.round(lineItems.reduce((sum, item) => sum + Number(item.amount || 0), 0) * 100) / 100;
+  const subtotalAmount =
+    inv.subtotal_amount !== undefined && inv.subtotal_amount !== null && Number(inv.subtotal_amount) > 0
+      ? Number(inv.subtotal_amount)
+      : computedSubtotal;
+  const vatRate = Number(inv.vat_rate || FIXED_INVOICE_VAT_RATE);
+  const vatAmount =
+    inv.vat_amount !== undefined && inv.vat_amount !== null
+      ? Number(inv.vat_amount)
+      : Math.round(subtotalAmount * (vatRate / 100) * 100) / 100;
+  const feeAmount =
+    inv.fee_amount !== undefined && inv.fee_amount !== null && Number(inv.fee_amount) > 0
+      ? Number(inv.fee_amount)
+      : Math.round((subtotalAmount + vatAmount) * 100) / 100;
+
+  return {
+    ...inv,
+    line_items: lineItems,
+    subtotal_amount: subtotalAmount,
+    vat_rate: vatRate,
+    vat_amount: vatAmount,
+    fee_amount: feeAmount,
+  };
+}
+
 app.post('/admin/invoices/generate', (req, res) => {
   const admin = requireRole(req, res, 'admin');
   if (!admin) return;
@@ -4121,7 +4274,10 @@ app.post('/admin/invoices/generate', (req, res) => {
   const serviceType =
     String(req.body.service_type || '').trim() ||
     'Independent Curatorial Connoisseurship & AI-Powered Authentication Evaluation';
-  const feeAmount = Math.max(0, Number(req.body.fee_amount || 0));
+
+  const { lineItems, subtotalAmount, vatRate, vatAmount, feeAmount } =
+    parseInvoiceBreakdownFromBody(req.body);
+
   const currency = ['USD', 'EUR', 'GBP', 'CHF'].includes(req.body.currency)
     ? req.body.currency
     : 'USD';
@@ -4149,12 +4305,13 @@ app.post('/admin/invoices/generate', (req, res) => {
   if (
     !artistName ||
     !artworkTitle ||
+    lineItems.length === 0 ||
     feeAmount <= 0 ||
     (!paymentAccountNumber && !cryptoWalletAddress)
   ) {
     req.setFlash(
       'error',
-      'Please enter the Artist Name, Artwork Being Verified, Fee to be Paid, and at least one Receiving Payment Method (Bank Account Number or Cryptocurrency Wallet Address).'
+      'Please enter the Artist Name, Artwork Being Verified, at least one Invoice Description item with an amount greater than 0, and at least one Receiving Payment Method (Bank Account Number or Cryptocurrency Wallet Address).'
     );
     return res.redirect('/admin/dashboard#invoice-generator');
   }
@@ -4189,6 +4346,10 @@ app.post('/admin/invoices/generate', (req, res) => {
     artwork_details: artworkDetails,
     reference_code: referenceCode,
     service_type: serviceType,
+    line_items: lineItems,
+    subtotal_amount: subtotalAmount,
+    vat_rate: vatRate,
+    vat_amount: vatAmount,
     fee_amount: feeAmount,
     currency,
     due_date: dueDate,
@@ -4215,7 +4376,7 @@ app.post('/admin/invoices/generate', (req, res) => {
         feeAmount,
         currency
       )})`,
-      message: `An official Curatorial & AI-Powered Authentication Payment Invoice (${invoiceNumber}) for "${artworkTitle}" has been generated. A copy is now available to view and download on your Artist Page and Studio Dashboard.`,
+      message: `An official Curatorial & AI-Powered Authentication Payment Invoice (${invoiceNumber}) for "${artworkTitle}" has been generated (${lineItems.length} item(s), Subtotal ${helpers.format_money_exact(subtotalAmount, currency)} + 15% VAT ${helpers.format_money_exact(vatAmount, currency)} = Total Due ${helpers.format_money_exact(feeAmount, currency)}). A copy is now available to view and download on your Artist Page and Studio Dashboard.`,
       action_url: `/invoices/${invoice.id}`,
       read_at: null,
     });
@@ -4227,15 +4388,70 @@ app.post('/admin/invoices/generate', (req, res) => {
     'AUTHENTICATION_INVOICE_GENERATED',
     'authentication_invoice',
     invoice.id,
-    `Generated authentication invoice ${invoiceNumber} for ${artistName} ("${artworkTitle}") — Fee: ${currency} ${feeAmount}`,
+    `Generated authentication invoice ${invoiceNumber} for ${artistName} ("${artworkTitle}") — ${lineItems.length} item(s), Subtotal: ${currency} ${subtotalAmount}, 15% VAT: ${currency} ${vatAmount}, Total Fee: ${currency} ${feeAmount}`,
     req.ip
   );
 
   req.setFlash(
     'success',
-    `Authentication Invoice ${invoiceNumber} generated for ${artistName} ("${artworkTitle}"). Opening print dialog and published to the Artist Page for download.`
+    `Authentication Invoice ${invoiceNumber} generated for ${artistName} ("${artworkTitle}") with ${lineItems.length} breakdown description(s) and 15% VAT. Opening print dialog and published to the Artist Page for download.`
   );
   res.redirect(`/invoices/${invoice.id}?print=1`);
+});
+
+app.post('/admin/invoices/update-breakdown', (req, res) => {
+  const admin = requireRole(req, res, 'admin');
+  if (!admin) return;
+  const db = DatabaseEngine.getInstance();
+  const invoiceId = Number(req.body.invoice_id || 0);
+  const inv = db.find('authentication_invoices', invoiceId);
+  if (!inv) {
+    req.setFlash('error', 'Invoice not found.');
+    return res.redirect('/admin/dashboard#invoice-generator');
+  }
+
+  const { lineItems, subtotalAmount, vatRate, vatAmount, feeAmount } =
+    parseInvoiceBreakdownFromBody(req.body);
+
+  if (lineItems.length === 0 || feeAmount <= 0) {
+    req.setFlash(
+      'error',
+      'An invoice must have at least one active description item with an amount greater than 0.'
+    );
+    return res.redirect(
+      req.body.redirect_to === 'invoice'
+        ? `/invoices/${invoiceId}`
+        : '/admin/dashboard#invoice-generator'
+    );
+  }
+
+  db.update('authentication_invoices', invoiceId, {
+    line_items: lineItems,
+    subtotal_amount: subtotalAmount,
+    vat_rate: vatRate,
+    vat_amount: vatAmount,
+    fee_amount: feeAmount,
+  });
+
+  logAudit(
+    db,
+    admin,
+    'AUTHENTICATION_INVOICE_BREAKDOWN_UPDATED',
+    'authentication_invoice',
+    invoiceId,
+    `Updated breakdown items for invoice ${inv.invoice_number} (${lineItems.length} description(s), Subtotal: ${subtotalAmount}, 15% VAT: ${vatAmount}, Total Due: ${feeAmount}).`,
+    req.ip
+  );
+
+  req.setFlash(
+    'success',
+    `Updated invoice ${inv.invoice_number}: ${lineItems.length} active description(s), Subtotal ${helpers.format_money_exact(subtotalAmount, inv.currency || 'USD')} + 15% VAT (${helpers.format_money_exact(vatAmount, inv.currency || 'USD')}) = Total Due ${helpers.format_money_exact(feeAmount, inv.currency || 'USD')}.`
+  );
+
+  if (req.body.redirect_to === 'invoice') {
+    return res.redirect(`/invoices/${invoiceId}`);
+  }
+  return res.redirect('/admin/dashboard#invoice-generator');
 });
 
 app.post('/admin/invoices/status', (req, res) => {
@@ -4353,18 +4569,20 @@ app.get('/invoices/:id', (req, res) => {
   if (!user) return;
   const db = DatabaseEngine.getInstance();
   const invoiceId = Number(req.params.id || 0);
-  const invoice = db.find('authentication_invoices', invoiceId);
-  if (!invoice) {
+  const rawInvoice = db.find('authentication_invoices', invoiceId);
+  if (!rawInvoice) {
     return res.renderPage('pages/404', { pageTitle: 'Invoice Not Found — ArtAlly' }, 404);
   }
-  if (!canAccessAuthenticationInvoice(req, db, invoice)) {
+  if (!canAccessAuthenticationInvoice(req, db, rawInvoice)) {
     req.setFlash('error', 'Access denied. Authentication invoices are private to the issuing administrator and the designated artist.');
     return res.redirect('/');
   }
+  const invoice = normalizeInvoiceBreakdown(rawInvoice);
 
   res.renderPage('public/authentication-invoice', {
     pageTitle: `Authentication Invoice ${invoice.invoice_number} — ${invoice.artwork_title} | ArtAlly`,
     invoice,
+    defaultAuthLineItems: DEFAULT_AUTHENTICATION_LINE_ITEMS,
   });
 });
 
@@ -4373,19 +4591,39 @@ app.get('/invoices/:id/download', (req, res) => {
   if (!user) return;
   const db = DatabaseEngine.getInstance();
   const invoiceId = Number(req.params.id || 0);
-  const invoice = db.find('authentication_invoices', invoiceId);
-  if (!invoice) {
+  const rawInvoice = db.find('authentication_invoices', invoiceId);
+  if (!rawInvoice) {
     return res.renderPage('pages/404', { pageTitle: 'Invoice Not Found — ArtAlly' }, 404);
   }
-  if (!canAccessAuthenticationInvoice(req, db, invoice)) {
+  if (!canAccessAuthenticationInvoice(req, db, rawInvoice)) {
     req.setFlash('error', 'Access denied. Authentication invoices are private to the issuing administrator and the designated artist.');
     return res.redirect('/');
   }
 
+  const invoice = normalizeInvoiceBreakdown(rawInvoice);
   const safeNum = String(invoice.invoice_number || `INV-${invoiceId}`).replace(/[^a-zA-Z0-9_-]/g, '-');
   const currency = invoice.currency || 'USD';
   const isPaid = (invoice.status || 'unpaid') === 'paid';
+  const lineItems = Array.isArray(invoice.line_items) ? invoice.line_items : [];
+  const subtotalFormatted = helpers.format_money_exact(Number(invoice.subtotal_amount || 0), currency);
+  const vatRate = Number(invoice.vat_rate || 15);
+  const vatFormatted = helpers.format_money_exact(Number(invoice.vat_amount || 0), currency);
   const feeFormatted = helpers.format_money_exact(Number(invoice.fee_amount || 0), currency);
+
+  const lineItemsRowsHtml = lineItems
+    .map(
+      (item) => `
+          <tr>
+            <td style="padding: 16px 18px; border-bottom: 1px solid #2E2B29;">
+              <strong style="display:block;font-size:15px;color:#FBF9F5;margin-bottom:6px;letter-spacing:0.01em;">${helpers.e(item.title)}</strong>
+              <div style="font-size:13px;color:#D6D0C4;line-height:1.6;font-family:monospace;">${String(helpers.e(item.description || '')).replace(/\r?\n/g, '<br>')}</div>
+            </td>
+            <td style="padding: 16px 18px; border-bottom: 1px solid #2E2B29; text-align:right; font-family:monospace; font-size:16px; font-weight:700; color:#FBF9F5; white-space:nowrap; vertical-align:top;">
+              ${helpers.format_money_exact(Number(item.amount || 0), currency)}
+            </td>
+          </tr>`
+    )
+    .join('');
 
   const standaloneHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -4451,31 +4689,28 @@ app.get('/invoices/:id/download', (req, res) => {
         </div>
       </div>
 
-      <table>
+      <table style="background:#161514;color:#FBF9F5;border:1px solid #B8965A;margin-bottom:24px;">
         <thead>
-          <tr>
-            <th>Verification &amp; Evaluation Description</th>
-            <th>Artwork Reference</th>
-            <th style="text-align:right;">Fee Amount (${helpers.e(currency)})</th>
+          <tr style="border-bottom:1px solid #B8965A;background:#0F0E0D;">
+            <th style="padding:14px 18px;font-family:monospace;font-size:12px;letter-spacing:0.16em;color:#C6A664;">DESCRIPTION</th>
+            <th style="padding:14px 18px;font-family:monospace;font-size:12px;letter-spacing:0.16em;color:#C6A664;text-align:right;">AMOUNT (${helpers.e(currency)})</th>
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td>
-              <strong style="display:block;margin-bottom:4px;">${helpers.e(invoice.service_type)}</strong>
-              <span style="font-size:12px;color:#57524C;line-height:1.5;">Mandatory pre-auction authentication and evaluation through ArtAlly’s independent connoisseurship experts and AI-powered forensic authentication suite.</span>
-            </td>
-            <td>
-              <strong>${helpers.e(invoice.artwork_title)}</strong>
-              ${invoice.reference_code ? `<br><span style="font-family:monospace;font-size:12px;color:#6E6A63;">Ref: ${helpers.e(invoice.reference_code)}</span>` : ''}
-            </td>
-            <td style="text-align:right;font-family:monospace;font-size:16px;font-weight:700;">${feeFormatted}</td>
-          </tr>
+          ${lineItemsRowsHtml}
         </tbody>
         <tfoot>
-          <tr style="background:#F3E9D2;">
-            <td colspan="2" style="text-align:right;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;font-size:12px;">Total Authentication Fee To Be Paid</td>
-            <td style="text-align:right;font-size:20px;font-weight:700;color:#8C6D32;font-family:Georgia,serif;">${feeFormatted} ${helpers.e(currency)}</td>
+          <tr style="background:#1C1A19;border-top:2px dashed #6E6A63;">
+            <td style="padding:12px 18px;text-align:right;font-family:monospace;font-size:12px;text-transform:uppercase;letter-spacing:0.14em;color:#D6D0C4;">SUBTOTAL (${lineItems.length} ITEM${lineItems.length === 1 ? '' : 'S'})</td>
+            <td style="padding:12px 18px;text-align:right;font-family:monospace;font-size:15px;font-weight:700;color:#FBF9F5;">${subtotalFormatted}</td>
+          </tr>
+          <tr style="background:#1C1A19;border-bottom:2px dashed #6E6A63;">
+            <td style="padding:12px 18px;text-align:right;font-family:monospace;font-size:12px;text-transform:uppercase;letter-spacing:0.14em;color:#C6A664;">FIXED VAT (${vatRate}%)</td>
+            <td style="padding:12px 18px;text-align:right;font-family:monospace;font-size:15px;font-weight:700;color:#C6A664;">${vatFormatted}</td>
+          </tr>
+          <tr style="background:#0F0E0D;">
+            <td style="padding:16px 18px;text-align:left;font-family:monospace;font-weight:700;text-transform:uppercase;letter-spacing:0.16em;font-size:14px;color:#FBF9F5;">TOTAL DUE (INCL. ${vatRate}% VAT)</td>
+            <td style="padding:16px 18px;text-align:right;font-size:22px;font-weight:700;color:#C6A664;font-family:monospace;">${feeFormatted} ${helpers.e(currency)}</td>
           </tr>
         </tfoot>
       </table>

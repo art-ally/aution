@@ -361,6 +361,7 @@ class DatabaseEngine {
           cols.authentication_invoices &&
           cols.authentication_invoices.crypto_wallet_address &&
           cols.authentication_invoices.payment_bank_address &&
+          cols.authentication_invoices.line_items &&
           cols.wallet_withdrawals &&
           cols.artist_profiles.withdrawal_unlocked;
 
@@ -394,6 +395,10 @@ class DatabaseEngine {
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_network VARCHAR(120) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_wallet_address VARCHAR(255) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_memo VARCHAR(255) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS line_items JSONB NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS subtotal_amount NUMERIC(14,2) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS vat_rate NUMERIC(6,2) NOT NULL DEFAULT 15.00;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(14,2) NULL;
           ALTER TABLE public.authentication_invoices ALTER COLUMN payment_account_name DROP NOT NULL;
           ALTER TABLE public.authentication_invoices ALTER COLUMN payment_bank_name DROP NOT NULL;
           ALTER TABLE public.authentication_invoices ALTER COLUMN payment_account_number DROP NOT NULL;

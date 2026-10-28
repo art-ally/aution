@@ -10,6 +10,12 @@
 var $inv = $invoice || {};
 var $currency = $inv['currency'] || 'USD';
 var $isPaid = ($inv['status'] || 'unpaid') === 'paid';
+var $lineItems = Array.isArray($inv['line_items']) ? $inv['line_items'] : [];
+var $subtotalAmount = Number($inv['subtotal_amount'] ?? 0);
+var $vatRate = Number($inv['vat_rate'] ?? 15);
+var $vatAmount = Number($inv['vat_amount'] ?? 0);
+var $totalFeeAmount = Number($inv['fee_amount'] ?? 0);
+var $presetItems = Array.isArray($defaultAuthLineItems) ? $defaultAuthLineItems : [];
 %>
 
 <section class="section" style="padding: 3rem 0;">
@@ -24,10 +30,100 @@ var $isPaid = ($inv['status'] || 'unpaid') === 'paid';
                 <span class="caption" style="color: var(--accent-gold);">Official Curatorial &amp; AI Authentication Invoice</span>
             </div>
             <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                <% if (hasRole('admin')) { %>
+                    <button type="button" onclick="var el=document.getElementById('admin-invoice-breakdown-editor'); el.style.display = (el.style.display === 'none' ? 'block' : 'none');" class="btn btn-outline btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);">
+                        ✎ Edit Descriptions &amp; Amounts
+                    </button>
+                <% } %>
                 <a href="/invoices/<%- Number($inv['id'] || 0) %>/download" class="btn btn-outline btn-sm">⬇ Download Invoice Copy</a>
                 <button onclick="window.print()" class="btn btn-gold btn-sm">🖨 Print / Save as PDF</button>
             </div>
         </div>
+
+        <% if (hasRole('admin')) { %>
+        <!-- Admin Live Breakdown Editor on Invoice Page -->
+        <div id="admin-invoice-breakdown-editor" class="no-print" style="display: none; background: #181615; color: #F4EFE6; border: 2px solid #B8965A; padding: 1.75rem; margin-bottom: 1.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; border-bottom: 1px solid rgba(184, 150, 90, 0.35); padding-bottom: 1rem; margin-bottom: 1rem;">
+                <div>
+                    <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.18em; color: #C6A664; font-weight: 700; margin: 0 0 0.25rem;">
+                        Admin Live Invoice Breakdown Editor
+                    </p>
+                    <h3 style="font-family: var(--font-serif); font-size: 1.35rem; color: #FBF9F5; margin: 0;">
+                        Add, Remove, or Edit Descriptions &amp; Amounts for <%- e($inv['invoice_number']) %>
+                    </h3>
+                    <p style="font-size: 0.78rem; color: #A69F93; margin-top: 0.25rem;">
+                        Only the descriptions kept in the list below will be charged on this invoice, plus the fixed 15% VAT.
+                    </p>
+                </div>
+                <button type="button" onclick="document.getElementById('admin-invoice-breakdown-editor').style.display='none'" style="background: transparent; border: 1px solid rgba(255,255,255,0.25); color: #D6D0C4; padding: 0.35rem 0.75rem; font-size: 0.75rem; cursor: pointer;">
+                    Close ✕
+                </button>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700; margin-bottom: 0.5rem;">
+                    + Quick-Add Preset Description or Custom Item:
+                </p>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.45rem;">
+                    <% for (const $pItem of $presetItems) { %>
+                        <button type="button"
+                            onclick='invViewAddPresetItem(<%- JSON.stringify($pItem) %>)'
+                            style="background: rgba(198,166,100,0.14); border: 1px solid #C6A664; color: #FBF9F5; padding: 0.35rem 0.65rem; font-size: 0.72rem; cursor: pointer;">
+                            + <%- e($pItem.title) %> ($<%- Number($pItem.amount).toLocaleString('en-US', {minimumFractionDigits: 2}) %>)
+                        </button>
+                    <% } %>
+                    <button type="button"
+                        onclick="invViewAddPresetItem({ key: 'custom', title: 'Custom Forensic / Authentication Verification Item', description: '- Specialized verification protocol.', amount: 500 })"
+                        style="background: #C6A664; border: 1px solid #C6A664; color: #161514; font-weight: 700; padding: 0.35rem 0.75rem; font-size: 0.72rem; cursor: pointer;">
+                        + Add Custom Description
+                    </button>
+                </div>
+            </div>
+
+            <form action="/admin/invoices/update-breakdown" method="POST">
+                <%- csrf_field() %>
+                <input type="hidden" name="invoice_id" value="<%- Number($inv['id']) %>">
+                <input type="hidden" name="redirect_to" value="invoice">
+
+                <div id="inv-view-items-container" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
+                    <% for (let $idx = 0; $idx < $lineItems.length; $idx++) {
+                        const $item = $lineItems[$idx]; %>
+                        <div class="inv-view-item-row" data-key="<%- e($item.key || '') %>" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(198,166,100,0.4); padding: 0.85rem;">
+                            <input type="hidden" name="item_key[]" value="<%- e($item.key || 'item') %>">
+                            <div style="display: grid; grid-template-columns: 1fr 170px auto; gap: 0.75rem; align-items: start;">
+                                <div>
+                                    <label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; margin-bottom: 0.25rem;">Description Heading *</label>
+                                    <input type="text" name="item_title[]" required value="<%- e($item.title) %>" style="width: 100%; background: #0F0E0D; border: 1px solid rgba(255,255,255,0.22); color: #FFFFFF; padding: 0.45rem 0.6rem; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.45rem;">
+                                    <label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.25rem;">Sub-Bullet Breakdown Details</label>
+                                    <textarea name="item_description[]" rows="3" style="width: 100%; background: #0F0E0D; border: 1px solid rgba(255,255,255,0.18); color: #D6D0C4; padding: 0.45rem 0.6rem; font-family: var(--font-mono); font-size: 0.76rem;"><%- e($item.description) %></textarea>
+                                </div>
+                                <div>
+                                    <label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; margin-bottom: 0.25rem;">Amount (<%- e($currency) %>) *</label>
+                                    <input type="number" step="0.01" min="0" name="item_amount[]" required value="<%- Number($item.amount || 0).toFixed(2) %>" oninput="invViewRecalc()" style="width: 100%; background: #0F0E0D; border: 1px solid #C6A664; color: #C6A664; padding: 0.45rem 0.6rem; font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; text-align: right;">
+                                </div>
+                                <div style="padding-top: 1.25rem;">
+                                    <button type="button" onclick="invViewRemoveRow(this)" style="background: rgba(180, 40, 40, 0.25); border: 1px solid #D9534F; color: #FFB4B4; padding: 0.45rem 0.65rem; font-size: 0.72rem; cursor: pointer;">
+                                        ✕ Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    <% } %>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; background: #0F0E0D; border: 1px solid #C6A664; padding: 1rem 1.25rem;">
+                    <div style="font-family: var(--font-mono); font-size: 0.85rem; color: #D6D0C4;">
+                        Subtotal: <strong id="inv-view-subtotal" style="color: #FFF;"><%- format_money_exact($subtotalAmount, $currency) %></strong>
+                        &nbsp;|&nbsp; Fixed VAT (15%): <strong id="inv-view-vat" style="color: #C6A664;"><%- format_money_exact($vatAmount, $currency) %></strong>
+                        &nbsp;|&nbsp; Total Due: <strong id="inv-view-total" style="color: #C6A664; font-size: 1rem;"><%- format_money_exact($totalFeeAmount, $currency) %></strong>
+                    </div>
+                    <button type="submit" class="btn btn-gold btn-sm">
+                        ✓ Save Invoice Breakdown &amp; Recalculate 15% VAT
+                    </button>
+                </div>
+            </form>
+        </div>
+        <% } %>
 
         <div class="invoice-paper" style="background: #FBF9F5; color: #161514; padding: 3.5rem 3.5rem; border: 2px solid #B8965A; box-shadow: 0 24px 60px rgba(0,0,0,0.55); position: relative;">
             <div style="border: 1px solid rgba(184, 150, 90, 0.45); padding: 2.75rem;">
@@ -102,44 +198,57 @@ var $isPaid = ($inv['status'] || 'unpaid') === 'paid';
                     </div>
                 </div>
 
-                <!-- Itemized Fee Table -->
-                <div style="margin-bottom: 2rem;">
-                    <table style="width: 100%; border-collapse: collapse; border: 1px solid #161514;">
+                <!-- Itemized Forensic & Authentication Breakdown Table -->
+                <div style="margin-bottom: 2rem; background: #141215; color: #FBF9F5; border: 1px solid #B8965A; padding: 1.5rem 1.75rem;">
+                    <table style="width: 100%; border-collapse: collapse;">
                         <thead>
-                            <tr style="background: #161514; color: #FBF9F5;">
-                                <th style="text-align: left; padding: 0.85rem 1.1rem; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.14em;">Verification &amp; Evaluation Description</th>
-                                <th style="text-align: left; padding: 0.85rem 1.1rem; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.14em;">Artwork Reference</th>
-                                <th style="text-align: right; padding: 0.85rem 1.1rem; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.14em;">Fee Amount (<%- e($currency) %>)</th>
+                            <tr style="border-bottom: 1px solid rgba(198, 166, 100, 0.45);">
+                                <th style="text-align: left; padding: 0.65rem 0.5rem 0.9rem; font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.16em; color: #FBF9F5;">DESCRIPTION</th>
+                                <th style="text-align: right; padding: 0.65rem 0.5rem 0.9rem; font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.16em; color: #FBF9F5;">AMOUNT</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr style="border-bottom: 1px solid #DCD5C9;">
-                                <td style="padding: 1.25rem 1.1rem; vertical-align: top;">
-                                    <p style="font-weight: 700; color: #161514; font-size: 0.95rem; margin-bottom: 0.35rem;">
-                                        <%- e($inv['service_type'] ?? 'Curatorial & AI-Powered Authentication & Valuation') %>
+                            <% for (const $item of $lineItems) { %>
+                            <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <td style="padding: 1.15rem 0.5rem; vertical-align: top;">
+                                    <p style="font-family: var(--font-mono); font-weight: 700; color: #FFFFFF; font-size: 0.96rem; margin: 0 0 0.35rem; letter-spacing: 0.01em;">
+                                        <%- e($item['title'] ?? '') %>
                                     </p>
-                                    <p style="font-size: 0.82rem; color: #57524C; line-height: 1.55;">
-                                        Mandatory pre-auction authentication and evaluation through ArtAlly’s independent connoisseurship experts and AI-powered forensic authentication suite. Includes originality verification, provenance registration, valuation assessment, and clearance for the 72-hour pre-bidding schedule.
-                                    </p>
-                                </td>
-                                <td style="padding: 1.25rem 1.1rem; vertical-align: top; font-size: 0.88rem; color: #161514;">
-                                    <strong><%- e($inv['artwork_title'] ?? 'Submitted Work') %></strong>
-                                    <% if (!empty($inv['reference_code'])) { %>
-                                        <br><span style="font-family: var(--font-mono); font-size: 0.78rem; color: #6E6A63;">Ref: <%- e($inv['reference_code']) %></span>
+                                    <% if (!empty($item['description'])) { %>
+                                    <div style="font-family: var(--font-mono); font-size: 0.84rem; color: #E2DDD5; line-height: 1.65;">
+                                        <%- nl2br(e($item['description'])) %>
+                                    </div>
                                     <% } %>
                                 </td>
-                                <td style="padding: 1.25rem 1.1rem; vertical-align: top; text-align: right; font-family: var(--font-mono); font-size: 1.1rem; font-weight: 700; color: #161514;">
-                                    <%- format_money_exact(Number($inv['fee_amount'] ?? 0), $currency) %>
+                                <td style="padding: 1.15rem 0.5rem; vertical-align: top; text-align: right; font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700; color: #FFFFFF; white-space: nowrap;">
+                                    <%- format_money_exact(Number($item['amount'] ?? 0), $currency) %>
                                 </td>
                             </tr>
+                            <% } %>
                         </tbody>
                         <tfoot>
-                            <tr style="background: rgba(184, 150, 90, 0.14);">
-                                <td colspan="2" style="padding: 1rem 1.1rem; text-align: right; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #161514;">
-                                    Total Authentication Fee To Be Paid
+                            <tr style="border-top: 2px dashed rgba(255, 255, 255, 0.4);">
+                                <td style="padding: 0.9rem 0.5rem 0.4rem; text-align: left; font-family: var(--font-mono); font-size: 0.84rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #D6D0C4;">
+                                    SUBTOTAL (<%- $lineItems.length %> DESCRIPTION<%- $lineItems.length === 1 ? '' : 'S' %>)
                                 </td>
-                                <td style="padding: 1rem 1.1rem; text-align: right; font-family: var(--font-serif); font-size: 1.55rem; font-weight: 700; color: #8C6D32;">
-                                    <%- format_money_exact(Number($inv['fee_amount'] ?? 0), $currency) %> <span style="font-size: 0.8rem; font-family: var(--font-mono);"><%- e($currency) %></span>
+                                <td style="padding: 0.9rem 0.5rem 0.4rem; text-align: right; font-family: var(--font-mono); font-size: 1.02rem; font-weight: 700; color: #FFFFFF;">
+                                    <%- format_money_exact($subtotalAmount, $currency) %>
+                                </td>
+                            </tr>
+                            <tr style="border-bottom: 2px dashed rgba(255, 255, 255, 0.4);">
+                                <td style="padding: 0.4rem 0.5rem 0.9rem; text-align: left; font-family: var(--font-mono); font-size: 0.84rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #C6A664;">
+                                    FIXED VAT (<%- $vatRate %>%)
+                                </td>
+                                <td style="padding: 0.4rem 0.5rem 0.9rem; text-align: right; font-family: var(--font-mono); font-size: 1.02rem; font-weight: 700; color: #C6A664;">
+                                    <%- format_money_exact($vatAmount, $currency) %>
+                                </td>
+                            </tr>
+                            <tr style="border-bottom: 2px dashed rgba(255, 255, 255, 0.4);">
+                                <td style="padding: 1.05rem 0.5rem; text-align: left; font-family: var(--font-mono); font-size: 1.02rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #FFFFFF;">
+                                    TOTAL DUE
+                                </td>
+                                <td style="padding: 1.05rem 0.5rem; text-align: right; font-family: var(--font-mono); font-size: 1.35rem; font-weight: 700; color: #FFFFFF;">
+                                    <%- format_money_exact($totalFeeAmount, $currency) %> <span style="font-size: 0.78rem; color: #C6A664;"><%- e($currency) %></span>
                                 </td>
                             </tr>
                         </tfoot>
@@ -280,8 +389,79 @@ var $isPaid = ($inv['status'] || 'unpaid') === 'paid';
 </section>
 
 <script>
+function invViewFormatMoney(val) {
+    var num = Number(val || 0);
+    return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function invViewRecalc() {
+    var container = document.getElementById('inv-view-items-container');
+    if (!container) return;
+    var inputs = container.querySelectorAll('input[name="item_amount[]"]');
+    var subtotal = 0;
+    inputs.forEach(function (inp) {
+        var v = parseFloat(inp.value);
+        if (!isNaN(v) && v > 0) subtotal += v;
+    });
+    var vat = Math.round(subtotal * 0.15 * 100) / 100;
+    var total = Math.round((subtotal + vat) * 100) / 100;
+    var subEl = document.getElementById('inv-view-subtotal');
+    var vatEl = document.getElementById('inv-view-vat');
+    var totEl = document.getElementById('inv-view-total');
+    if (subEl) subEl.textContent = invViewFormatMoney(subtotal);
+    if (vatEl) vatEl.textContent = invViewFormatMoney(vat);
+    if (totEl) totEl.textContent = invViewFormatMoney(total);
+}
+
+function invViewRemoveRow(btn) {
+    var container = document.getElementById('inv-view-items-container');
+    if (!container) return;
+    var rows = container.querySelectorAll('.inv-view-item-row');
+    if (rows.length <= 1) {
+        alert('At least 1 description must remain on the invoice.');
+        return;
+    }
+    var row = btn.closest('.inv-view-item-row');
+    if (row) row.remove();
+    invViewRecalc();
+}
+
+function invViewAddPresetItem(item) {
+    var container = document.getElementById('inv-view-items-container');
+    if (!container) return;
+    var div = document.createElement('div');
+    div.className = 'inv-view-item-row';
+    div.setAttribute('data-key', item.key || 'custom');
+    div.style.cssText = 'background: rgba(255,255,255,0.04); border: 1px solid rgba(198,166,100,0.4); padding: 0.85rem;';
+    div.innerHTML =
+        '<input type="hidden" name="item_key[]" value="' + (item.key || 'custom').replace(/"/g, '&quot;') + '">' +
+        '<div style="display: grid; grid-template-columns: 1fr 170px auto; gap: 0.75rem; align-items: start;">' +
+            '<div>' +
+                '<label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; margin-bottom: 0.25rem;">Description Heading *</label>' +
+                '<input type="text" name="item_title[]" required value="' + String(item.title || '').replace(/"/g, '&quot;') + '" style="width: 100%; background: #0F0E0D; border: 1px solid rgba(255,255,255,0.22); color: #FFFFFF; padding: 0.45rem 0.6rem; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.45rem;">' +
+                '<label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.25rem;">Sub-Bullet Breakdown Details</label>' +
+                '<textarea name="item_description[]" rows="3" style="width: 100%; background: #0F0E0D; border: 1px solid rgba(255,255,255,0.18); color: #D6D0C4; padding: 0.45rem 0.6rem; font-family: var(--font-mono); font-size: 0.76rem;"></textarea>' +
+            '</div>' +
+            '<div>' +
+                '<label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; margin-bottom: 0.25rem;">Amount *</label>' +
+                '<input type="number" step="0.01" min="0" name="item_amount[]" required value="' + Number(item.amount || 0).toFixed(2) + '" oninput="invViewRecalc()" style="width: 100%; background: #0F0E0D; border: 1px solid #C6A664; color: #C6A664; padding: 0.45rem 0.6rem; font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; text-align: right;">' +
+            '</div>' +
+            '<div style="padding-top: 1.25rem;">' +
+                '<button type="button" onclick="invViewRemoveRow(this)" style="background: rgba(180, 40, 40, 0.25); border: 1px solid #D9534F; color: #FFB4B4; padding: 0.45rem 0.65rem; font-size: 0.72rem; cursor: pointer;">✕ Remove</button>' +
+            '</div>' +
+        '</div>';
+    var ta = div.querySelector('textarea[name="item_description[]"]');
+    if (ta) ta.value = item.description || '';
+    container.appendChild(div);
+    invViewRecalc();
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     var params = new URLSearchParams(window.location.search);
+    if (params.get('edit') === '1') {
+        var ed = document.getElementById('admin-invoice-breakdown-editor');
+        if (ed) ed.style.display = 'block';
+    }
     if (params.get('print') === '1') {
         setTimeout(function () {
             window.print();
