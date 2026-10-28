@@ -578,29 +578,6 @@ var $watchedIds = user_watchlist_ids(); %>
 </section>
 <% } %>
 
-<!-- Section 9: Discover Curated Artists (Typographical Artist Roster — Names Only) -->
-<section class="bg-white border-y border-hairline py-20">
-    <div class="max-w-[1440px] mx-auto px-4 sm:px-8">
-        <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 border-b border-hairline pb-6">
-            <div>
-                <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-2">The Artist Roster</p>
-                <h2 class="font-serif text-4xl sm:text-5xl font-normal text-obsidian">Discover Represented Creators</h2>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <% for (const $artist of Object.values($artists || [])) { %>
-                <a href="/artists/<%- e($artist?.['slug']) %>" class="group border border-hairline bg-ivory px-7 py-8 flex items-center justify-between hover:border-bronze hover:bg-alabaster/60 transition">
-                    <h3 class="font-serif text-2xl sm:text-3xl text-obsidian group-hover:text-bronze transition">
-                        <%- e($artist?.['display_name']) %>
-                    </h3>
-                    <span class="text-stone group-hover:text-bronze transition text-sm">→</span>
-                </a>
-            <% } %>
-        </div>
-    </div>
-</section>
-
 <!-- Section 10: Editorial Stories & Journal -->
 <section class="max-w-[1440px] mx-auto px-4 sm:px-8 py-20">
     <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 border-b border-hairline pb-6">

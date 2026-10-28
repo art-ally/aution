@@ -208,57 +208,6 @@ $watchedIds = user_watchlist_ids();
     </div>
 </section>
 
-<!-- Section 5: Discover Curated Artists -->
-<section class="bg-white border-y border-hairline py-20">
-    <div class="max-w-[1440px] mx-auto px-4 sm:px-8">
-        <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 border-b border-hairline pb-6">
-            <div>
-                <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold mb-2">The Artist Roster</p>
-                <h2 class="font-serif text-4xl sm:text-5xl font-normal text-obsidian">Discover Represented Creators</h2>
-            </div>
-            <a href="/artists" class="mt-4 md:mt-0 text-xs uppercase tracking-widest text-obsidian hover:text-bronze transition font-semibold">
-                Browse Artist Directory →
-            </a>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            <?php foreach ($artists as $artist): ?>
-                <div class="group border border-hairline bg-ivory flex flex-col justify-between">
-                    <div>
-                        <a href="/artists/<?= e($artist['slug']) ?>" class="block aspect-square overflow-hidden bg-alabaster">
-                            <img
-                                src="<?= e($artist['profile_photo']) ?>"
-                                alt="<?= e($artist['display_name']) ?>"
-                                loading="lazy"
-                                class="w-full h-full object-cover grayscale group-hover:grayscale-0 transition duration-500"
-                            >
-                        </a>
-                        <div class="p-6">
-                            <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold mb-1">
-                                <?= e($artist['city'] ? ($artist['city'] . ', ' . $artist['country']) : $artist['country']) ?>
-                            </p>
-                            <h3 class="font-serif text-2xl text-obsidian mb-1">
-                                <a href="/artists/<?= e($artist['slug']) ?>" class="hover:text-bronze transition">
-                                    <?= e($artist['display_name']) ?>
-                                </a>
-                            </h3>
-                            <p class="text-[11px] text-stone uppercase tracking-wider mb-3"><?= e($artist['discipline']) ?></p>
-                            <p class="text-xs text-charcoal/80 line-clamp-3 leading-relaxed">
-                                <?= e($artist['biography']) ?>
-                            </p>
-                        </div>
-                    </div>
-                    <div class="px-6 pb-6">
-                        <a href="/artists/<?= e($artist['slug']) ?>" class="inline-block text-[11px] uppercase tracking-widest font-semibold text-obsidian group-hover:text-bronze transition">
-                            View Artist Dossier &amp; Works →
-                        </a>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        </div>
-    </div>
-</section>
-
 <!-- Section 6: Editorial Stories & Journal -->
 <section class="max-w-[1440px] mx-auto px-4 sm:px-8 py-20">
     <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 border-b border-hairline pb-6">

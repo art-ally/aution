@@ -362,7 +362,6 @@ app.get('/', (req, res) => {
   const featuredAuctions = enriched.filter((a) => (a.auction?.status || '') === 'active');
   const upcomingAuctions = enriched.filter((a) => (a.auction?.status || '') === 'upcoming');
   const categories = db.all('categories');
-  const artists = db.where('artist_profiles', (ap) => (ap.approval_status || 'approved') === 'approved');
   const articles = db.all('editorial_articles');
 
   res.renderPage('public/home', {
@@ -372,7 +371,6 @@ app.get('/', (req, res) => {
     featuredAuctions,
     upcomingAuctions,
     categories,
-    artists: artists.slice(0, 4),
     articles: articles.slice(0, 3),
   });
 });
@@ -610,6 +608,10 @@ app.get('/categories', (req, res) => {
 });
 
 app.get('/artists', (req, res) => {
+  const user = req.getCurrentUser();
+  if (!user || !helpers.userHasRole(user, 'admin')) {
+    return res.redirect('/');
+  }
   const db = DatabaseEngine.getInstance();
   const artists = db.all('artist_profiles').map((artist) => {
     const works = db.where(
@@ -641,11 +643,8 @@ app.get('/artists/:slug', (req, res) => {
   const isOwnerOrAdmin =
     user && (Number(user.id) === Number(artist.user_id) || helpers.userHasRole(user, 'admin'));
 
-  if (!isApproved && !isOwnerOrAdmin) {
-    return res.renderPage('public/artist-awaiting-approval', {
-      pageTitle: 'Artist Profile Awaiting Curatorial Approval — ArtAlly',
-      artist,
-    });
+  if (!isOwnerOrAdmin) {
+    return res.redirect('/');
   }
 
   const rawWorks = db.where(

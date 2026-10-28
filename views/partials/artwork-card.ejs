@@ -59,9 +59,9 @@ var $lotNumber = $auction?.['lot_number'] ?? ('LOT ' + sprintf('%02d', Number($l
         <!-- Editorial Metadata -->
         <div class="p-6">
             <div class="flex items-center justify-between text-[11px] uppercase tracking-widest text-stone mb-1.5">
-                <a href="/artists/<%- e($lot?.['artist_slug'] ?? '') %>" class="hover:text-bronze transition font-semibold text-charcoal">
+                <span class="font-semibold text-charcoal">
                     <%- e($lot?.['artist_name']) %>
-                </a>
+                </span>
                 <span><%- e(String(($lot?.['year_created'] ?? '') ?? "")) %></span>
             </div>
 

@@ -89,24 +89,6 @@ $isArtistOwner = $user && ((int)$user['id'] === (int)$artwork['artist_id']);
                         <p class="text-xs text-charcoal/90 leading-relaxed"><?= e($artwork['condition_report'] ?? 'In pristine original studio condition.') ?></p>
                     </div>
                 </div>
-
-                <!-- Artist Profile Summary Dossier -->
-                <?php if (!empty($artwork['artist_profile'])): ?>
-                    <?php $ap = $artwork['artist_profile']; ?>
-                    <div class="pt-6 border-t border-hairline flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 bg-ivory p-6">
-                        <div class="flex items-center space-x-4">
-                            <img src="<?= e($ap['profile_photo']) ?>" alt="<?= e($ap['display_name']) ?>" class="w-16 h-16 object-cover border border-hairline">
-                            <div>
-                                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">About the Artist</p>
-                                <h4 class="font-serif text-2xl text-obsidian"><?= e($ap['display_name']) ?></h4>
-                                <p class="text-xs text-stone"><?= e($ap['discipline']) ?> · <?= e($ap['country']) ?></p>
-                            </div>
-                        </div>
-                        <a href="/artists/<?= e($ap['slug']) ?>" class="border border-obsidian px-5 py-2.5 text-[11px] uppercase tracking-widest hover:bg-obsidian hover:text-ivory transition whitespace-nowrap">
-                            View Artist Profile →
-                        </a>
-                    </div>
-                <?php endif; ?>
             </div>
         </div>
 
@@ -139,9 +121,9 @@ $isArtistOwner = $user && ((int)$user['id'] === (int)$artwork['artist_id']);
 
                 <!-- Artist & Artwork Title -->
                 <div>
-                    <a href="/artists/<?= e($artwork['artist_slug']) ?>" class="text-xs uppercase tracking-widest text-stone hover:text-bronze transition font-semibold">
+                    <p class="text-xs uppercase tracking-widest text-stone font-semibold">
                         <?= e($artwork['artist_name']) ?> (<?= e($artwork['artist_country']) ?>)
-                    </a>
+                    </p>
                     <h1 class="font-serif text-3xl sm:text-4xl italic text-obsidian mt-1 leading-tight">
                         <?= e($artwork['title']) ?>, <span class="not-italic font-normal"><?= e((string)$artwork['year_created']) ?></span>
                     </h1>

@@ -55,7 +55,6 @@ class PublicController
         ));
 
         $categories = $this->db->all('categories');
-        $artists = $this->db->where('artist_profiles', fn($ap) => ($ap['approval_status'] ?? 'approved') === 'approved');
         $articles = $this->db->all('editorial_articles');
 
         view('public/home', [
@@ -64,7 +63,6 @@ class PublicController
             'featuredAuctions' => $featuredAuctions,
             'upcomingAuctions' => $upcomingAuctions,
             'categories' => $categories,
-            'artists' => array_slice($artists, 0, 4),
             'articles' => array_slice($articles, 0, 3),
         ]);
     }
@@ -277,6 +275,10 @@ class PublicController
 
     public function artists(): void
     {
+        $user = Auth::user();
+        if (!$user || !Auth::hasRole('admin')) {
+            redirect('/');
+        }
         $allArtists = $this->db->all('artist_profiles');
         $artists = [];
         foreach ($allArtists as $artist) {
@@ -308,12 +310,8 @@ class PublicController
         $user = Auth::user();
         $isOwnerOrAdmin = $user && ((int)$user['id'] === (int)$artist['user_id'] || Auth::hasRole('admin'));
 
-        if (!$isApproved && !$isOwnerOrAdmin) {
-            view('public/artist-awaiting-approval', [
-                'pageTitle' => 'Artist Profile Awaiting Curatorial Approval — ArtAlly',
-                'artist' => $artist,
-            ]);
-            return;
+        if (!$isOwnerOrAdmin) {
+            redirect('/');
         }
 
         $rawWorks = $this->db->where(

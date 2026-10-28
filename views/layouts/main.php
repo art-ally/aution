@@ -324,7 +324,6 @@ $isArtistDashboard = ($currentPath === '/artist' || str_starts_with($currentPath
                     <li><a href="/upcoming-auctions" class="hover:text-white transition">Upcoming Evening Sales</a></li>
                     <li><a href="/catalogue" class="hover:text-white transition">Complete Artwork Catalogue</a></li>
                     <li><a href="/categories" class="hover:text-white transition">Curatorial Departments</a></li>
-                    <li><a href="/artists" class="hover:text-white transition">Represented Artists</a></li>
                     <li><a href="/journal" class="hover:text-white transition">Stories &amp; Journal</a></li>
                 </ul>
             </div>
