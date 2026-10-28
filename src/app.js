@@ -37,6 +37,11 @@ if (IS_VERCEL) {
   app.use('/uploads', express.static(UPLOAD_ROOT));
 }
 app.use(express.static(PUBLIC_PATH, { index: false }));
+app.get('/favicon.ico', (req, res) => {
+  res.sendFile(path.join(PUBLIC_PATH, 'favicon.svg'), {
+    headers: { 'Content-Type': 'image/svg+xml' },
+  });
+});
 
 // --- Session Cookie Helpers (Stateless & Serverless-ready for Vercel) ---
 function decodeSessionCookie(rawCookie) {

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bronzeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C5A572" />
+      <stop offset="50%" stop-color="#8C6D46" />
+      <stop offset="100%" stop-color="#6B5132" />
+    </linearGradient>
+  </defs>
+  <!-- Obsidian Square Crest -->
+  <rect width="64" height="64" rx="12" fill="#111111" />
+  <!-- Fine Hairline Inner Frame -->
+  <rect x="4.5" y="4.5" width="55" height="55" rx="8.5" fill="none" stroke="url(#bronzeGrad)" stroke-width="1.5" opacity="0.85" />
+  <rect x="7.5" y="7.5" width="49" height="49" rx="6" fill="none" stroke="#FAF8F5" stroke-width="0.5" opacity="0.2" />
+  <!-- Subtle Top Diamond Accent -->
+  <polygon points="32,10 34.2,12.2 32,14.4 29.8,12.2" fill="url(#bronzeGrad)" />
+  <!-- Editorial Serif 'A' Monogram -->
+  <path d="M32 16 L17.5 47 H23.5 L26.8 39.5 H37.2 L40.5 47 H46.5 L32 16 Z M28.6 35 L32 26.8 L35.4 35 H28.6 Z" fill="#FAF8F5" />
+  <!-- Bronze Crossbar & Serif Accents -->
+  <rect x="25.5" y="34.2" width="13" height="2" fill="url(#bronzeGrad)" />
+  <rect x="15.5" y="45.8" width="10" height="1.6" fill="url(#bronzeGrad)" />
+  <rect x="38.5" y="45.8" width="10" height="1.6" fill="url(#bronzeGrad)" />
+</svg>

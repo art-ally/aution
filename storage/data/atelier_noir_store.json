@@ -41,37 +41,37 @@
     }
   ],
   "_meta": {
-    "version": 152,
+    "version": 192,
     "sequences": {
-      "bids": 3,
+      "bids": 5,
       "roles": 0,
-      "users": 7,
+      "users": 8,
       "orders": 0,
       "reports": 0,
-      "artworks": 4,
-      "auctions": 1,
+      "artworks": 5,
+      "auctions": 2,
       "payments": 0,
-      "audit_logs": 26,
+      "audit_logs": 30,
       "categories": 10,
-      "watchlists": 0,
+      "watchlists": 1,
       "commissions": 0,
       "order_items": 0,
-      "notifications": 29,
-      "artwork_images": 10,
-      "buyer_profiles": 6,
+      "notifications": 35,
+      "artwork_images": 13,
+      "buyer_profiles": 7,
       "seller_payouts": 0,
-      "artist_profiles": 7,
+      "artist_profiles": 8,
       "followed_artists": 0,
       "artwork_documents": 0,
       "platform_settings": 1,
       "editorial_articles": 0,
-      "artwork_submissions": 4,
-      "email_verifications": 6,
+      "artwork_submissions": 5,
+      "email_verifications": 7,
       "password_reset_tokens": 0,
       "newsletter_subscribers": 0,
       "authentication_invoices": 5
     },
-    "updated_at_ms": 1793203595261
+    "updated_at_ms": 1793204381310
   },
   "roles": [],
   "users": [
@@ -412,6 +412,54 @@
       "ip_address": "127.0.0.1",
       "updated_at": "2026-10-28 16:06:35",
       "target_type": "user"
+    },
+    {
+      "id": 27,
+      "action": "ARTIST_PROFILE_APPROVED",
+      "details": "Approved public artist profile for Jane.",
+      "user_id": 1,
+      "target_id": 8,
+      "actor_name": "Chief Administrator",
+      "created_at": "2026-10-28 16:13:51",
+      "ip_address": "127.0.0.1",
+      "updated_at": "2026-10-28 16:13:51",
+      "target_type": "artist_profile"
+    },
+    {
+      "id": 28,
+      "action": "BID_PRICE_UPDATED_AND_ALERTED",
+      "details": "Updated 'Floral': State=LIVE & STARTED, AgreedPrice=$6500, StartingBid=$5000, CurrentBid=$6150",
+      "user_id": 1,
+      "target_id": 5,
+      "actor_name": "Chief Administrator",
+      "created_at": "2026-10-28 16:16:28",
+      "ip_address": "127.0.0.1",
+      "updated_at": "2026-10-28 16:16:28",
+      "target_type": "artwork"
+    },
+    {
+      "id": 29,
+      "action": "ARTWORK_DELETED",
+      "details": "Permanently deleted artwork 'Floral'.",
+      "user_id": 1,
+      "target_id": 5,
+      "actor_name": "Chief Administrator",
+      "created_at": "2026-10-28 16:19:18",
+      "ip_address": "127.0.0.1",
+      "updated_at": "2026-10-28 16:19:18",
+      "target_type": "artwork"
+    },
+    {
+      "id": 30,
+      "action": "USER_DELETED",
+      "details": "Permanently deleted account 'Jane' (s-cajjf@gmail.com).",
+      "user_id": 1,
+      "target_id": 8,
+      "actor_name": "Chief Administrator",
+      "created_at": "2026-10-28 16:19:41",
+      "ip_address": "127.0.0.1",
+      "updated_at": "2026-10-28 16:19:41",
+      "target_type": "user"
     }
   ],
   "categories": [
@@ -506,7 +554,15 @@
       "description": "Interdisciplinary works combining gold leaf, raw textiles, mineral pigments, and found matter."
     }
   ],
-  "watchlists": [],
+  "watchlists": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "artwork_id": 5,
+      "created_at": "2026-10-28 16:17:46",
+      "updated_at": "2026-10-28 16:17:46"
+    }
+  ],
   "commissions": [],
   "order_items": [],
   "notifications": [
@@ -844,6 +900,76 @@
       "created_at": "2026-10-27 12:06:28",
       "updated_at": "2026-10-27 12:06:28",
       "artwork_title": "shot bl0ock"
+    },
+    {
+      "id": 30,
+      "type": "account_verified",
+      "title": "Welcome to ArtAlly",
+      "message": "Your Artist & Collector account is active. You may now complete your public portfolio or submit artwork for curatorial review.",
+      "read_at": null,
+      "user_id": 8,
+      "action_url": "/artist/dashboard",
+      "created_at": "2026-10-28 16:12:49",
+      "updated_at": "2026-10-28 16:12:49"
+    },
+    {
+      "id": 31,
+      "type": "artist_profile_approved",
+      "title": "Your Public Artist Profile is Now Approved & Live",
+      "message": "Congratulations Jane. Your artist registration and portfolio have been approved by the Administrator and are now publicly displayed in the Artists Directory.",
+      "read_at": null,
+      "user_id": 8,
+      "action_url": "/artists/jane-8",
+      "created_at": "2026-10-28 16:13:51",
+      "updated_at": "2026-10-28 16:13:51"
+    },
+    {
+      "id": 32,
+      "type": "submission_received",
+      "title": "Submission Received (AN-2026-1005)",
+      "message": "Your artwork \"Floral\" has been logged for specialist curatorial review.",
+      "read_at": null,
+      "user_id": 8,
+      "action_url": "/artist/submissions",
+      "created_at": "2026-10-28 16:15:07",
+      "updated_at": "2026-10-28 16:15:07"
+    },
+    {
+      "id": 33,
+      "type": "submission_received",
+      "title": "New Consignment Submission: AN-2026-1005",
+      "message": "Jane submitted \"Floral\" for auction evaluation.",
+      "read_at": null,
+      "user_id": 1,
+      "action_url": "/admin/dashboard#artists",
+      "created_at": "2026-10-28 16:15:07",
+      "updated_at": "2026-10-28 16:15:07"
+    },
+    {
+      "id": 34,
+      "type": "new_bid_alert",
+      "title": "🔔 NEW BID ALERT: $6,150 on \"Floral\"",
+      "ends_at": "2026-11-04 16:16:28",
+      "message": "ALERT: There is a new bid for $6,150 on your artwork \"Floral\"! This updated bid price and live countdown timer are now displayed on your Artist Page and Studio Dashboard. Note: Received by the ArtAlly Curatorial Review Board. Typical evaluation time is 24–48 hours.",
+      "read_at": null,
+      "user_id": 8,
+      "action_url": "/artist/dashboard",
+      "artwork_id": 5,
+      "bid_amount": 6150,
+      "created_at": "2026-10-28 16:16:28",
+      "updated_at": "2026-10-28 16:16:28",
+      "artwork_title": "Floral"
+    },
+    {
+      "id": 35,
+      "type": "bid_confirmed",
+      "title": "Bid Confirmed: Floral",
+      "message": "Your bid of $6,850 (Paddle PB-1791) is now the leading bid on \"Floral\".",
+      "read_at": null,
+      "user_id": 1,
+      "action_url": "/artworks/floral-111",
+      "created_at": "2026-10-28 16:17:46",
+      "updated_at": "2026-10-28 16:17:46"
     }
   ],
   "artwork_images": [
@@ -980,6 +1106,16 @@
       "shipping_address": "france",
       "identity_verified": true,
       "verified_payment_method": "Private Client Account Verified"
+    },
+    {
+      "id": 7,
+      "user_id": 8,
+      "created_at": "2026-10-28 16:12:49",
+      "updated_at": "2026-10-28 16:12:49",
+      "collecting_focus": "Contemporary & Modern Works",
+      "shipping_address": "France",
+      "identity_verified": true,
+      "verified_payment_method": "Private Client Account Verified"
     }
   ],
   "seller_payouts": [],
@@ -1083,6 +1219,15 @@
       "created_at": "2026-10-27 11:54:22",
       "updated_at": "2026-10-27 11:54:22",
       "verified_at": "2026-10-27 11:54:22"
+    },
+    {
+      "id": 7,
+      "email": "s-cajjf@gmail.com",
+      "token": "502c34556960582ed543e06640d989084a63c388",
+      "user_id": 8,
+      "created_at": "2026-10-28 16:12:49",
+      "updated_at": "2026-10-28 16:12:49",
+      "verified_at": "2026-10-28 16:12:49"
     }
   ],
   "password_reset_tokens": [],

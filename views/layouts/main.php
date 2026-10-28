@@ -14,6 +14,10 @@ $isArtistDashboard = ($currentPath === '/artist' || str_starts_with($currentPath
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle ?? ($brandName . ' — International Fine Art Auctions')) ?></title>
     <meta name="description" content="<?= e($metaDescription ?? 'ArtAlly is an international digital art auction house dedicated to original works from independent artists and distinguished private collections.') ?>">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="shortcut icon" href="/favicon.svg">
+    <link rel="apple-touch-icon" href="/favicon.svg">
+    <meta name="theme-color" content="#111111">
     <link rel="canonical" href="http://<?= e($_SERVER['HTTP_HOST'] ?? 'localhost:8000') ?><?= e(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH)) ?>">
 
     <!-- Editorial Typography: Cormorant Garamond (Serif) & Plus Jakarta Sans (Sans) -->
