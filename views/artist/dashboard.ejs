@@ -442,11 +442,14 @@
                                         <%- format_money_exact(Number($inv?.['fee_amount'] ?? 0), $invCurrency) %> <span class="text-xs font-mono"><%- e($invCurrency) %></span>
                                     </span>
                                 </div>
-                                <a href="/invoices/<%- Number($inv?.['id']) %>/download" class="bg-obsidian text-ivory px-4 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
-                                    ⬇ Download Invoice Copy
+                                <a href="/invoices/<%- Number($inv?.['id']) %>?download_pdf=1" target="_blank" class="bg-bronze text-white px-4 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-obsidian transition">
+                                    ⬇ Download PDF
                                 </a>
                                 <a href="/invoices/<%- Number($inv?.['id']) %>?print=1" target="_blank" class="border border-obsidian bg-white text-obsidian px-4 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-obsidian hover:text-ivory transition">
                                     🖨 View &amp; Print Invoice
+                                </a>
+                                <a href="/invoices/<%- Number($inv?.['id']) %>/download" class="bg-obsidian text-ivory px-4 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                                    ⬇ HTML Copy
                                 </a>
                             </div>
                         </div>
@@ -505,6 +508,78 @@
                                 </div>
                             </div>
                             <% } %>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Official ArtAlly Artist Consignment, Authentication & Digital Auction Contract Agreements -->
+    <div id="contract-agreements" class="bg-white border-2 border-obsidian p-6 sm:p-8 mb-10 space-y-5 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-hairline pb-4">
+            <div>
+                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Official ArtAlly Letterhead · Pre-Signed &amp; Aligned with Invoice</p>
+                <h2 class="font-serif text-2xl sm:text-3xl text-obsidian mt-0.5">Artist Consignment, Authentication &amp; Digital Auction Agreements</h2>
+            </div>
+            <span class="bg-[#181615] text-bronzeLight border border-bronze text-[10px] uppercase tracking-widest px-3 py-1.5 font-semibold self-start sm:self-center">
+                <%- count($contractAgreements || []) %> Official Agreement<%- count($contractAgreements || []) === 1 ? '' : 's' %>
+            </span>
+        </div>
+
+        <% if (empty($contractAgreements)) { %>
+            <p class="text-xs text-stone">
+                No contract agreements have been issued for your studio yet. When ArtAlly Administration generates your official Consignment, Authentication &amp; Digital Auction Contract Agreement on ArtAlly letterheaded paper, it will appear here with your registered details and aligned invoice breakdown ready to review, countersign, print, or download.
+            </p>
+        <% } else { %>
+            <div class="space-y-4">
+                <% for (const $agr of Object.values($contractAgreements || [])) { %>
+                    <% var $agrCur = $agr?.['currency'] ?? 'USD';
+                       var $agrCount = Math.max(1, Number($agr?.['total_artworks'] ?? 1));
+                       var $agrSigned = Boolean($agr?.['artist_signed']); %>
+                    <div class="border border-hairline bg-ivory p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div class="space-y-1.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-mono text-xs font-bold text-obsidian bg-white border border-hairline px-2.5 py-0.5">
+                                    <%- e($agr?.['agreement_number']) %>
+                                </span>
+                                <span class="bg-[#1A2E22] text-ivory text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                                    ✓ Pre-Signed &amp; Sealed by ArtAlly
+                                </span>
+                                <% if ($agrSigned) { %>
+                                    <span class="bg-bronze text-white text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                                        ✓ Countersigned by Artist
+                                    </span>
+                                <% } else { %>
+                                    <span class="bg-obsidian text-bronzeLight text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                                        ✍ Ready for Your Countersignature
+                                    </span>
+                                <% } %>
+                            </div>
+                            <h3 class="font-serif text-2xl text-obsidian">
+                                Artist Contract Agreement — <%- e($agr?.['artist_full_name']) %> (<%- $agrCount %> Artwork<%- $agrCount === 1 ? '' : 's' %>)
+                            </h3>
+                            <p class="text-xs text-stone">
+                                Aligned with Invoice <strong class="text-obsidian font-mono"><%- e($agr?.['invoice_number']) %></strong> · Per-Artwork Auth Fee: <strong class="text-obsidian"><%- format_money_exact(Number($agr?.['per_artwork_fee'] ?? 0), $agrCur) %></strong> · Commission Split: <strong class="text-bronze">15% ArtAlly / 85% Artist</strong>
+                            </p>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div class="text-left lg:text-right mr-2">
+                                <span class="block text-[10px] uppercase tracking-widest text-stone">Total Auth Fee (<%- $agrCount %> Work<%- $agrCount === 1 ? '' : 's' %>)</span>
+                                <span class="font-serif text-2xl font-bold text-obsidian">
+                                    <%- format_money_exact(Number($agr?.['total_auth_fee'] ?? 0), $agrCur) %> <span class="text-xs font-mono"><%- e($agrCur) %></span>
+                                </span>
+                            </div>
+                            <a href="/agreements/<%- Number($agr?.['id']) %>?download_pdf=1" target="_blank" class="bg-bronze text-white px-4 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-obsidian transition">
+                                ⬇ Download PDF
+                            </a>
+                            <a href="/agreements/<%- Number($agr?.['id']) %>" class="border-2 border-bronze bg-[#181615] text-bronzeLight px-4 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition">
+                                📜 View, Sign &amp; Print Contract
+                            </a>
+                            <a href="/agreements/<%- Number($agr?.['id']) %>/download" class="bg-obsidian text-ivory px-4 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
+                                ⬇ HTML Copy
+                            </a>
                         </div>
                     </div>
                 <% } %>

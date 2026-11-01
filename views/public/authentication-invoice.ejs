@@ -1,8 +1,112 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
+.inv-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+@media screen and (max-width: 680px) {
+    .inv-grid-2 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.pdf-no-break,
+.invoice-paper tr,
+.invoice-paper thead,
+.invoice-paper tfoot,
+.inv-box,
+.inv-remittance-box,
+.inv-footer-box {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+}
+
+/* PDF Export Mode (used by Download Official PDF button for exact A4 layout) */
+.pdf-export-mode {
+    width: 794px !important;
+    max-width: 794px !important;
+    margin: 0 auto !important;
+    padding: 20px 24px !important;
+    box-shadow: none !important;
+    background: #FBF9F5 !important;
+    color: #161514 !important;
+    box-sizing: border-box !important;
+}
+.pdf-export-mode .invoice-paper-inner {
+    padding: 20px 22px !important;
+}
+.pdf-export-mode .inv-grid-2 {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 16px !important;
+}
+.pdf-export-mode .no-print {
+    display: none !important;
+}
+
+@page {
+    size: A4 portrait;
+    margin: 10mm 10mm;
+}
+
 @media print {
-    header, footer, .announcement-bar, .no-print { display: none !important; }
-    body { background: #ffffff !important; color: #111111 !important; }
-    .invoice-paper { border: 2px solid #181615 !important; box-shadow: none !important; margin: 0 !important; max-width: 100% !important; }
+    html, body, main, .section, .container {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #161514 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    header, footer, .announcement-bar, .flash-banner, .no-print {
+        display: none !important;
+    }
+    .invoice-paper {
+        border: 2px solid #B8965A !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 18px 20px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        background: #FBF9F5 !important;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+    }
+    .invoice-paper-inner {
+        border: 1px solid rgba(184, 150, 90, 0.5) !important;
+        padding: 20px 22px !important;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+    }
+    .inv-grid-2 {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 16px !important;
+    }
+    .pdf-no-break,
+    .invoice-paper tr,
+    .invoice-paper thead,
+    .invoice-paper tfoot,
+    .inv-box,
+    .inv-remittance-box,
+    .inv-footer-box {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+    table {
+        page-break-inside: auto;
+    }
+    thead {
+        display: table-header-group;
+    }
+    tfoot {
+        display: table-footer-group;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
 }
 </style>
 
@@ -16,10 +120,11 @@ var $vatRate = Number($inv['vat_rate'] ?? 15);
 var $vatAmount = Number($inv['vat_amount'] ?? 0);
 var $totalFeeAmount = Number($inv['fee_amount'] ?? 0);
 var $presetItems = Array.isArray($defaultAuthLineItems) ? $defaultAuthLineItems : [];
+var $safePdfFilename = 'ArtAlly-Invoice-' + String($inv['invoice_number'] || 'INV-AUTH-2026').replace(/[^a-zA-Z0-9_-]/g, '-') + '.pdf';
 %>
 
 <section class="section" style="padding: 3rem 0;">
-    <div class="container" style="max-width: 920px;">
+    <div class="container" style="max-width: 940px;">
         <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; background: var(--bg-elevated); padding: 1rem 1.25rem; border: 1px solid var(--border-hairline);">
             <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                 <% if (hasRole('admin')) { %>
@@ -29,14 +134,34 @@ var $presetItems = Array.isArray($defaultAuthLineItems) ? $defaultAuthLineItems 
                 <% } %>
                 <span class="caption" style="color: var(--accent-gold);">Official Curatorial &amp; AI Authentication Invoice</span>
             </div>
-            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+            <div style="display: flex; gap: 0.65rem; flex-wrap: wrap;">
+                <% if (typeof $linkedAgreement !== 'undefined' && $linkedAgreement && $linkedAgreement['id']) { %>
+                    <a href="/agreements/<%- Number($linkedAgreement['id']) %>" class="btn btn-outline btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);">
+                        📜 View Aligned Contract Agreement (<%- e($linkedAgreement['agreement_number']) %>)
+                    </a>
+                <% } else if (hasRole('admin')) { %>
+                    <form action="/admin/agreements/from-invoice" method="POST" style="display: inline;">
+                        <%- csrf_field() %>
+                        <input type="hidden" name="invoice_id" value="<%- Number($inv['id'] || 0) %>">
+                        <button type="submit" class="btn btn-outline btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);">
+                            📜 Generate Aligned Contract Agreement
+                        </button>
+                    </form>
+                <% } %>
                 <% if (hasRole('admin')) { %>
                     <button type="button" onclick="var el=document.getElementById('admin-invoice-breakdown-editor'); el.style.display = (el.style.display === 'none' ? 'block' : 'none');" class="btn btn-outline btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);">
                         ✎ Edit Descriptions &amp; Amounts
                     </button>
                 <% } %>
-                <a href="/invoices/<%- Number($inv['id'] || 0) %>/download" class="btn btn-outline btn-sm">⬇ Download Invoice Copy</a>
-                <button onclick="window.print()" class="btn btn-gold btn-sm">🖨 Print / Save as PDF</button>
+                <button type="button" id="btn-download-invoice-pdf" onclick="downloadOfficialInvoicePdf()" class="btn btn-gold btn-sm">
+                    ⬇ Download Official PDF
+                </button>
+                <button type="button" onclick="window.print()" class="btn btn-outline btn-sm" style="border-color: #161514; color: #161514; font-weight: 700;">
+                    🖨 Print / Save as PDF
+                </button>
+                <a href="/invoices/<%- Number($inv['id'] || 0) %>/download" class="btn btn-outline btn-sm">
+                    ⬇ Download HTML Copy
+                </a>
             </div>
         </div>
 
@@ -52,7 +177,7 @@ var $presetItems = Array.isArray($defaultAuthLineItems) ? $defaultAuthLineItems 
                         Add, Remove, or Edit Descriptions &amp; Amounts for <%- e($inv['invoice_number']) %>
                     </h3>
                     <p style="font-size: 0.78rem; color: #A69F93; margin-top: 0.25rem;">
-                        Only the descriptions kept in the list below will be charged on this invoice, plus the fixed 15% VAT.
+                        Only the descriptions kept in the list below will be charged on this invoice, plus the fixed 15% VAT. Saving also synchronizes any aligned Contract Agreement.
                     </p>
                 </div>
                 <button type="button" onclick="document.getElementById('admin-invoice-breakdown-editor').style.display='none'" style="background: transparent; border: 1px solid rgba(255,255,255,0.25); color: #D6D0C4; padding: 0.35rem 0.75rem; font-size: 0.75rem; cursor: pointer;">
@@ -125,261 +250,265 @@ var $presetItems = Array.isArray($defaultAuthLineItems) ? $defaultAuthLineItems 
         </div>
         <% } %>
 
-        <div class="invoice-paper" style="background: #FBF9F5; color: #161514; padding: 3.5rem 3.5rem; border: 2px solid #B8965A; box-shadow: 0 24px 60px rgba(0,0,0,0.55); position: relative;">
-            <div style="border: 1px solid rgba(184, 150, 90, 0.45); padding: 2.75rem;">
+        <div id="invoice-printable-area" class="invoice-paper" style="background: #FBF9F5; color: #161514; padding: 2.5rem 2.75rem; border: 2px solid #B8965A; box-shadow: 0 24px 60px rgba(0,0,0,0.55); position: relative;">
+            <div class="invoice-paper-inner" style="border: 1px solid rgba(184, 150, 90, 0.45); padding: 2.25rem;">
                 
-                <!-- Top Header -->
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5rem; flex-wrap: wrap; border-bottom: 2px solid #161514; padding-bottom: 1.75rem; margin-bottom: 2rem;">
-                    <div>
-                        <p style="font-size: 0.72rem; letter-spacing: 0.28em; text-transform: uppercase; color: #8C6D32; margin-bottom: 0.4rem; font-weight: 700;">
-                            ARTALLY · CURATORIAL &amp; AI AUTHENTICATION DIVISION
-                        </p>
-                        <h1 style="font-family: var(--font-serif); font-size: 2.35rem; color: #161514; font-weight: 500; letter-spacing: 0.03em; line-height: 1.1; margin-bottom: 0.4rem;">
-                            AUTHENTICATION INVOICE
-                        </h1>
-                        <p style="font-size: 0.85rem; color: #57524C;">
-                            Independent Connoisseurship &amp; AI-Powered Provenance Verification Protocol · Contact: <a href="mailto:Art-Ally@consultant.com" style="color: #8C6D32; font-weight: 600; text-decoration: underline;">Art-Ally@consultant.com</a>
-                        </p>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="display: inline-block; padding: 0.35rem 0.9rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 0.65rem; border: 1px solid <%- $isPaid ? '#2D6A4F' : '#8C6D32' %>; background: <%- $isPaid ? 'rgba(45, 106, 79, 0.12)' : 'rgba(184, 150, 90, 0.15)' %>; color: <%- $isPaid ? '#1B4332' : '#705522' %>;">
-                            <%- $isPaid ? '✓ PAID & VERIFIED' : '● UNPAID — AWAITING PAYMENT' %>
+                <!-- Top Header + Billed To / Masterpiece Grid (Kept Together on Page 1) -->
+                <div class="pdf-no-break">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5rem; flex-wrap: wrap; border-bottom: 2px solid #161514; padding-bottom: 1.45rem; margin-bottom: 1.65rem;">
+                        <div>
+                            <p style="font-size: 0.7rem; letter-spacing: 0.26em; text-transform: uppercase; color: #8C6D32; margin-bottom: 0.35rem; font-weight: 700;">
+                                ARTALLY · CURATORIAL &amp; AI AUTHENTICATION DIVISION
+                            </p>
+                            <h1 style="font-family: var(--font-serif); font-size: 2.15rem; color: #161514; font-weight: 500; letter-spacing: 0.03em; line-height: 1.1; margin-bottom: 0.35rem;">
+                                AUTHENTICATION INVOICE
+                            </h1>
+                            <p style="font-size: 0.82rem; color: #57524C;">
+                                Independent Connoisseurship &amp; AI-Powered Provenance Verification Protocol · Contact: <a href="mailto:Art-Ally@consultant.com" style="color: #8C6D32; font-weight: 600; text-decoration: underline;">Art-Ally@consultant.com</a>
+                            </p>
                         </div>
-                        <p style="font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: #161514;">
-                            Invoice No: <%- e($inv['invoice_number'] ?? 'INV-AUTH-0001') %>
-                        </p>
-                        <p style="font-size: 0.8rem; color: #57524C; margin-top: 0.2rem;">
-                            Issued: <%- e(substr($inv['created_at'] ?? gmdate('Y-m-d'), 0, 10)) %>
-                        </p>
-                        <% if (!empty($inv['due_date'])) { %>
-                            <p style="font-size: 0.8rem; color: #8C2D2D; font-weight: 600; margin-top: 0.15rem;">
-                                Due Date: <%- e($inv['due_date']) %>
-                            </p>
-                        <% } %>
-                    </div>
-                </div>
-
-                <!-- Artist & Artwork Grid -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.75rem; margin-bottom: 2rem;">
-                    <div style="background: rgba(22, 21, 20, 0.03); border: 1px solid #DCD5C9; padding: 1.35rem;">
-                        <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.16em; color: #8C6D32; font-weight: 700; margin-bottom: 0.5rem;">
-                            Billed To (Artist &amp; Studio Details)
-                        </p>
-                        <p style="font-family: var(--font-serif); font-size: 1.35rem; font-weight: 600; color: #161514; margin-bottom: 0.25rem;">
-                            <%- e($inv['artist_name'] ?? 'Registered Artist') %>
-                        </p>
-                        <% if (!empty($inv['artist_email'])) { %>
-                            <p style="font-size: 0.84rem; color: #433F3B; margin-bottom: 0.35rem;">
-                                <strong>Email:</strong> <%- e($inv['artist_email']) %>
-                            </p>
-                        <% } %>
-                        <% if (!empty($inv['artist_details'])) { %>
-                            <div style="font-size: 0.84rem; color: #57524C; line-height: 1.55; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed #DCD5C9;">
-                                <%- nl2br(e($inv['artist_details'])) %>
+                        <div style="text-align: right;">
+                            <div style="display: inline-block; padding: 0.3rem 0.85rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 0.55rem; border: 1px solid <%- $isPaid ? '#2D6A4F' : '#8C6D32' %>; background: <%- $isPaid ? 'rgba(45, 106, 79, 0.12)' : 'rgba(184, 150, 90, 0.15)' %>; color: <%- $isPaid ? '#1B4332' : '#705522' %>;">
+                                <%- $isPaid ? '✓ PAID & VERIFIED' : '● UNPAID — AWAITING PAYMENT' %>
                             </div>
-                        <% } %>
+                            <p style="font-family: var(--font-mono); font-size: 0.92rem; font-weight: 700; color: #161514;">
+                                Invoice No: <%- e($inv['invoice_number'] ?? 'INV-AUTH-0001') %>
+                            </p>
+                            <p style="font-size: 0.78rem; color: #57524C; margin-top: 0.15rem;">
+                                Issued: <%- e(substr($inv['created_at'] ?? gmdate('Y-m-d'), 0, 10)) %>
+                            </p>
+                            <% if (!empty($inv['due_date'])) { %>
+                                <p style="font-size: 0.78rem; color: #8C2D2D; font-weight: 600; margin-top: 0.12rem;">
+                                    Due Date: <%- e($inv['due_date']) %>
+                                </p>
+                            <% } %>
+                        </div>
                     </div>
 
-                    <div style="background: rgba(22, 21, 20, 0.03); border: 1px solid #DCD5C9; padding: 1.35rem;">
-                        <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.16em; color: #8C6D32; font-weight: 700; margin-bottom: 0.5rem;">
-                            Masterpiece Subject to Verification
-                        </p>
-                        <p style="font-family: var(--font-serif); font-size: 1.35rem; font-weight: 600; color: #161514; font-style: italic; margin-bottom: 0.25rem;">
-                            &ldquo;<%- e($inv['artwork_title'] ?? 'Submitted Masterpiece') %>&rdquo;
-                        </p>
-                        <p style="font-size: 0.82rem; color: #8C6D32; font-weight: 600; margin-bottom: 0.35rem;">
-                            <%- e($inv['service_type'] ?? 'Curatorial Connoisseurship & AI-Powered Authentication') %>
-                        </p>
-                        <% if (!empty($inv['artwork_details'])) { %>
-                            <div style="font-size: 0.84rem; color: #57524C; line-height: 1.55; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed #DCD5C9;">
-                                <%- nl2br(e($inv['artwork_details'])) %>
-                            </div>
-                        <% } %>
+                    <!-- Artist & Artwork Grid (2 Side-by-Side Columns in HTML & PDF) -->
+                    <div class="inv-grid-2" style="margin-bottom: 1.65rem;">
+                        <div class="inv-box" style="background: rgba(22, 21, 20, 0.03); border: 1px solid #DCD5C9; padding: 1.2rem 1.3rem;">
+                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #8C6D32; font-weight: 700; margin-bottom: 0.45rem;">
+                                Billed To (Artist &amp; Studio Details)
+                            </p>
+                            <p style="font-family: var(--font-serif); font-size: 1.3rem; font-weight: 600; color: #161514; margin-bottom: 0.2rem;">
+                                <%- e($inv['artist_name'] ?? 'Registered Artist') %>
+                            </p>
+                            <% if (!empty($inv['artist_email'])) { %>
+                                <p style="font-size: 0.82rem; color: #433F3B; margin-bottom: 0.3rem;">
+                                    <strong>Email:</strong> <%- e($inv['artist_email']) %>
+                                </p>
+                            <% } %>
+                            <% if (!empty($inv['artist_details'])) { %>
+                                <div style="font-size: 0.8rem; color: #57524C; line-height: 1.5; margin-top: 0.35rem; padding-top: 0.35rem; border-top: 1px dashed #DCD5C9;">
+                                    <%- nl2br(e($inv['artist_details'])) %>
+                                </div>
+                            <% } %>
+                        </div>
+
+                        <div class="inv-box" style="background: rgba(22, 21, 20, 0.03); border: 1px solid #DCD5C9; padding: 1.2rem 1.3rem;">
+                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #8C6D32; font-weight: 700; margin-bottom: 0.45rem;">
+                                Masterpiece Subject to Verification
+                            </p>
+                            <p style="font-family: var(--font-serif); font-size: 1.3rem; font-weight: 600; color: #161514; font-style: italic; margin-bottom: 0.2rem;">
+                                &ldquo;<%- e($inv['artwork_title'] ?? 'Submitted Masterpiece') %>&rdquo;
+                            </p>
+                            <p style="font-size: 0.8rem; color: #8C6D32; font-weight: 600; margin-bottom: 0.3rem;">
+                                <%- e($inv['service_type'] ?? 'Curatorial Connoisseurship & AI-Powered Authentication') %>
+                            </p>
+                            <% if (!empty($inv['artwork_details'])) { %>
+                                <div style="font-size: 0.8rem; color: #57524C; line-height: 1.5; margin-top: 0.35rem; padding-top: 0.35rem; border-top: 1px dashed #DCD5C9;">
+                                    <%- nl2br(e($inv['artwork_details'])) %>
+                                </div>
+                            <% } %>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Itemized Forensic & Authentication Breakdown Table -->
-                <div style="margin-bottom: 2rem; background: #141215; color: #FBF9F5; border: 1px solid #B8965A; padding: 1.5rem 1.75rem;">
+                <div class="pdf-no-break" style="margin-bottom: 1.65rem; background: #141215; color: #FBF9F5; border: 1px solid #B8965A; padding: 1.35rem 1.55rem;">
                     <table style="width: 100%; border-collapse: collapse;">
                         <thead>
                             <tr style="border-bottom: 1px solid rgba(198, 166, 100, 0.45);">
-                                <th style="text-align: left; padding: 0.65rem 0.5rem 0.9rem; font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.16em; color: #FBF9F5;">DESCRIPTION</th>
-                                <th style="text-align: right; padding: 0.65rem 0.5rem 0.9rem; font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.16em; color: #FBF9F5;">AMOUNT</th>
+                                <th style="text-align: left; padding: 0.55rem 0.45rem 0.75rem; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.15em; color: #FBF9F5;">DESCRIPTION</th>
+                                <th style="text-align: right; padding: 0.55rem 0.45rem 0.75rem; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.15em; color: #FBF9F5;">AMOUNT</th>
                             </tr>
                         </thead>
                         <tbody>
                             <% for (const $item of $lineItems) { %>
-                            <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
-                                <td style="padding: 1.15rem 0.5rem; vertical-align: top;">
-                                    <p style="font-family: var(--font-mono); font-weight: 700; color: #FFFFFF; font-size: 0.96rem; margin: 0 0 0.35rem; letter-spacing: 0.01em;">
+                            <tr class="pdf-no-break" style="border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                <td style="padding: 0.9rem 0.45rem; vertical-align: top;">
+                                    <p style="font-family: var(--font-mono); font-weight: 700; color: #FFFFFF; font-size: 0.9rem; margin: 0 0 0.25rem; letter-spacing: 0.01em;">
                                         <%- e($item['title'] ?? '') %>
                                     </p>
                                     <% if (!empty($item['description'])) { %>
-                                    <div style="font-family: var(--font-mono); font-size: 0.84rem; color: #E2DDD5; line-height: 1.65;">
+                                    <div style="font-family: var(--font-mono); font-size: 0.78rem; color: #E2DDD5; line-height: 1.58;">
                                         <%- nl2br(e($item['description'])) %>
                                     </div>
                                     <% } %>
                                 </td>
-                                <td style="padding: 1.15rem 0.5rem; vertical-align: top; text-align: right; font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700; color: #FFFFFF; white-space: nowrap;">
+                                <td style="padding: 0.9rem 0.45rem; vertical-align: top; text-align: right; font-family: var(--font-mono); font-size: 0.98rem; font-weight: 700; color: #FFFFFF; white-space: nowrap;">
                                     <%- format_money_exact(Number($item['amount'] ?? 0), $currency) %>
                                 </td>
                             </tr>
                             <% } %>
                         </tbody>
-                        <tfoot>
+                        <tfoot class="pdf-no-break">
                             <tr style="border-top: 2px dashed rgba(255, 255, 255, 0.4);">
-                                <td style="padding: 0.9rem 0.5rem 0.4rem; text-align: left; font-family: var(--font-mono); font-size: 0.84rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #D6D0C4;">
+                                <td style="padding: 0.75rem 0.45rem 0.3rem; text-align: left; font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #D6D0C4;">
                                     SUBTOTAL (<%- $lineItems.length %> DESCRIPTION<%- $lineItems.length === 1 ? '' : 'S' %>)
                                 </td>
-                                <td style="padding: 0.9rem 0.5rem 0.4rem; text-align: right; font-family: var(--font-mono); font-size: 1.02rem; font-weight: 700; color: #FFFFFF;">
+                                <td style="padding: 0.75rem 0.45rem 0.3rem; text-align: right; font-family: var(--font-mono); font-size: 0.96rem; font-weight: 700; color: #FFFFFF;">
                                     <%- format_money_exact($subtotalAmount, $currency) %>
                                 </td>
                             </tr>
                             <tr style="border-bottom: 2px dashed rgba(255, 255, 255, 0.4);">
-                                <td style="padding: 0.4rem 0.5rem 0.9rem; text-align: left; font-family: var(--font-mono); font-size: 0.84rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #C6A664;">
+                                <td style="padding: 0.3rem 0.45rem 0.75rem; text-align: left; font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #C6A664;">
                                     FIXED VAT (<%- $vatRate %>%)
                                 </td>
-                                <td style="padding: 0.4rem 0.5rem 0.9rem; text-align: right; font-family: var(--font-mono); font-size: 1.02rem; font-weight: 700; color: #C6A664;">
+                                <td style="padding: 0.3rem 0.45rem 0.75rem; text-align: right; font-family: var(--font-mono); font-size: 0.96rem; font-weight: 700; color: #C6A664;">
                                     <%- format_money_exact($vatAmount, $currency) %>
                                 </td>
                             </tr>
                             <tr style="border-bottom: 2px dashed rgba(255, 255, 255, 0.4);">
-                                <td style="padding: 1.05rem 0.5rem; text-align: left; font-family: var(--font-mono); font-size: 1.02rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #FFFFFF;">
+                                <td style="padding: 0.85rem 0.45rem; text-align: left; font-family: var(--font-mono); font-size: 0.96rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #FFFFFF;">
                                     TOTAL DUE
                                 </td>
-                                <td style="padding: 1.05rem 0.5rem; text-align: right; font-family: var(--font-mono); font-size: 1.35rem; font-weight: 700; color: #FFFFFF;">
-                                    <%- format_money_exact($totalFeeAmount, $currency) %> <span style="font-size: 0.78rem; color: #C6A664;"><%- e($currency) %></span>
+                                <td style="padding: 0.85rem 0.45rem; text-align: right; font-family: var(--font-mono); font-size: 1.25rem; font-weight: 700; color: #FFFFFF;">
+                                    <%- format_money_exact($totalFeeAmount, $currency) %> <span style="font-size: 0.75rem; color: #C6A664;"><%- e($currency) %></span>
                                 </td>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
 
-                <!-- Receiving Account & Cryptocurrency Details Box -->
-                <div style="background: #161514; color: #F4EFE6; padding: 1.75rem 2rem; border: 1px solid #B8965A; margin-bottom: 2rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid rgba(184, 150, 90, 0.35); padding-bottom: 0.85rem; margin-bottom: 1.25rem;">
-                        <div>
-                            <p style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.2em; color: #C6A664; font-weight: 700;">
-                                Official Payment Remittance Instructions
+                <!-- Receiving Account & Cryptocurrency Details Box + Footer (Kept Together Without Splitting) -->
+                <div class="pdf-no-break">
+                    <div class="inv-remittance-box" style="background: #161514; color: #F4EFE6; padding: 1.45rem 1.75rem; border: 1px solid #B8965A; margin-bottom: 1.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.65rem; border-bottom: 1px solid rgba(184, 150, 90, 0.35); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                            <div>
+                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.18em; color: #C6A664; font-weight: 700;">
+                                    Official Payment Remittance Instructions
+                                </p>
+                                <h3 style="font-family: var(--font-serif); font-size: 1.2rem; color: #F4EFE6; margin-top: 0.12rem;">
+                                    Designated Bank &amp; Cryptocurrency Payment Details
+                                </h3>
+                            </div>
+                            <span style="font-family: var(--font-mono); font-size: 0.74rem; padding: 0.25rem 0.65rem; background: rgba(198, 166, 100, 0.16); border: 1px solid #C6A664; color: #C6A664;">
+                                 QUOTE INVOICE NO: <%- e($inv['invoice_number'] ?? '') %>
+                            </span>
+                        </div>
+
+                        <% var $hasBank = !empty($inv['payment_account_number']) || !empty($inv['payment_bank_name']) || !empty($inv['payment_account_name']);
+                           var $hasCrypto = !empty($inv['crypto_wallet_address']) || !empty($inv['crypto_currency']); %>
+
+                        <% if ($hasBank) { %>
+                        <div style="<%- $hasCrypto ? 'padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.14);' : '' %>">
+                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700; margin-bottom: 0.6rem;">
+                                🏛 Option A — Bank Wire / Financial Institution Transfer
                             </p>
-                            <h3 style="font-family: var(--font-serif); font-size: 1.3rem; color: #F4EFE6; margin-top: 0.15rem;">
-                                Designated Bank &amp; Cryptocurrency Payment Details
-                            </h3>
-                        </div>
-                        <span style="font-family: var(--font-mono); font-size: 0.78rem; padding: 0.3rem 0.75rem; background: rgba(198, 166, 100, 0.16); border: 1px solid #C6A664; color: #C6A664;">
-                             QUOTE INVOICE NO: <%- e($inv['invoice_number'] ?? '') %>
-                        </span>
-                    </div>
+                            <div class="inv-grid-2" style="gap: 0.95rem;">
+                                <% if (!empty($inv['payment_account_name'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Beneficiary / Account Name</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.88rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['payment_account_name']) %></p>
+                                </div>
+                                <% } %>
 
-                    <% var $hasBank = !empty($inv['payment_account_number']) || !empty($inv['payment_bank_name']) || !empty($inv['payment_account_name']);
-                       var $hasCrypto = !empty($inv['crypto_wallet_address']) || !empty($inv['crypto_currency']); %>
+                                <% if (!empty($inv['payment_bank_name'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Bank / Financial Institution</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.88rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['payment_bank_name']) %></p>
+                                </div>
+                                <% } %>
 
-                    <% if ($hasBank) { %>
-                    <div style="<%- $hasCrypto ? 'padding-bottom: 1.25rem; margin-bottom: 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.14);' : '' %>">
-                        <p style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.16em; color: #C6A664; font-weight: 700; margin-bottom: 0.75rem;">
-                            🏛 Option A — Bank Wire / Financial Institution Transfer
-                        </p>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.15rem;">
-                            <% if (!empty($inv['payment_account_name'])) { %>
-                            <div>
-                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Beneficiary / Account Name</p>
-                                <p style="font-family: var(--font-mono); font-size: 0.94rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['payment_account_name']) %></p>
+                                <% if (!empty($inv['payment_account_number'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Account Number / IBAN</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.92rem; font-weight: 700; color: #C6A664; word-break: break-all;"><%- e($inv['payment_account_number']) %></p>
+                                </div>
+                                <% } %>
+
+                                <% if (!empty($inv['payment_routing_details'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Routing / SWIFT / BIC / Sort Code</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.86rem; color: #FFFFFF;"><%- e($inv['payment_routing_details']) %></p>
+                                </div>
+                                <% } %>
+
+                                <% if (!empty($inv['payment_bank_address'])) { %>
+                                <div style="grid-column: 1 / -1;">
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Bank Address / Branch Location</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.86rem; color: #FFFFFF;"><%- e($inv['payment_bank_address']) %></p>
+                                </div>
+                                <% } %>
                             </div>
-                            <% } %>
-
-                            <% if (!empty($inv['payment_bank_name'])) { %>
-                            <div>
-                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Bank / Financial Institution</p>
-                                <p style="font-family: var(--font-mono); font-size: 0.94rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['payment_bank_name']) %></p>
-                            </div>
-                            <% } %>
-
-                            <% if (!empty($inv['payment_account_number'])) { %>
-                            <div>
-                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Account Number / IBAN</p>
-                                <p style="font-family: var(--font-mono); font-size: 0.98rem; font-weight: 700; color: #C6A664; word-break: break-all;"><%- e($inv['payment_account_number']) %></p>
-                            </div>
-                            <% } %>
-
-                            <% if (!empty($inv['payment_routing_details'])) { %>
-                            <div>
-                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Routing / SWIFT / BIC / Sort Code</p>
-                                <p style="font-family: var(--font-mono); font-size: 0.92rem; color: #FFFFFF;"><%- e($inv['payment_routing_details']) %></p>
-                            </div>
-                            <% } %>
-
-                            <% if (!empty($inv['payment_bank_address'])) { %>
-                            <div style="grid-column: 1 / -1;">
-                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Bank Address / Branch Location</p>
-                                <p style="font-family: var(--font-mono); font-size: 0.92rem; color: #FFFFFF;"><%- e($inv['payment_bank_address']) %></p>
-                            </div>
-                            <% } %>
-                        </div>
-                    </div>
-                    <% } %>
-
-                    <% if ($hasCrypto) { %>
-                    <div>
-                        <p style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.16em; color: #C6A664; font-weight: 700; margin-bottom: 0.75rem;">
-                            ₿ <%- $hasBank ? 'Option B — ' : '' %>Cryptocurrency / Digital Asset Remittance
-                        </p>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.15rem;">
-                            <% if (!empty($inv['crypto_currency'])) { %>
-                            <div>
-                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Accepted Cryptocurrency / Coin</p>
-                                <p style="font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: #FFFFFF;"><%- e($inv['crypto_currency']) %></p>
-                            </div>
-                            <% } %>
-
-                            <% if (!empty($inv['crypto_network'])) { %>
-                            <div>
-                                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Blockchain Network / Protocol</p>
-                                <p style="font-family: var(--font-mono); font-size: 0.95rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['crypto_network']) %></p>
-                            </div>
-                            <% } %>
-                        </div>
-
-                        <% if (!empty($inv['crypto_wallet_address'])) { %>
-                        <div style="margin-top: 0.9rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(198, 166, 100, 0.45); padding: 0.85rem 1rem;">
-                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.25rem;">Receiving Crypto Wallet Address</p>
-                            <p style="font-family: var(--font-mono); font-size: 0.98rem; font-weight: 700; color: #C6A664; word-break: break-all; margin: 0;"><%- e($inv['crypto_wallet_address']) %></p>
                         </div>
                         <% } %>
 
-                        <% if (!empty($inv['crypto_memo'])) { %>
-                        <div style="margin-top: 0.75rem;">
-                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.2rem;">Destination Tag / Memo / Network Note</p>
-                            <p style="font-family: var(--font-mono); font-size: 0.88rem; color: #FFFFFF;"><%- e($inv['crypto_memo']) %></p>
+                        <% if ($hasCrypto) { %>
+                        <div>
+                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700; margin-bottom: 0.6rem;">
+                                ₿ <%- $hasBank ? 'Option B — ' : '' %>Cryptocurrency / Digital Asset Remittance
+                            </p>
+                            <div class="inv-grid-2" style="gap: 0.95rem;">
+                                <% if (!empty($inv['crypto_currency'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Accepted Cryptocurrency / Coin</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.9rem; font-weight: 700; color: #FFFFFF;"><%- e($inv['crypto_currency']) %></p>
+                                </div>
+                                <% } %>
+
+                                <% if (!empty($inv['crypto_network'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Blockchain Network / Protocol</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.9rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['crypto_network']) %></p>
+                                </div>
+                                <% } %>
+                            </div>
+
+                            <% if (!empty($inv['crypto_wallet_address'])) { %>
+                            <div style="margin-top: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(198, 166, 100, 0.45); padding: 0.7rem 0.9rem;">
+                                <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.2rem;">Receiving Crypto Wallet Address</p>
+                                <p style="font-family: var(--font-mono); font-size: 0.9rem; font-weight: 700; color: #C6A664; word-break: break-all; margin: 0;"><%- e($inv['crypto_wallet_address']) %></p>
+                            </div>
+                            <% } %>
+
+                            <% if (!empty($inv['crypto_memo'])) { %>
+                            <div style="margin-top: 0.65rem;">
+                                <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Destination Tag / Memo / Network Note</p>
+                                <p style="font-family: var(--font-mono); font-size: 0.84rem; color: #FFFFFF;"><%- e($inv['crypto_memo']) %></p>
+                            </div>
+                            <% } %>
                         </div>
                         <% } %>
-                    </div>
-                    <% } %>
 
-                    <% if (!empty($inv['payment_instructions'])) { %>
-                        <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.12); font-size: 0.85rem; color: #D8D1C5; line-height: 1.6;">
-                            <strong style="color: #C6A664; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.12em; display: block; margin-bottom: 0.25rem;">Additional Payment Instructions &amp; Notes:</strong>
-                            <%- nl2br(e($inv['payment_instructions'])) %>
+                        <% if (!empty($inv['payment_instructions'])) { %>
+                            <div style="margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid rgba(255,255,255,0.12); font-size: 0.8rem; color: #D8D1C5; line-height: 1.55;">
+                                <strong style="color: #C6A664; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.12em; display: block; margin-bottom: 0.2rem;">Additional Payment Instructions &amp; Notes:</strong>
+                                <%- nl2br(e($inv['payment_instructions'])) %>
+                            </div>
+                        <% } %>
+                    </div>
+
+                    <!-- Footer / Authorization -->
+                    <div class="inv-footer-box" style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1.25rem; padding-top: 1rem; border-top: 1px solid #DCD5C9;">
+                        <div style="max-width: 460px;">
+                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #6E6A63; margin-bottom: 0.3rem;">
+                                Authentication &amp; 72-Hour Bidding Activation Notice
+                            </p>
+                            <p style="font-size: 0.76rem; color: #57524C; line-height: 1.5;">
+                                Upon confirmation of the authentication fee remittance above, independent connoisseurship &amp; AI-powered authentication completes and your masterpiece is automatically scheduled to open live collector bidding after the standard 72-hour exhibition preview window.
+                            </p>
                         </div>
-                    <% } %>
-                </div>
-
-                <!-- Footer / Authorization -->
-                <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1.5rem; padding-top: 1.25rem; border-top: 1px solid #DCD5C9;">
-                    <div style="max-width: 460px;">
-                        <p style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; color: #6E6A63; margin-bottom: 0.35rem;">
-                            Authentication &amp; 72-Hour Bidding Activation Notice
-                        </p>
-                        <p style="font-size: 0.78rem; color: #57524C; line-height: 1.55;">
-                            Upon confirmation of the authentication fee remittance above, independent connoisseurship &amp; AI-powered authentication completes and your masterpiece is automatically scheduled to open live collector bidding after the standard 72-hour exhibition preview window.
-                        </p>
-                    </div>
-                    <div style="text-align: right;">
-                        <p style="font-family: var(--font-serif); font-size: 1.35rem; font-style: italic; color: #161514; margin-bottom: 0.25rem;">
-                            ArtAlly Curatorial &amp; AI Board
-                        </p>
-                        <p style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.15em; color: #8C6D32;">
-                            Authorized Provenance &amp; Billing Seal
-                        </p>
+                        <div style="text-align: right;">
+                            <p style="font-family: var(--font-serif); font-size: 1.3rem; font-style: italic; color: #161514; margin-bottom: 0.2rem;">
+                                ArtAlly Curatorial &amp; AI Board
+                            </p>
+                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #8C6D32;">
+                                Authorized Provenance &amp; Billing Seal
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -456,13 +585,106 @@ function invViewAddPresetItem(item) {
     invViewRecalc();
 }
 
+function downloadOfficialInvoicePdf() {
+    var el = document.getElementById('invoice-printable-area');
+    if (!el) {
+        window.print();
+        return;
+    }
+    if (typeof html2pdf === 'undefined') {
+        window.print();
+        return;
+    }
+
+    var btn = document.getElementById('btn-download-invoice-pdf');
+    var origText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Generating Clean PDF...';
+    }
+
+    el.classList.add('pdf-export-mode');
+
+    // Smart Page-Break Spacer Engine: ensure no .pdf-no-break block or table row crosses an A4 page boundary
+    var adjustedElements = [];
+    try {
+        var pageWidthPx = 794;
+        var pageHeightPx = Math.floor(pageWidthPx * (281 / 194));
+        var blocks = el.querySelectorAll('.pdf-no-break');
+        for (var i = 0; i < blocks.length; i++) {
+            var blk = blocks[i];
+            var parentNoBreak = blk.parentElement ? blk.parentElement.closest('.pdf-no-break') : null;
+            if (parentNoBreak && el.contains(parentNoBreak)) continue;
+
+            var rootRect = el.getBoundingClientRect();
+            var blkRect = blk.getBoundingClientRect();
+            var relTop = blkRect.top - rootRect.top;
+            var height = blkRect.height;
+            var relBottom = relTop + height;
+
+            var startPage = Math.floor(relTop / pageHeightPx);
+            var endPage = Math.floor((relBottom - 4) / pageHeightPx);
+
+            if (startPage !== endPage && height < pageHeightPx * 0.92) {
+                var pushDown = (startPage + 1) * pageHeightPx - relTop + 14;
+                var prevMargin = blk.style.marginTop || '';
+                var computedMargin = parseFloat(window.getComputedStyle(blk).marginTop || '0') || 0;
+                blk.style.marginTop = (computedMargin + pushDown) + 'px';
+                adjustedElements.push({ el: blk, prevMargin: prevMargin });
+            }
+        }
+    } catch (e) {
+        console.warn('Invoice PDF page-break pre-calculation notice:', e);
+    }
+
+    var opt = {
+        margin: [8, 8, 8, 8],
+        filename: '<%- e($safePdfFilename) %>',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+            scale: 2,
+            useCORS: true,
+            letterRendering: true,
+            backgroundColor: '#FBF9F5',
+            windowWidth: 820
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['.pdf-no-break', 'tr', 'tfoot', '.inv-remittance-box'] }
+    };
+
+    html2pdf().set(opt).from(el).save().then(function () {
+        adjustedElements.forEach(function (item) {
+            item.el.style.marginTop = item.prevMargin;
+        });
+        el.classList.remove('pdf-export-mode');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origText;
+        }
+    }).catch(function () {
+        adjustedElements.forEach(function (item) {
+            item.el.style.marginTop = item.prevMargin;
+        });
+        el.classList.remove('pdf-export-mode');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origText;
+        }
+        window.print();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     var params = new URLSearchParams(window.location.search);
     if (params.get('edit') === '1') {
         var ed = document.getElementById('admin-invoice-breakdown-editor');
         if (ed) ed.style.display = 'block';
     }
-    if (params.get('print') === '1') {
+    if (params.get('download_pdf') === '1') {
+        setTimeout(function () {
+            downloadOfficialInvoicePdf();
+        }, 450);
+    } else if (params.get('print') === '1') {
         setTimeout(function () {
             window.print();
         }, 350);

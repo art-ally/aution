@@ -720,7 +720,28 @@ app.get('/artists/:slug', (req, res) => {
           String(inv.artist_name).trim().toLowerCase() ===
             String(artist.display_name).trim().toLowerCase())
     )
-    .sort((a, b) => Number(b.id) - Number(a.id));
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .map((inv) => normalizeInvoiceBreakdown(inv));
+
+  const contractAgreements = db
+    .where(
+      'contract_agreements',
+      (agr) =>
+        Number(agr.artist_id || 0) === Number(artist.user_id) ||
+        (agr.artist_email &&
+          artistUserObj.email &&
+          String(agr.artist_email).toLowerCase() === String(artistUserObj.email).toLowerCase()) ||
+        (agr.artist_full_name &&
+          artist.display_name &&
+          String(agr.artist_full_name).trim().toLowerCase() ===
+            String(artist.display_name).trim().toLowerCase()) ||
+        (agr.artist_professional_name &&
+          artist.display_name &&
+          String(agr.artist_professional_name).trim().toLowerCase() ===
+            String(artist.display_name).trim().toLowerCase())
+    )
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .map((agr) => normalizeContractAgreement(db, agr));
 
   res.renderPage('public/artist-profile', {
     pageTitle: `${artist.display_name} — Artist Portfolio & Auctions | ArtAlly`,
@@ -729,6 +750,7 @@ app.get('/artists/:slug', (req, res) => {
     isFollowing,
     isApproved,
     authInvoices,
+    contractAgreements,
   });
 });
 
@@ -1323,7 +1345,34 @@ app.get('/artist/dashboard', (req, res) => {
             String(inv.artist_name).trim().toLowerCase() ===
               String(profile.display_name || '').trim().toLowerCase()))
     )
-    .sort((a, b) => Number(b.id) - Number(a.id));
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .map((inv) => normalizeInvoiceBreakdown(inv));
+
+  const artistInvoiceIds = new Set(authInvoices.map((inv) => Number(inv.id)));
+
+  const contractAgreements = db
+    .where(
+      'contract_agreements',
+      (agr) =>
+        Number(agr.artist_id || 0) === Number(user.id) ||
+        (agr.invoice_id && artistInvoiceIds.has(Number(agr.invoice_id))) ||
+        (agr.artwork_id && artistArtworkIds.has(Number(agr.artwork_id))) ||
+        (agr.artist_email &&
+          user.email &&
+          String(agr.artist_email).trim().toLowerCase() === String(user.email).trim().toLowerCase()) ||
+        (agr.artist_full_name &&
+          (String(agr.artist_full_name).trim().toLowerCase() ===
+            String(user.name || '').trim().toLowerCase() ||
+            String(agr.artist_full_name).trim().toLowerCase() ===
+              String(profile.display_name || '').trim().toLowerCase())) ||
+        (agr.artist_professional_name &&
+          (String(agr.artist_professional_name).trim().toLowerCase() ===
+            String(user.name || '').trim().toLowerCase() ||
+            String(agr.artist_professional_name).trim().toLowerCase() ===
+              String(profile.display_name || '').trim().toLowerCase()))
+    )
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .map((agr) => normalizeContractAgreement(db, agr));
 
   const submissions = rawSubs
     .map((sub) => {
@@ -1386,6 +1435,7 @@ app.get('/artist/dashboard', (req, res) => {
     orders,
     payouts,
     authInvoices,
+    contractAgreements,
     notifications: notifications.slice(0, 8),
   });
 });
@@ -2719,10 +2769,36 @@ function handleAdminDashboard(req, res) {
     .all('authentication_invoices')
     .sort((a, b) => Number(b.id) - Number(a.id))
     .map((inv) => normalizeInvoiceBreakdown(inv));
-  const allArtistsList = allArtistProfiles.map((ap) => ({
-    ...ap,
-    user: db.find('users', Number(ap.user_id)) || {},
-  }));
+  const contractAgreements = db
+    .all('contract_agreements')
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .map((agr) => normalizeContractAgreement(db, agr));
+  const allArtistsList = allArtistProfiles
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .map((ap) => {
+      const apUser = db.find('users', Number(ap.user_id)) || {};
+      const apArtworks = allArtworks.filter((w) => Number(w.artist_id) === Number(ap.user_id));
+      const apInvoices = authInvoices.filter(
+        (inv) =>
+          Number(inv.artist_id || 0) === Number(ap.user_id) ||
+          (inv.artist_email &&
+            apUser.email &&
+            String(inv.artist_email).trim().toLowerCase() ===
+              String(apUser.email).trim().toLowerCase()) ||
+          (inv.artist_name &&
+            (String(inv.artist_name).trim().toLowerCase() ===
+              String(ap.display_name || '').trim().toLowerCase() ||
+              String(inv.artist_name).trim().toLowerCase() ===
+                String(apUser.name || '').trim().toLowerCase()))
+      );
+      return {
+        ...ap,
+        user: apUser,
+        artworks_count: Math.max(1, apArtworks.length),
+        artworks_list: apArtworks,
+        latest_invoice: apInvoices[0] || null,
+      };
+    });
   const allArtworksList = allArtworks.map((art) => ({
     ...art,
     artist_user: db.find('users', Number(art.artist_id)) || {},
@@ -2760,6 +2836,7 @@ function handleAdminDashboard(req, res) {
     payouts,
     walletWithdrawals,
     authInvoices,
+    contractAgreements,
     defaultAuthLineItems: DEFAULT_AUTHENTICATION_LINE_ITEMS,
     allArtistsList,
     allArtworksList,
@@ -4258,6 +4335,441 @@ function normalizeInvoiceBreakdown(inv) {
   };
 }
 
+function buildArtistArtworksSchedule(
+  db,
+  artistId,
+  fallbackArtworkId = null,
+  fallbackTitle = '',
+  fallbackDetails = '',
+  fallbackRef = ''
+) {
+  const uid = Number(artistId || 0);
+  const artistUser = uid > 0 ? db.find('users', uid) : null;
+  const artistProfile = uid > 0 ? db.findBy('artist_profiles', 'user_id', uid) : null;
+  const artistDisplayName =
+    artistProfile?.display_name || artistUser?.name || 'Registered Studio Artist';
+
+  const works =
+    uid > 0
+      ? db
+          .where('artworks', (a) => Number(a.artist_id) === uid)
+          .sort((a, b) => Number(a.id) - Number(b.id))
+      : [];
+
+  if (works.length > 0) {
+    return works.map((w, idx) => {
+      const sub = db.findBy('artwork_submissions', 'artwork_id', Number(w.id)) || {};
+      const auc = db.findBy('auctions', 'artwork_id', Number(w.id)) || {};
+      const reserveVal = Number(
+        w.agreed_price ||
+          sub.agreed_price ||
+          w.reserve_price ||
+          sub.reserve_price ||
+          w.artist_expected_price ||
+          sub.artist_expected_price ||
+          w.starting_bid ||
+          1500
+      );
+      const startingVal = Number(w.starting_bid || Math.round(reserveVal * 0.8) || 1000);
+      return {
+        index: idx + 1,
+        artwork_id: Number(w.id),
+        title: w.title || `Consigned Masterpiece #${idx + 1}`,
+        artist_name: artistDisplayName,
+        reference_code:
+          sub.reference_code || `AA-LOT-${helpers.gmdate('Y')}-${String(w.id).padStart(4, '0')}`,
+        year_created: w.year_created || helpers.gmdate('Y'),
+        medium: w.medium || 'Fine Art Original Medium',
+        dimensions: w.dimensions || 'Studio Standard Dimensions',
+        classification: w.classification || 'Original Unique Work (1/1)',
+        edition_details: w.edition_number || 'Unique 1/1 Original',
+        condition_report:
+          w.condition_report || 'Pristine studio condition; inspected and verified.',
+        signature_marks: w.artist_attribution || 'Hand-signed and dated by the Artist',
+        provenance: w.provenance || 'Direct from the Artist Studio; accompanied by Digital COA.',
+        reserve_price: reserveVal,
+        opening_bid: startingVal,
+        estimate_low: Number(w.estimate_low || reserveVal),
+        estimate_high: Number(w.estimate_high || Math.round(reserveVal * 1.4)),
+        currency: w.currency || sub.currency || 'USD',
+      };
+    });
+  }
+
+  if (fallbackArtworkId && Number(fallbackArtworkId) > 0) {
+    const w = db.find('artworks', Number(fallbackArtworkId));
+    if (w) {
+      const sub = db.findBy('artwork_submissions', 'artwork_id', Number(w.id)) || {};
+      const reserveVal = Number(
+        w.agreed_price || w.reserve_price || w.artist_expected_price || w.starting_bid || 1500
+      );
+      return [
+        {
+          index: 1,
+          artwork_id: Number(w.id),
+          title: w.title || fallbackTitle || 'Consigned Studio Masterpiece',
+          artist_name: artistDisplayName,
+          reference_code:
+            sub.reference_code ||
+            fallbackRef ||
+            `AA-LOT-${helpers.gmdate('Y')}-${String(w.id).padStart(4, '0')}`,
+          year_created: w.year_created || helpers.gmdate('Y'),
+          medium: w.medium || fallbackDetails || 'Original Fine Art Medium',
+          dimensions: w.dimensions || 'As Recorded in Studio Dossier',
+          classification: w.classification || 'Original Unique Work (1/1)',
+          edition_details: w.edition_number || 'Unique 1/1 Original',
+          condition_report: w.condition_report || 'Pristine studio condition.',
+          signature_marks: w.artist_attribution || 'Signed by the Artist',
+          provenance: w.provenance || 'Direct from the Artist Studio',
+          reserve_price: reserveVal,
+          opening_bid: Number(w.starting_bid || 1000),
+          estimate_low: Number(w.estimate_low || reserveVal),
+          estimate_high: Number(w.estimate_high || Math.round(reserveVal * 1.4)),
+          currency: w.currency || 'USD',
+        },
+      ];
+    }
+  }
+
+  return [
+    {
+      index: 1,
+      artwork_id: null,
+      title: fallbackTitle || 'Consigned Studio Artwork',
+      artist_name: artistDisplayName,
+      reference_code: fallbackRef || `AA-LOT-${helpers.gmdate('Y')}-0101`,
+      year_created: helpers.gmdate('Y'),
+      medium: fallbackDetails || 'Original Fine Art Medium & Support',
+      dimensions: 'Recorded in Studio Submission Dossier',
+      classification: 'Original Unique Work (1/1)',
+      edition_details: 'Unique 1/1 Original',
+      condition_report: 'Pristine studio condition; subject to AI & Curatorial verification.',
+      signature_marks: 'Signed and authenticated by the Artist',
+      provenance: 'Direct from the Artist Studio',
+      reserve_price: 2500,
+      opening_bid: 1800,
+      estimate_low: 2500,
+      estimate_high: 4000,
+      currency: 'USD',
+    },
+  ];
+}
+
+function normalizeContractAgreement(db, agr) {
+  if (!agr || typeof agr !== 'object') return agr;
+
+  const uid = Number(agr.artist_id || 0);
+  const artistUser = uid > 0 ? db.find('users', uid) : null;
+  const artistProfile = uid > 0 ? db.findBy('artist_profiles', 'user_id', uid) : null;
+
+  // Find linked invoice so authentication descriptions always align with the invoice
+  let linkedInvoice =
+    agr.invoice_id && Number(agr.invoice_id) > 0
+      ? db.find('authentication_invoices', Number(agr.invoice_id))
+      : null;
+
+  if (!linkedInvoice && uid > 0) {
+    const artistInvoices = db
+      .where('authentication_invoices', (inv) => Number(inv.artist_id || 0) === uid)
+      .sort((a, b) => Number(b.id) - Number(a.id));
+    if (artistInvoices.length > 0) {
+      linkedInvoice = artistInvoices[0];
+    }
+  }
+
+  const normalizedInvoice = linkedInvoice ? normalizeInvoiceBreakdown(linkedInvoice) : null;
+
+  let lineItems = agr.line_items;
+  if (typeof lineItems === 'string') {
+    try {
+      lineItems = JSON.parse(lineItems);
+    } catch (_) {
+      lineItems = [];
+    }
+  }
+
+  // Always prefer the linked invoice's live line_items so Agreement and Invoice 100% align
+  if (normalizedInvoice && Array.isArray(normalizedInvoice.line_items) && normalizedInvoice.line_items.length > 0) {
+    lineItems = normalizedInvoice.line_items.map((item) => ({ ...item }));
+  } else if (!Array.isArray(lineItems) || lineItems.length === 0) {
+    lineItems = DEFAULT_AUTHENTICATION_LINE_ITEMS.map((item) => ({ ...item }));
+  }
+
+  const perArtworkSubtotal =
+    Math.round(lineItems.reduce((sum, item) => sum + Number(item.amount || 0), 0) * 100) / 100;
+  const vatRate = Number(agr.vat_rate || normalizedInvoice?.vat_rate || FIXED_INVOICE_VAT_RATE);
+  const perArtworkVat = Math.round(perArtworkSubtotal * (vatRate / 100) * 100) / 100;
+  const perArtworkFee = Math.round((perArtworkSubtotal + perArtworkVat) * 100) / 100;
+
+  let schedule = agr.artworks_schedule;
+  if (typeof schedule === 'string') {
+    try {
+      schedule = JSON.parse(schedule);
+    } catch (_) {
+      schedule = [];
+    }
+  }
+  if (!Array.isArray(schedule) || schedule.length === 0) {
+    schedule = buildArtistArtworksSchedule(
+      db,
+      uid,
+      agr.artwork_id || normalizedInvoice?.artwork_id,
+      normalizedInvoice?.artwork_title || '',
+      normalizedInvoice?.artwork_details || '',
+      normalizedInvoice?.reference_code || ''
+    );
+  }
+
+  const totalArtworks = Math.max(
+    1,
+    Number(agr.total_artworks || schedule.length || 1)
+  );
+
+  const totalAuthSubtotal = Math.round(perArtworkSubtotal * totalArtworks * 100) / 100;
+  const totalAuthVat = Math.round(perArtworkVat * totalArtworks * 100) / 100;
+  const totalAuthFee = Math.round(perArtworkFee * totalArtworks * 100) / 100;
+
+  const artistFullName =
+    agr.artist_full_name ||
+    artistUser?.name ||
+    artistProfile?.display_name ||
+    normalizedInvoice?.artist_name ||
+    'Registered Artist';
+  const artistProfessionalName =
+    agr.artist_professional_name ||
+    artistProfile?.display_name ||
+    artistFullName;
+  const artistEmail =
+    agr.artist_email ||
+    artistUser?.email ||
+    normalizedInvoice?.artist_email ||
+    '';
+  const artistCountry =
+    agr.artist_country ||
+    artistProfile?.country ||
+    artistUser?.country ||
+    'Switzerland';
+  const artistAddress =
+    agr.artist_address ||
+    (artistProfile?.city ? `${artistProfile.city}, ${artistCountry}` : artistCountry);
+  const artistDiscipline =
+    agr.artist_discipline ||
+    artistProfile?.discipline ||
+    'Contemporary Fine Art';
+  const artistRegistrationRef =
+    agr.artist_registration_ref ||
+    `ART-REG-${helpers.gmdate('Y')}-${String(uid || agr.id || 1).padStart(4, '0')}`;
+
+  return {
+    ...agr,
+    invoice_id: normalizedInvoice ? Number(normalizedInvoice.id) : agr.invoice_id || null,
+    invoice_number:
+      normalizedInvoice?.invoice_number || agr.invoice_number || 'INV-AUTH-ALIGNED',
+    artist_full_name: artistFullName,
+    artist_professional_name: artistProfessionalName,
+    artist_email: artistEmail,
+    artist_phone: agr.artist_phone || 'Verified Studio Contact on File',
+    artist_address: artistAddress,
+    artist_country: artistCountry,
+    artist_discipline: artistDiscipline,
+    artist_registration_ref: artistRegistrationRef,
+    total_artworks: totalArtworks,
+    artworks_schedule: schedule,
+    service_type:
+      normalizedInvoice?.service_type ||
+      agr.service_type ||
+      'Independent Curatorial Connoisseurship & AI-Powered Authentication Evaluation',
+    line_items: lineItems,
+    per_artwork_subtotal: perArtworkSubtotal,
+    vat_rate: vatRate,
+    per_artwork_vat: perArtworkVat,
+    per_artwork_fee: perArtworkFee,
+    total_auth_subtotal: totalAuthSubtotal,
+    total_auth_vat: totalAuthVat,
+    total_auth_fee: totalAuthFee,
+    currency: normalizedInvoice?.currency || agr.currency || 'USD',
+    commission_rate: Number(agr.commission_rate || 15),
+    artist_share_rate: Number(agr.artist_share_rate || 85),
+    buyer_premium_rate: Number(agr.buyer_premium_rate || 20),
+    exclusivity_type: agr.exclusivity_type || 'Non-Exclusive',
+    exclusivity_period: agr.exclusivity_period || 'Duration of Scheduled Auction Cycle',
+    governing_law:
+      agr.governing_law ||
+      'Laws of Switzerland (Canton of Geneva) & International Art Trade Conventions',
+    dispute_forum:
+      agr.dispute_forum ||
+      'Competent Commercial Courts & Arbitration Chamber of Geneva, Switzerland',
+    platform_signatory_name: agr.platform_signatory_name || 'Dr. Henri Vance',
+    platform_signatory_title:
+      agr.platform_signatory_title ||
+      'Chief Curatorial Director & Head of Authentication',
+    platform_signed_at:
+      agr.platform_signed_at || String(agr.created_at || formatUtcNow()).substring(0, 10),
+    payment_method:
+      normalizedInvoice?.payment_method || agr.payment_method || 'bank_and_crypto',
+    payment_account_name:
+      normalizedInvoice?.payment_account_name ?? agr.payment_account_name ?? '',
+    payment_bank_name:
+      normalizedInvoice?.payment_bank_name ?? agr.payment_bank_name ?? '',
+    payment_account_number:
+      normalizedInvoice?.payment_account_number ?? agr.payment_account_number ?? '',
+    payment_routing_details:
+      normalizedInvoice?.payment_routing_details ?? agr.payment_routing_details ?? '',
+    payment_bank_address:
+      normalizedInvoice?.payment_bank_address ?? agr.payment_bank_address ?? '',
+    crypto_currency:
+      normalizedInvoice?.crypto_currency ?? agr.crypto_currency ?? '',
+    crypto_network:
+      normalizedInvoice?.crypto_network ?? agr.crypto_network ?? '',
+    crypto_wallet_address:
+      normalizedInvoice?.crypto_wallet_address ?? agr.crypto_wallet_address ?? '',
+    crypto_memo: normalizedInvoice?.crypto_memo ?? agr.crypto_memo ?? '',
+    payment_instructions:
+      normalizedInvoice?.payment_instructions ?? agr.payment_instructions ?? '',
+  };
+}
+
+function createOrSyncContractAgreementFromInvoice(db, invoice, adminId = 1, totalArtworksOverride = null) {
+  const normInv = normalizeInvoiceBreakdown(invoice);
+  const uid = Number(normInv.artist_id || 0);
+  const artistUser = uid > 0 ? db.find('users', uid) : null;
+  const artistProfile = uid > 0 ? db.findBy('artist_profiles', 'user_id', uid) : null;
+
+  const schedule = buildArtistArtworksSchedule(
+    db,
+    uid,
+    normInv.artwork_id,
+    normInv.artwork_title,
+    normInv.artwork_details,
+    normInv.reference_code
+  );
+
+  const totalArtworks = Math.max(
+    1,
+    Number(totalArtworksOverride || schedule.length || 1)
+  );
+
+  const perArtworkSubtotal = Number(normInv.subtotal_amount || 0);
+  const vatRate = Number(normInv.vat_rate || FIXED_INVOICE_VAT_RATE);
+  const perArtworkVat = Number(normInv.vat_amount || 0);
+  const perArtworkFee = Number(normInv.fee_amount || 0);
+
+  const totalAuthSubtotal = Math.round(perArtworkSubtotal * totalArtworks * 100) / 100;
+  const totalAuthVat = Math.round(perArtworkVat * totalArtworks * 100) / 100;
+  const totalAuthFee = Math.round(perArtworkFee * totalArtworks * 100) / 100;
+
+  const existing = db.findBy('contract_agreements', 'invoice_id', Number(normInv.id));
+  if (existing) {
+    return db.update('contract_agreements', existing.id, {
+      invoice_number: normInv.invoice_number,
+      artist_id: uid > 0 ? uid : existing.artist_id,
+      artwork_id: normInv.artwork_id || existing.artwork_id,
+      service_type: normInv.service_type,
+      line_items: normInv.line_items,
+      total_artworks: totalArtworksOverride ? totalArtworks : Math.max(1, Number(existing.total_artworks || totalArtworks)),
+      artworks_schedule: schedule,
+      per_artwork_subtotal: perArtworkSubtotal,
+      vat_rate: vatRate,
+      per_artwork_vat: perArtworkVat,
+      per_artwork_fee: perArtworkFee,
+      total_auth_subtotal: Math.round(
+        perArtworkSubtotal *
+          (totalArtworksOverride ? totalArtworks : Math.max(1, Number(existing.total_artworks || totalArtworks))) *
+          100
+      ) / 100,
+      total_auth_vat: Math.round(
+        perArtworkVat *
+          (totalArtworksOverride ? totalArtworks : Math.max(1, Number(existing.total_artworks || totalArtworks))) *
+          100
+      ) / 100,
+      total_auth_fee: Math.round(
+        perArtworkFee *
+          (totalArtworksOverride ? totalArtworks : Math.max(1, Number(existing.total_artworks || totalArtworks))) *
+          100
+      ) / 100,
+      currency: normInv.currency || 'USD',
+      payment_method: normInv.payment_method || 'bank_and_crypto',
+      payment_account_name: normInv.payment_account_name || '',
+      payment_bank_name: normInv.payment_bank_name || '',
+      payment_account_number: normInv.payment_account_number || '',
+      payment_routing_details: normInv.payment_routing_details || '',
+      payment_bank_address: normInv.payment_bank_address || '',
+      crypto_currency: normInv.crypto_currency || '',
+      crypto_network: normInv.crypto_network || '',
+      crypto_wallet_address: normInv.crypto_wallet_address || '',
+      crypto_memo: normInv.crypto_memo || '',
+      payment_instructions: normInv.payment_instructions || '',
+    });
+  }
+
+  const randomAgrNum = Math.floor(1000 + Math.random() * 9000);
+  const agreementNumber = `AGR-AA-${helpers.gmdate('Y')}-${randomAgrNum}`;
+  const artistFullName =
+    artistUser?.name || artistProfile?.display_name || normInv.artist_name || 'Registered Artist';
+  const artistProfessionalName = artistProfile?.display_name || artistFullName;
+  const artistCountry = artistProfile?.country || artistUser?.country || 'Switzerland';
+  const artistAddress =
+    (artistProfile?.city ? `${artistProfile.city}, ${artistCountry}` : '') ||
+    normInv.artist_details ||
+    artistCountry;
+
+  return db.insert('contract_agreements', {
+    agreement_number: agreementNumber,
+    invoice_id: Number(normInv.id),
+    invoice_number: normInv.invoice_number,
+    artist_id: uid > 0 ? uid : null,
+    artwork_id: normInv.artwork_id || null,
+    artist_full_name: artistFullName,
+    artist_professional_name: artistProfessionalName,
+    artist_email: artistUser?.email || normInv.artist_email || '',
+    artist_phone: 'Verified Studio Contact on File',
+    artist_address: artistAddress,
+    artist_country: artistCountry,
+    artist_discipline: artistProfile?.discipline || 'Contemporary Fine Art',
+    artist_registration_ref: `ART-REG-${helpers.gmdate('Y')}-${String(uid || 1).padStart(4, '0')}`,
+    total_artworks: totalArtworks,
+    artworks_schedule: schedule,
+    service_type: normInv.service_type,
+    line_items: normInv.line_items,
+    per_artwork_subtotal: perArtworkSubtotal,
+    vat_rate: vatRate,
+    per_artwork_vat: perArtworkVat,
+    per_artwork_fee: perArtworkFee,
+    total_auth_subtotal: totalAuthSubtotal,
+    total_auth_vat: totalAuthVat,
+    total_auth_fee: totalAuthFee,
+    currency: normInv.currency || 'USD',
+    commission_rate: 15.0,
+    artist_share_rate: 85.0,
+    buyer_premium_rate: 20.0,
+    exclusivity_type: 'Non-Exclusive',
+    exclusivity_period: 'Duration of Scheduled Auction Cycle',
+    governing_law:
+      'Laws of Switzerland (Canton of Geneva) & International Art Trade Conventions',
+    dispute_forum:
+      'Competent Commercial Courts & Arbitration Chamber of Geneva, Switzerland',
+    platform_signatory_name: 'Dr. Henri Vance',
+    platform_signatory_title: 'Chief Curatorial Director & Head of Authentication',
+    platform_signed_at: helpers.gmdate('Y-m-d'),
+    artist_signed: false,
+    artist_signature_text: null,
+    artist_signed_at: null,
+    status: 'issued_presigned',
+    payment_method: normInv.payment_method || 'bank_and_crypto',
+    payment_account_name: normInv.payment_account_name || '',
+    payment_bank_name: normInv.payment_bank_name || '',
+    payment_account_number: normInv.payment_account_number || '',
+    payment_routing_details: normInv.payment_routing_details || '',
+    payment_bank_address: normInv.payment_bank_address || '',
+    crypto_currency: normInv.crypto_currency || '',
+    crypto_network: normInv.crypto_network || '',
+    crypto_wallet_address: normInv.crypto_wallet_address || '',
+    crypto_memo: normInv.crypto_memo || '',
+    payment_instructions: normInv.payment_instructions || '',
+    created_by: Number(adminId || 1),
+  });
+}
+
 app.post('/admin/invoices/generate', (req, res) => {
   const admin = requireRole(req, res, 'admin');
   if (!admin) return;
@@ -4368,15 +4880,23 @@ app.post('/admin/invoices/generate', (req, res) => {
     created_by: Number(admin.id),
   });
 
+  // Automatically create/sync an aligned Artist Contract Agreement with the invoice's authentication descriptions
+  const alignedAgreement = createOrSyncContractAgreementFromInvoice(
+    db,
+    invoice,
+    admin.id,
+    req.body.total_artworks || null
+  );
+
   if (resolvedArtistId) {
     db.insert('notifications', {
       user_id: resolvedArtistId,
       type: 'authentication_invoice_issued',
-      title: `📄 Authentication Invoice Issued: ${invoiceNumber} (${helpers.format_money_exact(
+      title: `📄 Authentication Invoice & Aligned Contract Issued: ${invoiceNumber} (${helpers.format_money_exact(
         feeAmount,
         currency
       )})`,
-      message: `An official Curatorial & AI-Powered Authentication Payment Invoice (${invoiceNumber}) for "${artworkTitle}" has been generated (${lineItems.length} item(s), Subtotal ${helpers.format_money_exact(subtotalAmount, currency)} + 15% VAT ${helpers.format_money_exact(vatAmount, currency)} = Total Due ${helpers.format_money_exact(feeAmount, currency)}). A copy is now available to view and download on your Artist Page and Studio Dashboard.`,
+      message: `An official Curatorial & AI-Powered Authentication Payment Invoice (${invoiceNumber}) and Aligned Artist Contract Agreement (${alignedAgreement.agreement_number}) for "${artworkTitle}" have been generated (${lineItems.length} item(s), Subtotal ${helpers.format_money_exact(subtotalAmount, currency)} + 15% VAT ${helpers.format_money_exact(vatAmount, currency)} = Per-Artwork Fee ${helpers.format_money_exact(feeAmount, currency)}). Copies are now available on your Artist Page and Studio Dashboard.`,
       action_url: `/invoices/${invoice.id}`,
       read_at: null,
     });
@@ -4388,13 +4908,13 @@ app.post('/admin/invoices/generate', (req, res) => {
     'AUTHENTICATION_INVOICE_GENERATED',
     'authentication_invoice',
     invoice.id,
-    `Generated authentication invoice ${invoiceNumber} for ${artistName} ("${artworkTitle}") — ${lineItems.length} item(s), Subtotal: ${currency} ${subtotalAmount}, 15% VAT: ${currency} ${vatAmount}, Total Fee: ${currency} ${feeAmount}`,
+    `Generated authentication invoice ${invoiceNumber} and aligned contract agreement ${alignedAgreement.agreement_number} for ${artistName} ("${artworkTitle}") — ${lineItems.length} item(s), Subtotal: ${currency} ${subtotalAmount}, 15% VAT: ${currency} ${vatAmount}, Total Fee: ${currency} ${feeAmount}`,
     req.ip
   );
 
   req.setFlash(
     'success',
-    `Authentication Invoice ${invoiceNumber} generated for ${artistName} ("${artworkTitle}") with ${lineItems.length} breakdown description(s) and 15% VAT. Opening print dialog and published to the Artist Page for download.`
+    `Authentication Invoice ${invoiceNumber} (and aligned Contract Agreement ${alignedAgreement.agreement_number}) generated for ${artistName} ("${artworkTitle}") with ${lineItems.length} breakdown description(s) and 15% VAT. Opening print dialog and published to the Artist Page for download.`
   );
   res.redirect(`/invoices/${invoice.id}?print=1`);
 });
@@ -4425,13 +4945,18 @@ app.post('/admin/invoices/update-breakdown', (req, res) => {
     );
   }
 
-  db.update('authentication_invoices', invoiceId, {
+  const updatedInv = db.update('authentication_invoices', invoiceId, {
     line_items: lineItems,
     subtotal_amount: subtotalAmount,
     vat_rate: vatRate,
     vat_amount: vatAmount,
     fee_amount: feeAmount,
   });
+
+  // Automatically sync any aligned Contract Agreement linked to this invoice
+  if (updatedInv) {
+    createOrSyncContractAgreementFromInvoice(db, updatedInv, admin.id);
+  }
 
   logAudit(
     db,
@@ -4578,10 +5103,17 @@ app.get('/invoices/:id', (req, res) => {
     return res.redirect('/');
   }
   const invoice = normalizeInvoiceBreakdown(rawInvoice);
+  const rawLinkedAgr =
+    db.findBy('contract_agreements', 'invoice_id', Number(invoice.id)) ||
+    (invoice.artist_id
+      ? db.findBy('contract_agreements', 'artist_id', Number(invoice.artist_id))
+      : null);
+  const linkedAgreement = rawLinkedAgr ? normalizeContractAgreement(db, rawLinkedAgr) : null;
 
   res.renderPage('public/authentication-invoice', {
     pageTitle: `Authentication Invoice ${invoice.invoice_number} — ${invoice.artwork_title} | ArtAlly`,
     invoice,
+    linkedAgreement,
     defaultAuthLineItems: DEFAULT_AUTHENTICATION_LINE_ITEMS,
   });
 });
@@ -4631,34 +5163,39 @@ app.get('/invoices/:id/download', (req, res) => {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ArtAlly Authentication Invoice — ${helpers.e(invoice.invoice_number)}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
-  body { font-family: Georgia, 'Times New Roman', serif; background: #F4EFE6; color: #161514; margin: 0; padding: 32px 16px; }
-  .sheet { max-width: 840px; margin: 0 auto; background: #FBF9F5; border: 2px solid #B8965A; padding: 42px; box-sizing: border-box; }
-  .inner { border: 1px solid rgba(184,150,90,0.45); padding: 32px; }
-  .top-actions { max-width: 840px; margin: 0 auto 16px; display: flex; justify-content: flex-end; gap: 12px; font-family: sans-serif; }
+  @page { size: A4 portrait; margin: 10mm 10mm; }
+  body { font-family: Georgia, 'Times New Roman', serif; background: #F4EFE6; color: #161514; margin: 0; padding: 32px 16px; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .sheet { max-width: 820px; margin: 0 auto; background: #FBF9F5; border: 2px solid #B8965A; padding: 32px; box-sizing: border-box; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .inner { border: 1px solid rgba(184,150,90,0.45); padding: 26px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .top-actions { max-width: 820px; margin: 0 auto 16px; display: flex; justify-content: flex-end; gap: 12px; font-family: sans-serif; }
   .btn { background: #161514; color: #C6A664; border: 1px solid #C6A664; padding: 10px 18px; cursor: pointer; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; text-decoration: none; }
+  .btn-gold { background: #C6A664; color: #161514; border: 1px solid #161514; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #161514; padding-bottom: 20px; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
   .eyebrow { font-family: sans-serif; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: #8C6D32; font-weight: 700; margin: 0 0 6px; }
   h1 { font-size: 32px; margin: 0 0 6px; font-weight: 500; letter-spacing: 0.03em; }
   .badge { display: inline-block; font-family: sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; padding: 5px 12px; border: 1px solid ${isPaid ? '#2D6A4F' : '#8C6D32'}; background: ${isPaid ? '#E6F4EA' : '#F7EFE0'}; color: ${isPaid ? '#1B4332' : '#705522'}; margin-bottom: 8px; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
-  .box { background: rgba(22,21,20,0.03); border: 1px solid #DCD5C9; padding: 18px; }
+  .box { background: rgba(22,21,20,0.03); border: 1px solid #DCD5C9; padding: 18px; break-inside: avoid !important; page-break-inside: avoid !important; }
   .label { font-family: sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: #8C6D32; font-weight: 700; margin: 0 0 8px; }
   table { width: 100%; border-collapse: collapse; border: 1px solid #161514; margin-bottom: 24px; font-family: sans-serif; }
+  tr, thead, tfoot, .bank-box, .pdf-no-break { break-inside: avoid !important; page-break-inside: avoid !important; }
   th { background: #161514; color: #FBF9F5; text-align: left; padding: 12px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; }
   td { padding: 16px 14px; border-bottom: 1px solid #DCD5C9; font-size: 14px; vertical-align: top; }
   .bank-box { background: #161514; color: #F4EFE6; padding: 24px; border: 1px solid #B8965A; margin-bottom: 24px; font-family: sans-serif; }
   .bank-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
   .bank-item-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #A69F93; margin: 0 0 4px; }
   .bank-item-val { font-family: monospace; font-size: 15px; font-weight: 700; color: #FFFFFF; margin: 0; word-break: break-all; }
-  @media print { .top-actions { display: none !important; } body { background: #fff; padding: 0; } .sheet { border: 2px solid #000; } }
+  @media print { .top-actions { display: none !important; } body { background: #fff; padding: 0; } .sheet { border: 2px solid #B8965A; max-width: 100%; padding: 18px; } }
 </style>
 </head>
 <body>
   <div class="top-actions">
+    <button class="btn btn-gold" onclick="downloadStandaloneInvPdf()">⬇ Download Official PDF</button>
     <button class="btn" onclick="window.print()">🖨 Print / Save as PDF</button>
   </div>
-  <div class="sheet">
+  <div id="standalone-invoice-sheet" class="sheet">
     <div class="inner">
       <div class="header">
         <div>
@@ -4758,7 +5295,7 @@ app.get('/invoices/:id/download', (req, res) => {
         ${invoice.payment_instructions ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.14);font-size:13px;color:#D8D1C5;line-height:1.5;"><strong style="color:#C6A664;">Payment Instructions:</strong><br>${String(helpers.e(invoice.payment_instructions)).replace(/\r?\n/g, '<br>')}</div>` : ''}
       </div>
 
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #DCD5C9;padding-top:16px;font-family:sans-serif;flex-wrap:wrap;gap:16px;">
+      <div class="pdf-no-break" style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #DCD5C9;padding-top:16px;font-family:sans-serif;flex-wrap:wrap;gap:16px;">
         <p style="margin:0;font-size:12px;color:#57524C;max-width:460px;line-height:1.5;">
           Once authentication fee remittance is verified, independent connoisseurship &amp; AI-powered authentication completes and your masterpiece is scheduled for live bidding after the 72-hour waiting period.
         </p>
@@ -4769,12 +5306,810 @@ app.get('/invoices/:id/download', (req, res) => {
       </div>
     </div>
   </div>
+  <script>
+    function downloadStandaloneInvPdf() {
+      var el = document.getElementById('standalone-invoice-sheet');
+      if (!el || typeof html2pdf === 'undefined') { window.print(); return; }
+      html2pdf().set({
+        margin: [8, 8, 8, 8],
+        filename: 'ArtAlly-${safeNum}.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#FBF9F5', windowWidth: 840 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['.box', 'tr', 'tfoot', '.bank-box', '.pdf-no-break'] }
+      }).from(el).save();
+    }
+  </script>
 </body>
 </html>`;
 
   res.set('Content-Type', 'text/html; charset=UTF-8');
   res.set('Content-Disposition', `attachment; filename="ArtAlly-${safeNum}.html"`);
   res.send(standaloneHtml);
+});
+
+// ============================================================================
+// 7. ARTIST CONSIGNMENT, AUTHENTICATION & DIGITAL AUCTION CONTRACT GENERATOR
+// ============================================================================
+
+function canAccessContractAgreement(req, db, agreement) {
+  const user = req.getCurrentUser();
+  const adminUser = req.sessionData?.admin_user_id
+    ? db.find('users', Number(req.sessionData.admin_user_id))
+    : null;
+  if (adminUser && helpers.userHasRole(adminUser, 'admin')) return true;
+  if (!user) return false;
+  if (helpers.userHasRole(user, 'admin')) return true;
+  if (agreement.artist_id && Number(agreement.artist_id) === Number(user.id)) return true;
+  if (
+    agreement.artist_email &&
+    String(agreement.artist_email).trim().toLowerCase() ===
+      String(user.email || '').trim().toLowerCase()
+  ) {
+    return true;
+  }
+  const artistProfile = db.findBy('artist_profiles', 'user_id', Number(user.id));
+  const fullNameLower = String(agreement.artist_full_name || '').trim().toLowerCase();
+  const profNameLower = String(agreement.artist_professional_name || '').trim().toLowerCase();
+  const userLower = String(user.name || '').trim().toLowerCase();
+  const dispLower = String(artistProfile?.display_name || '').trim().toLowerCase();
+  if (
+    (fullNameLower && (fullNameLower === userLower || fullNameLower === dispLower)) ||
+    (profNameLower && (profNameLower === userLower || profNameLower === dispLower))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+app.post('/admin/agreements/from-invoice', (req, res) => {
+  const admin = requireRole(req, res, 'admin');
+  if (!admin) return;
+  const db = DatabaseEngine.getInstance();
+  const invoiceId = Number(req.body.invoice_id || 0);
+  const rawInv = db.find('authentication_invoices', invoiceId);
+  if (!rawInv) {
+    req.setFlash('error', 'Authentication invoice not found.');
+    return res.redirect('/admin/dashboard#agreement-generator');
+  }
+  const agreement = createOrSyncContractAgreementFromInvoice(
+    db,
+    rawInv,
+    admin.id,
+    req.body.total_artworks || null
+  );
+  req.setFlash(
+    'success',
+    `Aligned Contract Agreement ${agreement.agreement_number} synced with Invoice ${rawInv.invoice_number} for ${agreement.artist_full_name}.`
+  );
+  return res.redirect(`/agreements/${agreement.id}?print=1`);
+});
+
+app.post('/admin/agreements/generate', (req, res) => {
+  const admin = requireRole(req, res, 'admin');
+  if (!admin) return;
+  const db = DatabaseEngine.getInstance();
+
+  const invoiceIdInput = Number(req.body.invoice_id || 0);
+  const artistIdInput = Number(req.body.artist_id || 0);
+  const artworkIdInput = Number(req.body.artwork_id || 0);
+
+  // Resolve registered artist automatically if selected or matched by email/name, or fallback to latest registered artist
+  let resolvedArtistId = artistIdInput > 0 ? artistIdInput : null;
+  const linkedInvoiceRaw =
+    invoiceIdInput > 0 ? db.find('authentication_invoices', invoiceIdInput) : null;
+
+  if (!resolvedArtistId && linkedInvoiceRaw?.artist_id) {
+    resolvedArtistId = Number(linkedInvoiceRaw.artist_id);
+  }
+
+  const inputEmail = String(req.body.artist_email || '').trim();
+  const inputFullName = String(req.body.artist_full_name || '').trim();
+
+  if (!resolvedArtistId && inputEmail) {
+    const matchedUser = db.findBy('users', 'email', inputEmail.toLowerCase());
+    if (matchedUser) resolvedArtistId = Number(matchedUser.id);
+  }
+  if (!resolvedArtistId && inputFullName) {
+    const matchedProfile = db
+      .all('artist_profiles')
+      .find(
+        (ap) =>
+          String(ap.display_name || '').trim().toLowerCase() === inputFullName.toLowerCase()
+      );
+    if (matchedProfile) resolvedArtistId = Number(matchedProfile.user_id);
+  }
+  if (!resolvedArtistId) {
+    const allProfiles = db
+      .all('artist_profiles')
+      .filter((ap) => !ap.is_seeded)
+      .sort((a, b) => Number(b.id) - Number(a.id));
+    if (allProfiles.length > 0) {
+      resolvedArtistId = Number(allProfiles[0].user_id);
+    }
+  }
+
+  const artistUser = resolvedArtistId ? db.find('users', resolvedArtistId) : null;
+  const artistProfile = resolvedArtistId
+    ? db.findBy('artist_profiles', 'user_id', resolvedArtistId)
+    : null;
+
+  // Automatically populate artist details from registered artist profile if not overridden
+  const artistFullName =
+    inputFullName ||
+    artistUser?.name ||
+    artistProfile?.display_name ||
+    linkedInvoiceRaw?.artist_name ||
+    'Registered Studio Artist';
+  const artistProfessionalName =
+    String(req.body.artist_professional_name || '').trim() ||
+    artistProfile?.display_name ||
+    artistFullName;
+  const artistEmail =
+    inputEmail ||
+    artistUser?.email ||
+    linkedInvoiceRaw?.artist_email ||
+    '';
+  const artistCountry =
+    String(req.body.artist_country || '').trim() ||
+    artistProfile?.country ||
+    artistUser?.country ||
+    'Switzerland';
+  const artistAddress =
+    String(req.body.artist_address || '').trim() ||
+    (artistProfile?.city ? `${artistProfile.city}, ${artistCountry}` : artistCountry);
+  const artistPhone =
+    String(req.body.artist_phone || '').trim() ||
+    'Verified Studio Contact on File';
+  const artistDiscipline =
+    String(req.body.artist_discipline || '').trim() ||
+    artistProfile?.discipline ||
+    'Contemporary Fine Art';
+  const artistRegistrationRef =
+    String(req.body.artist_registration_ref || '').trim() ||
+    `ART-REG-${helpers.gmdate('Y')}-${String(resolvedArtistId || 1).padStart(4, '0')}`;
+
+  // Determine linked invoice or artist's latest invoice so authentication descriptions align
+  let targetInvoice = linkedInvoiceRaw;
+  if (!targetInvoice && resolvedArtistId) {
+    const artistInvoices = db
+      .where('authentication_invoices', (inv) => Number(inv.artist_id || 0) === resolvedArtistId)
+      .sort((a, b) => Number(b.id) - Number(a.id));
+    if (artistInvoices.length > 0) {
+      targetInvoice = artistInvoices[0];
+    }
+  }
+
+  // Parse breakdown descriptions from form body (or pull directly from targetInvoice)
+  const parsedFromBody = parseInvoiceBreakdownFromBody(req.body);
+  let lineItems = parsedFromBody.lineItems;
+  if (
+    (!Array.isArray(lineItems) || lineItems.length === 0) &&
+    targetInvoice
+  ) {
+    const normInv = normalizeInvoiceBreakdown(targetInvoice);
+    lineItems = normInv.line_items;
+  }
+  if (!Array.isArray(lineItems) || lineItems.length === 0) {
+    lineItems = DEFAULT_AUTHENTICATION_LINE_ITEMS.map((item) => ({ ...item }));
+  }
+
+  const perArtworkSubtotal =
+    Math.round(lineItems.reduce((sum, item) => sum + Number(item.amount || 0), 0) * 100) / 100;
+  const vatRate = FIXED_INVOICE_VAT_RATE;
+  const perArtworkVat = Math.round(perArtworkSubtotal * (vatRate / 100) * 100) / 100;
+  const perArtworkFee = Math.round((perArtworkSubtotal + perArtworkVat) * 100) / 100;
+
+  // Build artworks schedule and total_artworks
+  const schedule = buildArtistArtworksSchedule(
+    db,
+    resolvedArtistId,
+    artworkIdInput || targetInvoice?.artwork_id,
+    String(req.body.artwork_title || targetInvoice?.artwork_title || '').trim(),
+    String(req.body.artwork_details || targetInvoice?.artwork_details || '').trim(),
+    String(req.body.reference_code || targetInvoice?.reference_code || '').trim()
+  );
+
+  const totalArtworks = Math.max(
+    1,
+    Number(req.body.total_artworks || schedule.length || 1)
+  );
+
+  const totalAuthSubtotal = Math.round(perArtworkSubtotal * totalArtworks * 100) / 100;
+  const totalAuthVat = Math.round(perArtworkVat * totalArtworks * 100) / 100;
+  const totalAuthFee = Math.round(perArtworkFee * totalArtworks * 100) / 100;
+
+  const currency = ['USD', 'EUR', 'GBP', 'CHF'].includes(req.body.currency)
+    ? req.body.currency
+    : targetInvoice?.currency || 'USD';
+
+  const serviceType =
+    String(req.body.service_type || '').trim() ||
+    targetInvoice?.service_type ||
+    'Independent Curatorial Connoisseurship & AI-Powered Authentication Evaluation';
+
+  const exclusivityType =
+    req.body.exclusivity_type === 'Exclusive' ? 'Exclusive' : 'Non-Exclusive';
+  const exclusivityPeriod =
+    String(req.body.exclusivity_period || '').trim() ||
+    'Duration of Scheduled Auction Cycle';
+  const governingLaw =
+    String(req.body.governing_law || '').trim() ||
+    'Laws of Switzerland (Canton of Geneva) & International Art Trade Conventions';
+  const disputeForum =
+    String(req.body.dispute_forum || '').trim() ||
+    'Competent Commercial Courts & Arbitration Chamber of Geneva, Switzerland';
+  const platformSignatoryName =
+    String(req.body.platform_signatory_name || '').trim() || 'Dr. Henri Vance';
+  const platformSignatoryTitle =
+    String(req.body.platform_signatory_title || '').trim() ||
+    'Chief Curatorial Director & Head of Authentication';
+
+  // Ensure the linked invoice's line_items are also synced or create an aligned invoice if none exists yet
+  if (targetInvoice) {
+    targetInvoice = db.update('authentication_invoices', targetInvoice.id, {
+      line_items: lineItems,
+      subtotal_amount: perArtworkSubtotal,
+      vat_rate: vatRate,
+      vat_amount: perArtworkVat,
+      fee_amount: perArtworkFee,
+      currency,
+      service_type: serviceType,
+    });
+  } else {
+    const randomInvNum = Math.floor(1000 + Math.random() * 9000);
+    const newInvoiceNumber = `INV-AUTH-${helpers.gmdate('Y')}-${randomInvNum}`;
+    const primaryWork = schedule[0] || {};
+    targetInvoice = db.insert('authentication_invoices', {
+      invoice_number: newInvoiceNumber,
+      artist_id: resolvedArtistId,
+      artwork_id: primaryWork.artwork_id || (artworkIdInput > 0 ? artworkIdInput : null),
+      artist_name: artistFullName,
+      artist_email: artistEmail,
+      artist_details: `${artistDiscipline} · ${artistAddress}`,
+      artwork_title: primaryWork.title || 'Consigned Studio Artwork',
+      artwork_details: `${primaryWork.medium || ''} · ${primaryWork.dimensions || ''}`,
+      reference_code: primaryWork.reference_code || '',
+      service_type: serviceType,
+      line_items: lineItems,
+      subtotal_amount: perArtworkSubtotal,
+      vat_rate: vatRate,
+      vat_amount: perArtworkVat,
+      fee_amount: perArtworkFee,
+      currency,
+      due_date: helpers.gmdate('Y-m-d', helpers.strtotime('+3 days')),
+      status: 'unpaid',
+      payment_method: 'bank_and_crypto',
+      payment_account_name: String(req.body.payment_account_name || 'ArtAlly Escrow Treasury').trim(),
+      payment_bank_name: String(req.body.payment_bank_name || 'Lombard Odier & Cie').trim(),
+      payment_account_number: String(req.body.payment_account_number || '').trim(),
+      payment_routing_details: String(req.body.payment_routing_details || '').trim(),
+      payment_bank_address: String(req.body.payment_bank_address || 'Rue de la Corraterie 11, 1204 Geneva, Switzerland').trim(),
+      crypto_currency: String(req.body.crypto_currency || '').trim(),
+      crypto_network: String(req.body.crypto_network || '').trim(),
+      crypto_wallet_address: String(req.body.crypto_wallet_address || '').trim(),
+      crypto_memo: String(req.body.crypto_memo || '').trim(),
+      payment_instructions: String(req.body.payment_instructions || '').trim(),
+      created_by: Number(admin.id),
+    });
+  }
+
+  const randomAgrNum = Math.floor(1000 + Math.random() * 9000);
+  const agreementNumber = `AGR-AA-${helpers.gmdate('Y')}-${randomAgrNum}`;
+
+  const agreement = db.insert('contract_agreements', {
+    agreement_number: agreementNumber,
+    invoice_id: targetInvoice ? Number(targetInvoice.id) : null,
+    invoice_number: targetInvoice?.invoice_number || null,
+    artist_id: resolvedArtistId,
+    artwork_id: artworkIdInput > 0 ? artworkIdInput : schedule[0]?.artwork_id || null,
+    artist_full_name: artistFullName,
+    artist_professional_name: artistProfessionalName,
+    artist_email: artistEmail,
+    artist_phone: artistPhone,
+    artist_address: artistAddress,
+    artist_country: artistCountry,
+    artist_discipline: artistDiscipline,
+    artist_registration_ref: artistRegistrationRef,
+    total_artworks: totalArtworks,
+    artworks_schedule: schedule,
+    service_type: serviceType,
+    line_items: lineItems,
+    per_artwork_subtotal: perArtworkSubtotal,
+    vat_rate: vatRate,
+    per_artwork_vat: perArtworkVat,
+    per_artwork_fee: perArtworkFee,
+    total_auth_subtotal: totalAuthSubtotal,
+    total_auth_vat: totalAuthVat,
+    total_auth_fee: totalAuthFee,
+    currency,
+    commission_rate: 15.0,
+    artist_share_rate: 85.0,
+    buyer_premium_rate: 20.0,
+    exclusivity_type: exclusivityType,
+    exclusivity_period: exclusivityPeriod,
+    governing_law: governingLaw,
+    dispute_forum: disputeForum,
+    platform_signatory_name: platformSignatoryName,
+    platform_signatory_title: platformSignatoryTitle,
+    platform_signed_at: helpers.gmdate('Y-m-d'),
+    artist_signed: false,
+    artist_signature_text: null,
+    artist_signed_at: null,
+    status: 'issued_presigned',
+    payment_method: targetInvoice?.payment_method || 'bank_and_crypto',
+    payment_account_name: targetInvoice?.payment_account_name || '',
+    payment_bank_name: targetInvoice?.payment_bank_name || '',
+    payment_account_number: targetInvoice?.payment_account_number || '',
+    payment_routing_details: targetInvoice?.payment_routing_details || '',
+    payment_bank_address: targetInvoice?.payment_bank_address || '',
+    crypto_currency: targetInvoice?.crypto_currency || '',
+    crypto_network: targetInvoice?.crypto_network || '',
+    crypto_wallet_address: targetInvoice?.crypto_wallet_address || '',
+    crypto_memo: targetInvoice?.crypto_memo || '',
+    payment_instructions: targetInvoice?.payment_instructions || '',
+    created_by: Number(admin.id),
+  });
+
+  if (resolvedArtistId) {
+    db.insert('notifications', {
+      user_id: resolvedArtistId,
+      type: 'contract_agreement_issued',
+      title: `📜 Official ArtAlly Contract Agreement Issued: ${agreementNumber}`,
+      message: `Your official Artist Consignment, Authentication & Digital Auction Contract Agreement (${agreementNumber}) pre-signed by ArtAlly on official letterheaded paper is ready for review, countersignature, and download (${totalArtworks} artwork(s), Per-Artwork Auth Fee ${helpers.format_money_exact(perArtworkFee, currency)}, Total Auth Fee ${helpers.format_money_exact(totalAuthFee, currency)}, 15% House Commission / 85% Artist Share).`,
+      action_url: `/agreements/${agreement.id}`,
+      read_at: null,
+    });
+  }
+
+  logAudit(
+    db,
+    admin,
+    'CONTRACT_AGREEMENT_GENERATED',
+    'contract_agreement',
+    agreement.id,
+    `Generated Contract Agreement ${agreementNumber} for ${artistFullName} (${totalArtworks} artwork(s), Per-Artwork Auth Fee: ${currency} ${perArtworkFee}, Total Auth Fee: ${currency} ${totalAuthFee}, Aligned Invoice: ${targetInvoice?.invoice_number || 'N/A'})`,
+    req.ip
+  );
+
+  req.setFlash(
+    'success',
+    `Contract Agreement ${agreementNumber} generated on ArtAlly Letterheaded Paper (pre-signed by ArtAlly and aligned with Invoice ${targetInvoice?.invoice_number || ''}) for ${artistFullName}.`
+  );
+  return res.redirect(`/agreements/${agreement.id}?print=1`);
+});
+
+app.post('/admin/agreements/update-breakdown', (req, res) => {
+  const admin = requireRole(req, res, 'admin');
+  if (!admin) return;
+  const db = DatabaseEngine.getInstance();
+  const agreementId = Number(req.body.agreement_id || 0);
+  const agr = db.find('contract_agreements', agreementId);
+  if (!agr) {
+    req.setFlash('error', 'Contract Agreement not found.');
+    return res.redirect('/admin/dashboard#agreement-generator');
+  }
+
+  const { lineItems, subtotalAmount, vatRate, vatAmount, feeAmount } =
+    parseInvoiceBreakdownFromBody(req.body);
+
+  if (lineItems.length === 0 || feeAmount <= 0) {
+    req.setFlash(
+      'error',
+      'The Agreement must contain at least one authentication description with an amount greater than 0.'
+    );
+    return res.redirect(`/agreements/${agreementId}`);
+  }
+
+  const totalArtworks = Math.max(1, Number(req.body.total_artworks || agr.total_artworks || 1));
+  const totalAuthSubtotal = Math.round(subtotalAmount * totalArtworks * 100) / 100;
+  const totalAuthVat = Math.round(vatAmount * totalArtworks * 100) / 100;
+  const totalAuthFee = Math.round(feeAmount * totalArtworks * 100) / 100;
+
+  db.update('contract_agreements', agreementId, {
+    line_items: lineItems,
+    total_artworks: totalArtworks,
+    per_artwork_subtotal: subtotalAmount,
+    vat_rate: vatRate,
+    per_artwork_vat: vatAmount,
+    per_artwork_fee: feeAmount,
+    total_auth_subtotal: totalAuthSubtotal,
+    total_auth_vat: totalAuthVat,
+    total_auth_fee: totalAuthFee,
+  });
+
+  // Also update the linked Authentication Invoice so Agreement and Invoice stay 100% aligned
+  if (agr.invoice_id && Number(agr.invoice_id) > 0) {
+    const linkedInv = db.find('authentication_invoices', Number(agr.invoice_id));
+    if (linkedInv) {
+      db.update('authentication_invoices', linkedInv.id, {
+        line_items: lineItems,
+        subtotal_amount: subtotalAmount,
+        vat_rate: vatRate,
+        vat_amount: vatAmount,
+        fee_amount: feeAmount,
+      });
+    }
+  }
+
+  logAudit(
+    db,
+    admin,
+    'CONTRACT_AGREEMENT_UPDATED',
+    'contract_agreement',
+    agreementId,
+    `Updated Contract Agreement ${agr.agreement_number} and synced with linked Invoice (${lineItems.length} description(s), Per-Artwork Fee: ${feeAmount}, Total Artworks: ${totalArtworks}, Total Auth Fee: ${totalAuthFee}).`,
+    req.ip
+  );
+
+  req.setFlash(
+    'success',
+    `Updated Contract Agreement ${agr.agreement_number} and synced with aligned Invoice: Per-Artwork Fee ${helpers.format_money_exact(feeAmount, agr.currency || 'USD')} × ${totalArtworks} Artwork(s) = Total Authentication Fee ${helpers.format_money_exact(totalAuthFee, agr.currency || 'USD')}.`
+  );
+  return res.redirect(`/agreements/${agreementId}`);
+});
+
+app.post('/admin/agreements/delete', (req, res) => {
+  const admin = requireRole(req, res, 'admin');
+  if (!admin) return;
+  const db = DatabaseEngine.getInstance();
+  const agreementId = Number(req.body.agreement_id || 0);
+  const agr = db.find('contract_agreements', agreementId);
+  if (agr) {
+    db.delete('contract_agreements', agreementId);
+    logAudit(
+      db,
+      admin,
+      'CONTRACT_AGREEMENT_DELETED',
+      'contract_agreement',
+      agreementId,
+      `Deleted contract agreement ${agr.agreement_number}.`,
+      req.ip
+    );
+    req.setFlash('success', `Deleted Contract Agreement ${agr.agreement_number}.`);
+  }
+  return res.redirect('/admin/dashboard#agreement-generator');
+});
+
+app.post('/agreements/:id/sign', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const db = DatabaseEngine.getInstance();
+  const agreementId = Number(req.params.id || 0);
+  const rawAgr = db.find('contract_agreements', agreementId);
+  if (!rawAgr || !canAccessContractAgreement(req, db, rawAgr)) {
+    req.setFlash('error', 'Contract Agreement not found or access denied.');
+    return res.redirect('/');
+  }
+
+  const signatureText =
+    String(req.body.artist_signature_text || '').trim() ||
+    rawAgr.artist_full_name ||
+    user.name;
+
+  db.update('contract_agreements', agreementId, {
+    artist_signed: true,
+    artist_signature_text: signatureText,
+    artist_signed_at: formatUtcNow(),
+    status: 'countersigned',
+  });
+
+  req.setFlash(
+    'success',
+    `✓ Contract Agreement ${rawAgr.agreement_number} has been countersigned by ${signatureText} and is now fully executed by both ArtAlly and the Artist.`
+  );
+  return res.redirect(`/agreements/${agreementId}`);
+});
+
+app.get('/agreements/:id', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const db = DatabaseEngine.getInstance();
+  const agreementId = Number(req.params.id || 0);
+  const rawAgr = db.find('contract_agreements', agreementId);
+  if (!rawAgr) {
+    return res.renderPage('pages/404', { pageTitle: 'Contract Agreement Not Found — ArtAlly' }, 404);
+  }
+  if (!canAccessContractAgreement(req, db, rawAgr)) {
+    req.setFlash(
+      'error',
+      'Access denied. Contract Agreements are private to ArtAlly Administration and the registered Artist.'
+    );
+    return res.redirect('/');
+  }
+
+  const agreement = normalizeContractAgreement(db, rawAgr);
+
+  res.renderPage('public/contract-agreement', {
+    pageTitle: `Artist Consignment & Authentication Agreement ${agreement.agreement_number} — ${agreement.artist_full_name} | ArtAlly`,
+    agreement,
+    defaultAuthLineItems: DEFAULT_AUTHENTICATION_LINE_ITEMS,
+  });
+});
+
+app.get('/agreements/:id/download', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const db = DatabaseEngine.getInstance();
+  const agreementId = Number(req.params.id || 0);
+  const rawAgr = db.find('contract_agreements', agreementId);
+  if (!rawAgr) {
+    return res.renderPage('pages/404', { pageTitle: 'Contract Agreement Not Found — ArtAlly' }, 404);
+  }
+  if (!canAccessContractAgreement(req, db, rawAgr)) {
+    req.setFlash(
+      'error',
+      'Access denied. Contract Agreements are private to ArtAlly Administration and the registered Artist.'
+    );
+    return res.redirect('/');
+  }
+
+  const agr = normalizeContractAgreement(db, rawAgr);
+  const safeNum = String(agr.agreement_number || `AGR-${agreementId}`).replace(/[^a-zA-Z0-9_-]/g, '-');
+  const currency = agr.currency || 'USD';
+  const lineItems = Array.isArray(agr.line_items) ? agr.line_items : [];
+  const schedule = Array.isArray(agr.artworks_schedule) ? agr.artworks_schedule : [];
+  const totalArtworks = Math.max(1, Number(agr.total_artworks || 1));
+
+  const perSubFmt = helpers.format_money_exact(Number(agr.per_artwork_subtotal || 0), currency);
+  const perVatFmt = helpers.format_money_exact(Number(agr.per_artwork_vat || 0), currency);
+  const perFeeFmt = helpers.format_money_exact(Number(agr.per_artwork_fee || 0), currency);
+  const totSubFmt = helpers.format_money_exact(Number(agr.total_auth_subtotal || 0), currency);
+  const totVatFmt = helpers.format_money_exact(Number(agr.total_auth_vat || 0), currency);
+  const totFeeFmt = helpers.format_money_exact(Number(agr.total_auth_fee || 0), currency);
+
+  const authRowsHtml = lineItems
+    .map(
+      (item, idx) => `
+      <tr>
+        <td style="padding:12px 14px;border-bottom:1px solid #2E2B29;color:#FBF9F5;">
+          <strong style="display:block;font-size:14px;color:#FFFFFF;margin-bottom:4px;">0${idx + 1}. ${helpers.e(item.title)}</strong>
+          <div style="font-size:12px;color:#D6D0C4;line-height:1.55;font-family:monospace;">${String(helpers.e(item.description || '')).replace(/\r?\n/g, '<br>')}</div>
+        </td>
+        <td style="padding:12px 14px;border-bottom:1px solid #2E2B29;text-align:right;font-family:monospace;font-size:14px;font-weight:700;color:#C6A664;white-space:nowrap;vertical-align:top;">
+          ${helpers.format_money_exact(Number(item.amount || 0), currency)}
+        </td>
+      </tr>`
+    )
+    .join('');
+
+  const scheduleRowsHtml = schedule
+    .map(
+      (w, idx) => `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #DCD5C9;font-family:monospace;font-size:12px;font-weight:700;">#${idx + 1}<br><span style="color:#8C6D32;">${helpers.e(w.reference_code || '')}</span></td>
+        <td style="padding:10px 12px;border-bottom:1px solid #DCD5C9;">
+          <strong style="font-size:14px;font-style:italic;">&ldquo;${helpers.e(w.title || 'Consigned Artwork')}&rdquo;</strong>
+          <div style="font-size:12px;color:#57524C;">${helpers.e(w.medium || '')} · ${helpers.e(w.dimensions || '')} (${helpers.e(w.year_created || '')})</div>
+          <div style="font-size:11px;color:#8C6D32;">${helpers.e(w.classification || 'Original 1/1')} · ${helpers.e(w.provenance || 'Direct from Artist Studio')}</div>
+        </td>
+        <td style="padding:10px 12px;border-bottom:1px solid #DCD5C9;font-family:monospace;font-size:13px;">${helpers.format_money_exact(Number(w.reserve_price || 0), currency)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #DCD5C9;font-size:12px;">15% ArtAlly<br><strong>85% Artist</strong></td>
+        <td style="padding:10px 12px;border-bottom:1px solid #DCD5C9;text-align:right;font-family:monospace;font-weight:700;color:#8C6D32;">${perFeeFmt}</td>
+      </tr>`
+    )
+    .join('');
+
+  const standaloneContractHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArtAlly Artist Consignment, Authentication &amp; Digital Auction Agreement — ${helpers.e(agr.agreement_number)}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  @page { size: A4 portrait; margin: 10mm 10mm; }
+  body { font-family: Georgia, 'Times New Roman', serif; background: #EBE5DA; color: #161514; margin: 0; padding: 28px 14px; line-height: 1.6; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .top-bar { max-width: 820px; margin: 0 auto 16px; display: flex; justify-content: flex-end; gap: 12px; font-family: sans-serif; }
+  .btn { background: #161514; color: #C6A664; border: 1px solid #C6A664; padding: 10px 18px; cursor: pointer; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; text-decoration: none; }
+  .btn-gold { background: #C6A664; color: #161514; border: 1px solid #161514; }
+  .letterhead-sheet { max-width: 820px; margin: 0 auto; background: #FBF9F5; border: 2px solid #B8965A; padding: 30px; box-sizing: border-box; box-shadow: 0 20px 50px rgba(0,0,0,0.25); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .letterhead-inner { border: 1px solid rgba(184,150,90,0.5); padding: 26px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .lh-banner { background: #161514; color: #FBF9F5; padding: 22px 26px; border-bottom: 3px solid #B8965A; margin: -26px -26px 24px -26px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 18px; }
+  .lh-brand { display: flex; align-items: center; gap: 16px; }
+  .lh-crest { width: 56px; height: 56px; border: 2px solid #C6A664; display: flex; align-items: center; justify-content: center; font-family: Georgia, serif; font-size: 22px; font-weight: 700; color: #C6A664; letter-spacing: 0.08em; background: #0F0E0D; }
+  .clause-title { font-family: sans-serif; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #161514; border-bottom: 1px solid #DCD5C9; padding-bottom: 6px; margin: 22px 0 10px; break-after: avoid !important; page-break-after: avoid !important; }
+  .party-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px; break-inside: avoid !important; page-break-inside: avoid !important; }
+  .party-box { background: rgba(22,21,20,0.03); border: 1px solid #DCD5C9; padding: 16px; font-size: 13.5px; break-inside: avoid !important; page-break-inside: avoid !important; }
+  .sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; break-inside: avoid !important; page-break-inside: avoid !important; }
+  .sig-box { border: 1px solid #161514; padding: 18px; background: #FFFDF9; position: relative; break-inside: avoid !important; page-break-inside: avoid !important; }
+  tr, thead, tfoot, .pdf-no-break { break-inside: avoid !important; page-break-inside: avoid !important; }
+  @media print { .top-bar { display: none !important; } body { background: #fff; padding: 0; } .letterhead-sheet { border: 2px solid #B8965A; box-shadow: none; max-width: 100%; padding: 18px; } }
+</style>
+</head>
+<body>
+  <div class="top-bar">
+    <button class="btn btn-gold" onclick="downloadStandaloneContractPdf()">⬇ Download Official PDF</button>
+    <button class="btn" onclick="window.print()">🖨 Print / Save Official Contract as PDF</button>
+  </div>
+  <div id="standalone-contract-sheet" class="letterhead-sheet">
+    <div class="letterhead-inner">
+      <div class="lh-banner">
+        <div class="lh-brand">
+          <div class="lh-crest">AA</div>
+          <div>
+            <p style="margin:0;font-family:sans-serif;font-size:10px;letter-spacing:0.26em;text-transform:uppercase;color:#C6A664;font-weight:700;">OFFICIAL INSTITUTIONAL LETTERHEAD · GENEVA · NEW YORK · LONDON · PARIS</p>
+            <h1 style="margin:4px 0;font-size:28px;letter-spacing:0.14em;font-weight:600;color:#FBF9F5;">ARTALLY</h1>
+            <p style="margin:0;font-family:sans-serif;font-size:11px;color:#D6D0C4;">ArtAlly International Fine Art Auctioneers &amp; Curatorial House Ltd. · Rue du Rhône 42, 1204 Geneva · Art-Ally@consultant.com</p>
+          </div>
+        </div>
+        <div style="text-align:right;font-family:sans-serif;font-size:12px;">
+          <div style="display:inline-block;padding:4px 10px;background:rgba(198,166,100,0.2);border:1px solid #C6A664;color:#C6A664;font-weight:700;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;margin-bottom:6px;">
+            ✓ PRE-SIGNED &amp; SEALED BY ARTALLY
+          </div>
+          <div style="font-family:monospace;font-weight:700;color:#FFFFFF;">Agreement Ref: ${helpers.e(agr.agreement_number)}</div>
+          <div style="font-family:monospace;font-size:11px;color:#C6A664;">Aligned Invoice: ${helpers.e(agr.invoice_number)}</div>
+          <div style="font-size:11px;color:#A69F93;">Date: ${helpers.e(String(agr.platform_signed_at || '').substring(0, 10))}</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;border-bottom:2px solid #161514;padding-bottom:18px;margin-bottom:24px;">
+        <p style="margin:0 0 4px;font-family:sans-serif;font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:#8C6D32;font-weight:700;">CURATORIAL CONNOISSEURSHIP, AI FORENSIC AUTHENTICATION &amp; TIMED AUCTION DIVISION</p>
+        <h2 style="margin:0;font-size:24px;letter-spacing:0.03em;color:#161514;">ARTIST ARTWORK CONSIGNMENT, AUTHENTICATION &amp; DIGITAL AUCTION AGREEMENT</h2>
+      </div>
+
+      <div class="party-grid">
+        <div class="party-box">
+          <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#8C6D32;">1. THE DIGITAL AUCTION PLATFORM (&ldquo;ARTALLY&rdquo;)</p>
+          <p style="margin:4px 0;"><strong>Company Name:</strong> ArtAlly</p>
+          <p style="margin:4px 0;"><strong>Registered Legal Name:</strong> ArtAlly International Fine Art Auctioneers &amp; Curatorial House Ltd.</p>
+          <p style="margin:4px 0;"><strong>Registered Headquarters:</strong> Rue du Rhône 42, 1204 Geneva, Switzerland</p>
+          <p style="margin:4px 0;"><strong>Registration No.:</strong> CHE-418.920.315 (Geneva Commercial Registry)</p>
+          <p style="margin:4px 0;"><strong>Official Email:</strong> Art-Ally@consultant.com</p>
+        </div>
+        <div class="party-box">
+          <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#8C6D32;">2. THE REGISTERED ARTIST / ARTWORK OWNER (&ldquo;ARTIST&rdquo;)</p>
+          <p style="margin:4px 0;"><strong>Full Legal Name:</strong> ${helpers.e(agr.artist_full_name)}</p>
+          <p style="margin:4px 0;"><strong>Professional / Studio Name:</strong> ${helpers.e(agr.artist_professional_name)}</p>
+          <p style="margin:4px 0;"><strong>Registered Address / Studio:</strong> ${helpers.e(agr.artist_address)}</p>
+          <p style="margin:4px 0;"><strong>Country:</strong> ${helpers.e(agr.artist_country)}</p>
+          <p style="margin:4px 0;"><strong>Registered Email:</strong> ${helpers.e(agr.artist_email || 'On Studio File')}</p>
+          <p style="margin:4px 0;"><strong>Discipline &amp; Registration ID:</strong> ${helpers.e(agr.artist_discipline)} · <span style="font-family:monospace;">${helpers.e(agr.artist_registration_ref)}</span></p>
+        </div>
+      </div>
+
+      <div class="clause-title">3. PURPOSE, NATURE &amp; THE ARTALLY CURATORIAL AUCTION PROCESS</div>
+      <p style="font-size:14px;margin:0 0 10px;">This Agreement establishes the binding terms under which the Registered Artist consigns original artwork(s) to <strong>ArtAlly</strong> for independent curatorial connoisseurship, AI-powered forensic authentication, international collector marketing, and timed digital auction sale:</p>
+      <ol style="font-size:13.5px;margin:0 0 14px;padding-left:20px;">
+        <li><strong>Studio Registration &amp; Dossier Submission:</strong> The Artist registers an official Studio Account on ArtAlly and supplies complete metadata, high-resolution imagery, provenance records, and reserve valuation for each consigned artwork.</li>
+        <li><strong>Mandatory Curatorial &amp; AI-Powered Forensic Authentication:</strong> Every consigned artwork undergoes ArtAlly&rsquo;s independent forensic, metadata, chain-of-title, Digital Art Passport (COA), and DoD encryption verification protocol prior to public auction listing.</li>
+        <li><strong>Per-Artwork Authentication Payment &amp; 72-Hour Preview Activation:</strong> The authentication fee is assessed <strong>per each individual artwork</strong> and the total authentication payment depends on the <strong>total number of artworks</strong> covered (${totalArtworks} artwork(s)). Upon confirmation of the authentication payment, verification completes and the artwork(s) automatically enter ArtAlly&rsquo;s <strong>72-hour collector exhibition preview window</strong> before live bidding opens.</li>
+        <li><strong>Timed Digital Saleroom &amp; Anti-Sniping Protection:</strong> ArtAlly conducts timed digital auctions using institutional bidding increments, confidential Reserve Price protection, and automatic 5-minute anti-sniping extensions.</li>
+        <li><strong>15% / 85% Commission Split &amp; Studio Treasury Wallet Settlement:</strong> Upon completed sale and cleared buyer settlement, ArtAlly retains a <strong>15% commission</strong> of the final hammer price and disburses the Artist&rsquo;s <strong>85% net share</strong> directly to the Artist&rsquo;s ArtAlly Studio Treasury Wallet for withdrawal via Bank Wire or Cryptocurrency (clearing within 2 to 7 business days).</li>
+      </ol>
+
+      <div class="clause-title">4. OWNERSHIP, PROVENANCE &amp; AUTHORITY TO CONSIGN</div>
+      <p style="font-size:13.5px;margin:0 0 12px;">The Artist represents and warrants that they are the creator and sole lawful owner of each artwork identified in Schedule A, free from any undisclosed lien, security interest, ownership dispute, or encumbrance. Title to each artwork remains vested in the Artist until a qualifying auction sale is completed and buyer funds have cleared.</p>
+
+      <div class="clause-title">5. AUTHENTICATION PROCESS &amp; PER-ARTWORK FEE AGREEMENT (ALIGNED WITH INVOICE ${helpers.e(agr.invoice_number)})</div>
+      <p style="font-size:13.5px;margin:0 0 12px;">The Artist acknowledges that every artwork submitted to ArtAlly undergoes mandatory independent connoisseurship and AI forensic verification. The authentication descriptions and fees below are aligned directly with Official Authentication Invoice <strong>${helpers.e(agr.invoice_number)}</strong>. <strong>The authentication fee applies per each artwork, and the grand total authentication payment is calculated according to the total number of artworks (${totalArtworks} artwork${totalArtworks === 1 ? '' : 's'}).</strong></p>
+
+      <table style="width:100%;border-collapse:collapse;background:#141215;color:#FBF9F5;border:1px solid #B8965A;margin:14px 0 20px;font-family:sans-serif;">
+        <thead>
+          <tr style="background:#0F0E0D;border-bottom:1px solid #B8965A;">
+            <th style="padding:12px 14px;text-align:left;font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#C6A664;">AUTHENTICATION DESCRIPTION (SYNCED FROM INVOICE ${helpers.e(agr.invoice_number)})</th>
+            <th style="padding:12px 14px;text-align:right;font-family:monospace;font-size:11px;letter-spacing:0.15em;color:#C6A664;">FEE PER 1 ARTWORK (${helpers.e(currency)})</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${authRowsHtml}
+        </tbody>
+        <tfoot>
+          <tr style="background:#1C1A19;border-top:2px dashed #6E6A63;">
+            <td style="padding:10px 14px;font-family:monospace;font-size:12px;color:#D6D0C4;">PER-ARTWORK SUBTOTAL (${lineItems.length} AUTHENTICATION DESCRIPTION${lineItems.length === 1 ? '' : 'S'})</td>
+            <td style="padding:10px 14px;text-align:right;font-family:monospace;font-size:14px;font-weight:700;color:#FFFFFF;">${perSubFmt}</td>
+          </tr>
+          <tr style="background:#1C1A19;">
+            <td style="padding:10px 14px;font-family:monospace;font-size:12px;color:#C6A664;">FIXED VAT (${Number(agr.vat_rate || 15)}%) PER ARTWORK</td>
+            <td style="padding:10px 14px;text-align:right;font-family:monospace;font-size:14px;font-weight:700;color:#C6A664;">${perVatFmt}</td>
+          </tr>
+          <tr style="background:#24201E;border-bottom:2px solid #B8965A;">
+            <td style="padding:12px 14px;font-family:monospace;font-size:13px;font-weight:700;color:#FFFFFF;">TOTAL AUTHENTICATION FEE PER EACH ARTWORK (INCL. 15% VAT)</td>
+            <td style="padding:12px 14px;text-align:right;font-family:monospace;font-size:16px;font-weight:700;color:#C6A664;">${perFeeFmt}</td>
+          </tr>
+          <tr style="background:#0F0E0D;">
+            <td style="padding:14px;font-family:monospace;font-size:13px;font-weight:700;color:#FBF9F5;">
+              TOTAL ARTWORKS COVERED: <span style="color:#C6A664;">${totalArtworks} ARTWORK${totalArtworks === 1 ? '' : 'S'}</span><br>
+              <span style="font-size:11px;color:#A69F93;">Grand Total Calculation: ${totalArtworks} × (${perSubFmt} Subtotal + ${perVatFmt} VAT = ${perFeeFmt} Per Artwork)</span>
+            </td>
+            <td style="padding:14px;text-align:right;font-family:monospace;font-size:20px;font-weight:700;color:#C6A664;">
+              ${totFeeFmt} ${helpers.e(currency)}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="clause-title">6. PERCENTAGE COMMISSION AGREEMENT (15% ARTALLY COMMISSION / 85% ARTIST SHARE)</div>
+      <p style="font-size:13.5px;margin:0 0 10px;">In consideration of ArtAlly&rsquo;s digital auction, marketing, collector curation, and escrow administration services, the Parties agree to the following percentage split on each successfully completed sale:</p>
+      <ul style="font-size:13.5px;margin:0 0 12px;padding-left:20px;">
+        <li><strong>ArtAlly Platform Commission:</strong> <strong>Fifteen percent (15%)</strong> of the final hammer price.</li>
+        <li><strong>Artist&rsquo;s Net Share:</strong> <strong>Eighty-five percent (85%)</strong> of the final hammer price.</li>
+        <li><strong>Buyer&rsquo;s Premium:</strong> A separate 20% Buyer&rsquo;s Premium is charged to the winning collector above the hammer price and does not reduce the Artist&rsquo;s 85% hammer share.</li>
+        <li><strong>Illustration:</strong> On a final hammer price of $10,000.00, ArtAlly&rsquo;s 15% commission is $1,500.00 and the Artist&rsquo;s 85% net share is $8,500.00. No commission is charged if an artwork remains unsold.</li>
+      </ul>
+
+      <div class="clause-title">7. RESERVE PRICE, TIMED AUCTION RULES &amp; STUDIO WALLET PAYOUT SETTLEMENT</div>
+      <p style="font-size:13.5px;margin:0 0 12px;">ArtAlly shall not accept a winning bid below the agreed Reserve Price stated in Schedule A without the Artist&rsquo;s written or portal confirmation. Following cleared buyer payment, the Artist&rsquo;s 85% net proceeds are credited to the Artist&rsquo;s <strong>ArtAlly Studio Treasury Wallet</strong>, from which the Artist may withdraw funds via designated Bank Wire Transfer or Cryptocurrency within <strong>2 to 7 business days</strong>.</p>
+
+      <div class="clause-title">8. COPYRIGHT, WHITE-GLOVE LOGISTICS, CONFIDENTIALITY &amp; GOVERNING LAW</div>
+      <p style="font-size:13.5px;margin:0 0 12px;">The Artist retains full copyright in all consigned artworks and grants ArtAlly a non-exclusive licence to reproduce and display images of the artwork(s) for auction cataloguing, marketing, and archival records. This Agreement is governed by the <strong>${helpers.e(agr.governing_law)}</strong>, with exclusive forum in the <strong>${helpers.e(agr.dispute_forum)}</strong>.</p>
+
+      <div class="clause-title">SCHEDULE A: CONSIGNED ARTWORK &amp; VALUATION SCHEDULE (${totalArtworks} ARTWORK${totalArtworks === 1 ? '' : 'S'})</div>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #161514;margin-bottom:24px;font-family:sans-serif;">
+        <thead>
+          <tr style="background:#161514;color:#FBF9F5;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;">
+            <th style="padding:10px 12px;text-align:left;">Lot / Ref</th>
+            <th style="padding:10px 12px;text-align:left;">Artwork Details &amp; Provenance</th>
+            <th style="padding:10px 12px;text-align:left;">Reserve Price</th>
+            <th style="padding:10px 12px;text-align:left;">Percentage Split</th>
+            <th style="padding:10px 12px;text-align:right;">Auth Fee / Work</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${scheduleRowsHtml}
+        </tbody>
+      </table>
+
+      <div class="pdf-no-break">
+        <div class="clause-title">9. ARTIST&rsquo;S DECLARATION &amp; INSTITUTIONAL EXECUTION SIGNATURES</div>
+        <p style="font-size:13px;margin:0 0 16px;">By executing below, both Parties confirm their acceptance of this Agreement, the mandatory Curatorial &amp; AI Authentication Schedule aligned with Invoice <strong>${helpers.e(agr.invoice_number)}</strong> (${perFeeFmt} per artwork × ${totalArtworks} artwork(s) = ${totFeeFmt} total), and the 15% Platform / 85% Artist commission agreement.</p>
+
+        <div class="sig-grid">
+          <div class="sig-box">
+            <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#8C6D32;">FOR ARTALLY (THE DIGITAL AUCTION PLATFORM)</p>
+            <p style="margin:4px 0;font-size:13px;"><strong>Legal Entity:</strong> ArtAlly International Fine Art Auctioneers Ltd.</p>
+            <p style="margin:4px 0;font-size:13px;"><strong>Authorised Signatory:</strong> ${helpers.e(agr.platform_signatory_name)}</p>
+            <p style="margin:4px 0 12px;font-size:13px;"><strong>Position / Title:</strong> ${helpers.e(agr.platform_signatory_title)}</p>
+            <div style="border-bottom:1px solid #161514;padding-bottom:6px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-end;">
+              <div>
+                <span style="font-family:'Brush Script MT','Lucida Handwriting',Georgia,serif;font-size:30px;font-style:italic;color:#14284B;">Dr. Henri Vance</span>
+                <span style="display:block;font-family:sans-serif;font-size:10px;text-transform:uppercase;letter-spacing:0.14em;color:#2D6A4F;font-weight:700;">✓ Pre-Signed &amp; Authenticated by ArtAlly</span>
+              </div>
+              <div style="border:2px double #8C6D32;padding:6px 10px;text-align:center;font-family:sans-serif;font-size:9px;font-weight:700;letter-spacing:0.12em;color:#8C6D32;text-transform:uppercase;">
+                ARTALLY GENEVA<br>OFFICIAL CORPORATE<br>&amp; CURATORIAL SEAL
+              </div>
+            </div>
+            <p style="margin:4px 0 0;font-size:12px;color:#57524C;"><strong>Date Executed:</strong> ${helpers.e(String(agr.platform_signed_at || '').substring(0, 10))}</p>
+          </div>
+
+          <div class="sig-box">
+            <p style="margin:0 0 8px;font-family:sans-serif;font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#8C6D32;">FOR THE REGISTERED ARTIST / ARTWORK OWNER</p>
+            <p style="margin:4px 0;font-size:13px;"><strong>Artist Full Legal Name:</strong> ${helpers.e(agr.artist_full_name)}</p>
+            <p style="margin:4px 0;font-size:13px;"><strong>Professional / Studio Name:</strong> ${helpers.e(agr.artist_professional_name)}</p>
+            <p style="margin:4px 0 12px;font-size:13px;"><strong>Registered Email &amp; Country:</strong> ${helpers.e(agr.artist_email)} (${helpers.e(agr.artist_country)})</p>
+            <div style="border-bottom:1px solid #161514;padding-bottom:8px;margin-bottom:8px;min-height:46px;display:flex;align-items:flex-end;">
+              ${
+                agr.artist_signed
+                  ? `<div><span style="font-family:Georgia,serif;font-size:26px;font-style:italic;color:#161514;">${helpers.e(agr.artist_signature_text || agr.artist_full_name)}</span><span style="display:block;font-family:sans-serif;font-size:10px;text-transform:uppercase;letter-spacing:0.14em;color:#2D6A4F;font-weight:700;">✓ Countersigned by Registered Artist</span></div>`
+                  : `<span style="font-size:12px;color:#8C6D32;font-style:italic;">Artist Signature: ________________________________________</span>`
+              }
+            </div>
+            <p style="margin:4px 0 0;font-size:12px;color:#57524C;"><strong>Date:</strong> ${helpers.e(agr.artist_signed_at ? String(agr.artist_signed_at).substring(0, 10) : String(agr.platform_signed_at || '').substring(0, 10))}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    function downloadStandaloneContractPdf() {
+      var el = document.getElementById('standalone-contract-sheet');
+      if (!el || typeof html2pdf === 'undefined') { window.print(); return; }
+      html2pdf().set({
+        margin: [8, 8, 8, 8],
+        filename: 'ArtAlly-Contract-${safeNum}.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#FBF9F5', windowWidth: 840 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['.party-grid', '.sig-grid', '.sig-box', 'tr', 'tfoot', '.pdf-no-break'] }
+      }).from(el).save();
+    }
+  </script>
+</body>
+</html>`;
+
+  res.set('Content-Type', 'text/html; charset=UTF-8');
+  res.set('Content-Disposition', `attachment; filename="ArtAlly-Contract-${safeNum}.html"`);
+  res.send(standaloneContractHtml);
 });
 
 // Automatic Auction Countdown Expiration & Sync Endpoint

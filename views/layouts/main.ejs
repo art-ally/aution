@@ -78,13 +78,29 @@ var $isArtistDashboard = ($currentPath === '/artist' || str_starts_with($current
         ::-webkit-scrollbar-track { background: #FAF8F5; }
         ::-webkit-scrollbar-thumb { background: #C8C1B6; }
         ::-webkit-scrollbar-thumb:hover { background: #8C6D46; }
+
+        @media print {
+            html, body, main {
+                display: block !important;
+                min-height: 0 !important;
+                height: auto !important;
+                background: #FFFFFF !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .no-print, .announcement-bar, .flash-banner, header, footer {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col bg-ivory text-obsidian selection:bg-bronze selection:text-white" x-data="{ mobileMenuOpen: false, searchModalOpen: false }">
 
     <% if (!$isArtistDashboard) { %>
     <!-- Top Institutional Announcement Bar -->
-    <div class="bg-obsidian text-ivory text-[11px] tracking-editorial uppercase py-2.5 px-4 sm:px-8 border-b border-charcoal">
+    <div class="announcement-bar no-print bg-obsidian text-ivory text-[11px] tracking-editorial uppercase py-2.5 px-4 sm:px-8 border-b border-charcoal">
         <div class="max-w-[1440px] mx-auto flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center space-x-4">
                 <span class="text-bronzeLight font-medium">Autumn Evening Sales</span>
@@ -256,7 +272,7 @@ var $isArtistDashboard = ($currentPath === '/artist' || str_starts_with($current
 
     <!-- Flash Notifications Banner -->
     <% if ($flashSuccess) { %>
-        <div class="bg-[#1A2E22] text-ivory px-4 sm:px-8 py-3.5 border-b border-bronze/40">
+        <div class="flash-banner no-print bg-[#1A2E22] text-ivory px-4 sm:px-8 py-3.5 border-b border-bronze/40">
             <div class="max-w-[1440px] mx-auto flex items-center justify-between text-xs tracking-wide">
                 <div class="flex items-center space-x-3">
                     <span class="inline-block w-2 h-2 bg-bronzeLight rounded-full"></span>
@@ -267,7 +283,7 @@ var $isArtistDashboard = ($currentPath === '/artist' || str_starts_with($current
     <% } %>
 
     <% if ($flashError) { %>
-        <div class="bg-[#3B1818] text-ivory px-4 sm:px-8 py-3.5 border-b border-red-400/30">
+        <div class="flash-banner no-print bg-[#3B1818] text-ivory px-4 sm:px-8 py-3.5 border-b border-red-400/30">
             <div class="max-w-[1440px] mx-auto flex items-center justify-between text-xs tracking-wide">
                 <div class="flex items-center space-x-3">
                     <span class="inline-block w-2 h-2 bg-red-400 rounded-full"></span>

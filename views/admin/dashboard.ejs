@@ -8,6 +8,7 @@
         </div>
         <div class="flex flex-wrap gap-2.5 text-xs uppercase tracking-widest">
             <a href="#invoice-generator" class="px-4 py-2.5 bg-bronze text-white hover:bg-obsidian transition font-semibold">📄 Auth Invoice Generator (<%- count($authInvoices || []) %>)</a>
+            <a href="#agreement-generator" class="px-4 py-2.5 bg-[#181615] text-bronzeLight border border-bronze hover:bg-bronze hover:text-white transition font-semibold">📜 Contract Agreement Generator (<%- count($contractAgreements || []) %>)</a>
             <a href="#artists" class="px-4 py-2.5 bg-obsidian text-ivory hover:bg-bronze transition">Real Artists &amp; Uploads (<%- $stats?.['total_artists'] %>)</a>
             <a href="#submissions" class="px-4 py-2.5 border border-obsidian hover:bg-obsidian hover:text-ivory transition">Submissions (<%- $stats?.['pending_submissions'] %>)</a>
             <a href="#auctions" class="px-4 py-2.5 border border-obsidian hover:bg-obsidian hover:text-ivory transition">Live Bid &amp; Sold Control (<%- $stats?.['active_auctions'] %>)</a>
@@ -531,14 +532,24 @@
                                         <% } %>
                                     </td>
                                     <td class="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                                        <form action="/admin/agreements/from-invoice" method="POST" class="inline">
+                                            <%- csrf_field() %>
+                                            <input type="hidden" name="invoice_id" value="<%- Number($invRow?.['id']) %>">
+                                            <button type="submit" class="px-3 py-1.5 bg-[#181615] text-bronzeLight border border-bronze text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition" title="Open or generate the aligned Artist Contract Agreement for this Invoice">
+                                                📜 Contract
+                                            </button>
+                                        </form>
                                         <a href="/invoices/<%- Number($invRow?.['id']) %>?edit=1" class="inline-block px-3 py-1.5 border border-bronze bg-bronze/10 text-bronze text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition" title="Add, remove, or edit descriptions and amounts on this invoice">
                                             ✎ Edit Descriptions
+                                        </a>
+                                        <a href="/invoices/<%- Number($invRow?.['id']) %>?download_pdf=1" target="_blank" class="inline-block px-3 py-1.5 bg-bronze text-white text-[10px] uppercase tracking-widest font-semibold hover:bg-obsidian transition">
+                                            ⬇ Download PDF
                                         </a>
                                         <a href="/invoices/<%- Number($invRow?.['id']) %>?print=1" target="_blank" class="inline-block px-3 py-1.5 bg-obsidian text-ivory text-[10px] uppercase tracking-widest hover:bg-bronze transition">
                                             🖨 Print / View
                                         </a>
                                         <a href="/invoices/<%- Number($invRow?.['id']) %>/download" class="inline-block px-3 py-1.5 border border-obsidian text-obsidian text-[10px] uppercase tracking-widest hover:bg-obsidian hover:text-ivory transition">
-                                            ⬇ Download
+                                            ⬇ HTML
                                         </a>
                                         <form action="/admin/invoices/status" method="POST" class="inline">
                                             <%- csrf_field() %>
@@ -550,6 +561,377 @@
                                         <form action="/admin/invoices/delete" method="POST" class="inline" onsubmit="return confirm('Delete this authentication invoice?');">
                                             <%- csrf_field() %>
                                             <input type="hidden" name="invoice_id" value="<%- Number($invRow?.['id']) %>">
+                                            <button type="submit" class="px-2.5 py-1.5 border border-red-800 text-red-800 text-[10px] uppercase tracking-widest hover:bg-red-800 hover:text-white transition">
+                                                ✕
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } %>
+        </div>
+    </section>
+
+    <!-- SECTION 0B: Artist Consignment, Authentication & Digital Auction Contract Agreement Generator -->
+    <% var $defaultArtistObj = (Array.isArray($allArtistsList) && $allArtistsList.length > 0) ? $allArtistsList[0] : null;
+       var $defaultArtistUser = $defaultArtistObj?.['user'] ?? {};
+       var $defaultArtistInvoice = $defaultArtistObj?.['latest_invoice'] ?? ((Array.isArray($authInvoices) && $authInvoices.length > 0) ? $authInvoices[0] : null);
+       var $defaultAgrLineItems = ($defaultArtistInvoice && Array.isArray($defaultArtistInvoice['line_items']) && $defaultArtistInvoice['line_items'].length > 0)
+           ? $defaultArtistInvoice['line_items']
+           : $presetList;
+       var $defaultAgrArtworksCount = Math.max(1, Number($defaultArtistObj?.['artworks_count'] ?? 1));
+    %>
+    <section id="agreement-generator" class="bg-white border-2 border-obsidian p-8 space-y-8 shadow-sm">
+        <div class="border-b border-hairline pb-5 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+            <div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="bg-[#181615] text-bronzeLight border border-bronze text-[10px] uppercase tracking-widest px-3 py-1 font-semibold">
+                        ✓ ArtAlly Official Letterheaded Paper · Pre-Signed &amp; Sealed by ArtAlly
+                    </span>
+                    <span class="bg-bronze/15 text-bronze border border-bronze text-[10px] uppercase tracking-widest px-2.5 py-1 font-semibold">
+                        15% Platform / 85% Artist Commission · Per-Artwork Auth Fee Aligned with Invoice
+                    </span>
+                </div>
+                <h2 class="font-serif text-3xl text-obsidian mt-2">Artist Consignment, Authentication &amp; Digital Auction Contract Agreement Generator</h2>
+            </div>
+            <p class="text-xs text-stone max-w-xl">
+                Since the artist registers first, their registered details automatically appear below. The authentication descriptions are pulled directly from the artist’s Authentication Invoice so both the Agreement and Invoice align 100%, with the authentication payment calculated <strong>per each artwork</strong> and multiplied by the <strong>total artworks</strong>.
+            </p>
+        </div>
+
+        <form action="/admin/agreements/generate" method="POST" class="space-y-8">
+            <%- csrf_field() %>
+
+            <!-- Step 1: Select Registered Artist & Aligned Authentication Invoice (Auto-Fills Everything) -->
+            <div class="bg-[#181615] text-ivory border border-bronze p-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-bronzeLight font-semibold mb-1.5">
+                        1. Registered Artist (Auto-Populates Artist Details &amp; Total Artworks) *
+                    </label>
+                    <select id="agr_select_artist" name="artist_id" class="w-full border border-bronze bg-obsidian px-3.5 py-2.5 text-xs text-white" onchange="autoFillAgreementFromArtist(this)">
+                        <% if (empty($allArtistsList)) { %>
+                            <option value="0">— No Registered Artists Yet (Type Artist Details Below) —</option>
+                        <% } else { %>
+                            <% for (let $aIdx = 0; $aIdx < $allArtistsList.length; $aIdx++) {
+                                const $apItem = $allArtistsList[$aIdx];
+                                const $apUser = $apItem?.['user'] ?? {};
+                                const $apInv = $apItem?.['latest_invoice'] ?? null;
+                                const $apRegRef = 'ART-REG-' + gmdate('Y') + '-' + String($apItem?.['user_id'] || 1).padStart(4, '0'); %>
+                                <option value="<%- Number($apItem?.['user_id'] || 0) %>"
+                                    <%- $aIdx === 0 ? 'selected' : '' %>
+                                    data-full-name="<%- e($apUser?.['name'] || $apItem?.['display_name'] || '') %>"
+                                    data-prof-name="<%- e($apItem?.['display_name'] || $apUser?.['name'] || '') %>"
+                                    data-email="<%- e($apUser?.['email'] || '') %>"
+                                    data-country="<%- e($apItem?.['country'] || $apUser?.['country'] || 'Switzerland') %>"
+                                    data-address="<%- e(($apItem?.['city'] ? $apItem['city'] + ', ' : '') + ($apItem?.['country'] || $apUser?.['country'] || 'Switzerland')) %>"
+                                    data-discipline="<%- e($apItem?.['discipline'] || 'Contemporary Fine Art') %>"
+                                    data-reg-ref="<%- e($apRegRef) %>"
+                                    data-artworks-count="<%- Math.max(1, Number($apItem?.['artworks_count'] || 1)) %>"
+                                    data-latest-invoice-id="<%- Number($apInv?.['id'] || 0) %>">
+                                    <%- e($apItem?.['display_name'] || $apUser?.['name']) %> (<%- e($apUser?.['email'] || 'Registered Artist') %> · <%- Math.max(1, Number($apItem?.['artworks_count'] || 1)) %> Artwork(s))
+                                </option>
+                            <% } %>
+                            <option value="0">— Or Enter Custom Artist Details Manually —</option>
+                        <% } %>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] uppercase tracking-widest text-bronzeLight font-semibold mb-1.5">
+                        2. Align Authentication Descriptions From Issued Invoice (100% Invoice Sync)
+                    </label>
+                    <select id="agr_select_invoice" name="invoice_id" class="w-full border border-bronze bg-obsidian px-3.5 py-2.5 text-xs text-white" onchange="autoFillAgreementFromInvoice(this)">
+                        <option value="0">— Sync with Artist’s Latest Invoice or Use Active Breakdown Below —</option>
+                        <% for (const $invOpt of Object.values($authInvoices || [])) { %>
+                            <option value="<%- Number($invOpt?.['id'] || 0) %>"
+                                <%- ($defaultArtistInvoice && Number($defaultArtistInvoice['id']) === Number($invOpt?.['id'])) ? 'selected' : '' %>
+                                data-artist-id="<%- Number($invOpt?.['artist_id'] || 0) %>"
+                                data-artist-name="<%- e($invOpt?.['artist_name'] || '') %>"
+                                data-artist-email="<%- e($invOpt?.['artist_email'] || '') %>"
+                                data-currency="<%- e($invOpt?.['currency'] || 'USD') %>"
+                                data-service="<%- e($invOpt?.['service_type'] || '') %>"
+                                data-items='<%- JSON.stringify($invOpt?.['line_items'] || []) %>'>
+                                <%- e($invOpt?.['invoice_number']) %> — <%- e($invOpt?.['artist_name']) %> ("<%- e($invOpt?.['artwork_title']) %>" · <%- format_money_exact(Number($invOpt?.['fee_amount'] || 0), $invOpt?.['currency'] || 'USD') %>/artwork)
+                            </option>
+                        <% } %>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Column 1: Registered Artist Details (Auto-Appears from Registration) -->
+                <div class="border border-hairline p-6 bg-ivory space-y-3.5">
+                    <div class="flex items-center justify-between border-b border-hairline pb-2">
+                        <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold">
+                            1. Registered Artist Details (Auto-Filled)
+                        </p>
+                        <span class="bg-obsidian text-bronzeLight text-[9px] uppercase tracking-widest px-2 py-0.5 font-semibold">Auto-Synced</span>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Full Legal Name *</label>
+                        <input type="text" id="agr_artist_full_name" name="artist_full_name" required value="<%- e($defaultArtistUser?.['name'] || $defaultArtistObj?.['display_name'] || $defaultArtistInvoice?.['artist_name'] || '') %>" placeholder="Registered Artist Full Legal Name" class="w-full border border-hairline bg-white px-3 py-2 text-sm text-obsidian font-semibold">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Professional / Studio Name</label>
+                        <input type="text" id="agr_artist_prof_name" name="artist_professional_name" value="<%- e($defaultArtistObj?.['display_name'] || $defaultArtistUser?.['name'] || '') %>" placeholder="Artist Professional / Studio Name" class="w-full border border-hairline bg-white px-3 py-2 text-sm text-obsidian">
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Registered Email</label>
+                            <input type="email" id="agr_artist_email" name="artist_email" value="<%- e($defaultArtistUser?.['email'] || $defaultArtistInvoice?.['artist_email'] || '') %>" placeholder="artist@studio.com" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Country</label>
+                            <input type="text" id="agr_artist_country" name="artist_country" value="<%- e($defaultArtistObj?.['country'] || $defaultArtistUser?.['country'] || 'Switzerland') %>" placeholder="Country" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Registered Studio Address / Location</label>
+                        <input type="text" id="agr_artist_address" name="artist_address" value="<%- e(($defaultArtistObj?.['city'] ? $defaultArtistObj['city'] + ', ' : '') + ($defaultArtistObj?.['country'] || $defaultArtistUser?.['country'] || 'Switzerland')) %>" placeholder="City, Studio Address & Country" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Artistic Discipline</label>
+                            <input type="text" id="agr_artist_discipline" name="artist_discipline" value="<%- e($defaultArtistObj?.['discipline'] || 'Contemporary Fine Art') %>" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Registration ID</label>
+                            <input type="text" id="agr_artist_reg_ref" name="artist_registration_ref" value="<%- e('ART-REG-' + gmdate('Y') + '-' + String($defaultArtistObj?.['user_id'] || 1).padStart(4, '0')) %>" class="w-full border border-hairline bg-white px-3 py-2 text-xs font-mono text-obsidian">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Column 2: Per-Artwork Authentication Payment & Total Artworks Calculator -->
+                <div class="border border-hairline p-6 bg-ivory space-y-4">
+                    <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold border-b border-hairline pb-2">
+                        2. Per-Artwork Auth Payment &amp; Total Artworks
+                    </p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Total Artworks Covered *</label>
+                            <input type="number" id="agr_total_artworks" name="total_artworks" min="1" max="500" required value="<%- $defaultAgrArtworksCount %>" oninput="recalcAgreementGenerator()" class="w-full border-2 border-bronze bg-white px-3 py-2 text-base font-mono font-bold text-obsidian">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Currency</label>
+                            <select id="agr_currency_select" name="currency" onchange="recalcAgreementGenerator()" class="w-full border border-hairline bg-white px-3 py-2.5 text-xs text-obsidian">
+                                <option value="USD">USD ($)</option>
+                                <option value="EUR">EUR (€)</option>
+                                <option value="GBP">GBP (£)</option>
+                                <option value="CHF">CHF (Fr.)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-charcoal font-semibold mb-1">Authentication Service Protocol (Aligned with Invoice)</label>
+                        <input type="text" id="agr_service_type" name="service_type" value="<%- e($defaultArtistInvoice?.['service_type'] || 'Independent Curatorial Connoisseurship & AI-Powered Authentication Evaluation') %>" class="w-full border border-hairline bg-white px-3 py-2 text-xs text-obsidian">
+                    </div>
+
+                    <!-- Live Per-Artwork & Total Artworks Summary Box -->
+                    <div class="bg-[#181615] text-ivory border border-bronze p-4 space-y-2 font-mono text-xs">
+                        <div class="flex justify-between items-center text-stone text-[11px]">
+                            <span>Per-Artwork Subtotal (<span id="agr_gen_item_count"><%- $defaultAgrLineItems.length %></span> items):</span>
+                            <span id="agr_gen_per_sub" class="text-white font-semibold">$9,500.00</span>
+                        </div>
+                        <div class="flex justify-between items-center text-stone text-[11px]">
+                            <span>Fixed 15% VAT (Per Artwork):</span>
+                            <span id="agr_gen_per_vat" class="text-bronzeLight font-semibold">$1,425.00</span>
+                        </div>
+                        <div class="border-t border-white/15 pt-1.5 flex justify-between items-center text-xs font-bold">
+                            <span class="text-ivory">Auth Fee Per 1 Artwork:</span>
+                            <span id="agr_gen_per_fee" class="text-bronzeLight">$10,925.00</span>
+                        </div>
+                        <div class="border-t-2 border-dashed border-bronze/60 pt-2 flex justify-between items-center text-sm font-bold">
+                            <span class="text-white uppercase">Total Auth (<span id="agr_gen_art_count"><%- $defaultAgrArtworksCount %></span> Work<span id="agr_gen_art_plural"><%- $defaultAgrArtworksCount === 1 ? '' : 's' %></span>):</span>
+                            <span id="agr_gen_grand_total" class="text-bronzeLight text-base">$10,925.00</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-hairline p-3 text-[11px] text-stone leading-relaxed">
+                        <strong class="text-obsidian block mb-0.5">Percentage Commission Agreement:</strong>
+                        Fixed <strong>15% ArtAlly Platform Commission</strong> &amp; <strong>85% Artist Net Share</strong> of the final hammer price, disbursed to the Artist’s Studio Treasury Wallet.
+                    </div>
+                </div>
+
+                <!-- Column 3: Pre-Signed ArtAlly Letterhead & Legal Terms -->
+                <div class="border border-bronze p-6 bg-[#181615] text-ivory space-y-4">
+                    <p class="text-[11px] uppercase tracking-widest text-bronzeLight font-semibold border-b border-white/15 pb-2">
+                        3. Pre-Signed ArtAlly Letterhead &amp; Signatory
+                    </p>
+                    <div class="bg-white/5 border border-bronze/50 p-3.5 space-y-1.5 text-xs">
+                        <span class="text-[10px] uppercase tracking-widest text-bronzeLight font-bold block">✓ ArtAlly Side Pre-Signed &amp; Sealed</span>
+                        <p class="text-stone text-[11px] leading-relaxed">
+                            Generated on official <strong>ArtAlly Geneva Letterheaded Paper</strong> with ArtAlly’s executive cursive signature and corporate seal already affixed.
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">ArtAlly Authorised Signatory Name</label>
+                        <input type="text" name="platform_signatory_name" value="Dr. Henri Vance" class="w-full border border-white/20 bg-white/10 px-3 py-2 text-xs text-white">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Signatory Position / Title</label>
+                        <input type="text" name="platform_signatory_title" value="Chief Curatorial Director & Head of Authentication" class="w-full border border-white/20 bg-white/10 px-3 py-2 text-xs text-white">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Exclusivity</label>
+                            <select name="exclusivity_type" class="w-full border border-white/20 bg-obsidian px-2.5 py-2 text-xs text-white">
+                                <option value="Non-Exclusive">Non-Exclusive</option>
+                                <option value="Exclusive">Exclusive Consignment</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-stone mb-1">Governing Law</label>
+                            <input type="text" name="governing_law" value="Laws of Switzerland (Canton of Geneva)" class="w-full border border-white/20 bg-white/10 px-2.5 py-2 text-xs text-white">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aligned Authentication Descriptions List (Synced with Invoice) -->
+            <div class="border-2 border-bronze bg-[#141215] text-ivory p-6 space-y-4">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/15 pb-4">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
+                            4. Aligned Authentication Descriptions (Pulled From Invoice · Per-Artwork Amounts)
+                        </p>
+                        <h3 class="font-serif text-2xl text-white mt-0.5">
+                            Authentication Protocol Breakdown on Contract Agreement &amp; Invoice
+                        </h3>
+                        <p class="text-xs text-stone mt-1">
+                            These authentication descriptions appear on the Contract Agreement and are automatically kept in sync with the Artist’s Authentication Invoice.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" onclick="resetDefaultAgreementItems()" class="px-3 py-1.5 border border-bronze text-bronzeLight text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition">
+                            ↺ Restore Default 5 Descriptions
+                        </button>
+                        <button type="button" onclick="addAgreementGeneratorItem({ key: 'custom', title: 'Custom Forensic / Authentication Protocol', description: '- Specialized curatorial and AI verification procedure.', amount: 500.00 })" class="px-3 py-1.5 bg-bronze text-white text-[10px] uppercase tracking-widest font-semibold hover:bg-white hover:text-obsidian transition">
+                            + Add Custom Description
+                        </button>
+                    </div>
+                </div>
+
+                <div id="agr_generator_items_container" class="space-y-3">
+                    <% for (const $aItem of $defaultAgrLineItems) { %>
+                        <div class="agr-gen-item-row bg-white/5 border border-white/15 p-4 grid grid-cols-1 sm:grid-cols-12 gap-4 items-start" data-key="<%- e($aItem.key || 'item') %>">
+                            <input type="hidden" name="item_key[]" value="<%- e($aItem.key || 'item') %>">
+                            <div class="sm:col-span-8 space-y-2">
+                                <label class="block text-[9px] uppercase tracking-widest text-bronzeLight font-semibold">Authentication Description Title *</label>
+                                <input type="text" name="item_title[]" required value="<%- e($aItem.title) %>" class="w-full bg-[#0F0E0D] border border-white/25 px-3 py-2 text-sm font-mono font-bold text-white">
+                                <label class="block text-[9px] uppercase tracking-widest text-stone font-semibold">Forensic Protocol Sub-Bullets</label>
+                                <textarea name="item_description[]" rows="2" class="w-full bg-[#0F0E0D] border border-white/15 px-3 py-2 text-xs font-mono text-stone leading-relaxed"><%- e($aItem.description) %></textarea>
+                            </div>
+                            <div class="sm:col-span-3">
+                                <label class="block text-[9px] uppercase tracking-widest text-bronzeLight font-semibold sm:text-right mb-1">Per-Artwork Fee *</label>
+                                <input type="number" step="0.01" min="0" name="item_amount[]" required value="<%- Number($aItem.amount || 0).toFixed(2) %>" oninput="recalcAgreementGenerator()" class="w-full bg-[#0F0E0D] border-2 border-bronze px-3 py-2.5 text-base font-mono font-bold text-bronzeLight text-right">
+                            </div>
+                            <div class="sm:col-span-1 flex sm:justify-end pt-5">
+                                <button type="button" onclick="removeAgreementGeneratorItem(this)" class="px-2.5 py-2 bg-red-950/60 border border-red-600/70 text-red-200 text-[10px] uppercase tracking-widest font-semibold hover:bg-red-700 hover:text-white transition">
+                                    ✕ Remove
+                                </button>
+                            </div>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-4 pt-2">
+                <p class="text-xs text-stone">
+                    * Clicking <strong>Generate &amp; Print Contract Agreement</strong> issues the official contract on ArtAlly Letterheaded Paper (already signed by ArtAlly) and places a copy on the Artist’s Dashboard and Artist Page.
+                </p>
+                <button type="submit" class="bg-[#181615] text-bronzeLight border-2 border-bronze px-8 py-3.5 text-xs uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition shadow-sm">
+                    📜 Generate &amp; Print Pre-Signed Contract Agreement →
+                </button>
+            </div>
+        </form>
+
+        <!-- Issued Contract Agreements Ledger -->
+        <div class="border-t border-hairline pt-6 space-y-4">
+            <h3 class="font-serif text-2xl text-obsidian">Issued Artist Consignment &amp; Authentication Contract Agreements (<%- count($contractAgreements || []) %>)</h3>
+
+            <% if (empty($contractAgreements)) { %>
+                <p class="text-xs text-stone italic">No contract agreements have been generated yet. Select a registered artist above or click <strong>📜 Contract</strong> on any invoice to generate your first agreement.</p>
+            <% } else { %>
+                <div class="overflow-x-auto border border-hairline">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-obsidian text-ivory uppercase tracking-widest text-[10px]">
+                                <th class="py-3 px-4">Agreement Ref</th>
+                                <th class="py-3 px-4">Registered Artist</th>
+                                <th class="py-3 px-4">Aligned Invoice</th>
+                                <th class="py-3 px-4">Per-Artwork &amp; Total Auth Fee</th>
+                                <th class="py-3 px-4">Commission Split</th>
+                                <th class="py-3 px-4">Signatures</th>
+                                <th class="py-3 px-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-hairline">
+                            <% for (const $agrRow of Object.values($contractAgreements || [])) { %>
+                                <% var $agrCur = $agrRow?.['currency'] ?? 'USD';
+                                   var $agrWorksCount = Math.max(1, Number($agrRow?.['total_artworks'] ?? 1)); %>
+                                <tr class="hover:bg-ivory/60">
+                                    <td class="py-3.5 px-4 font-mono font-semibold text-obsidian">
+                                        <%- e($agrRow?.['agreement_number']) %>
+                                        <div class="text-[10px] text-stone font-sans">Issued: <%- e(substr($agrRow?.['created_at'] ?? '', 0, 10)) %></div>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <div class="font-semibold text-obsidian"><%- e($agrRow?.['artist_full_name']) %></div>
+                                        <div class="text-[11px] text-stone"><%- e($agrRow?.['artist_email']) %> · <%- e($agrRow?.['artist_country']) %></div>
+                                        <div class="text-[10px] font-mono text-bronze"><%- e($agrRow?.['artist_registration_ref']) %></div>
+                                    </td>
+                                    <td class="py-3.5 px-4 font-mono">
+                                        <% if (!empty($agrRow?.['invoice_id'])) { %>
+                                            <a href="/invoices/<%- Number($agrRow?.['invoice_id']) %>" class="text-bronze underline font-semibold"><%- e($agrRow?.['invoice_number']) %></a>
+                                        <% } else { %>
+                                            <span class="text-stone"><%- e($agrRow?.['invoice_number'] || 'Aligned') %></span>
+                                        <% } %>
+                                        <div class="text-[10px] text-stone font-sans"><%- (Array.isArray($agrRow?.['line_items']) ? $agrRow['line_items'].length : 5) %> synced description(s)</div>
+                                    </td>
+                                    <td class="py-3.5 px-4 font-mono text-obsidian">
+                                        <div class="font-bold text-sm text-bronze">
+                                            Total (<%- $agrWorksCount %> work<%- $agrWorksCount === 1 ? '' : 's' %>): <%- format_money_exact(Number($agrRow?.['total_auth_fee'] ?? 0), $agrCur) %>
+                                        </div>
+                                        <div class="text-[10px] text-stone">
+                                            <%- format_money_exact(Number($agrRow?.['per_artwork_fee'] ?? 0), $agrCur) %> per artwork (incl. 15% VAT)
+                                        </div>
+                                    </td>
+                                    <td class="py-3.5 px-4 text-[11px]">
+                                        <span class="font-semibold text-obsidian">15% ArtAlly</span> / <strong class="text-[#1B4332]">85% Artist</strong>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <span class="bg-[#1A2E22] text-ivory text-[10px] uppercase tracking-widest px-2 py-0.5 font-semibold block w-max mb-1">
+                                            ✓ ArtAlly Signed
+                                        </span>
+                                        <% if ($agrRow?.['artist_signed']) { %>
+                                            <span class="bg-bronze text-white text-[10px] uppercase tracking-widest px-2 py-0.5 font-semibold block w-max">
+                                                ✓ Artist Signed
+                                            </span>
+                                        <% } else { %>
+                                            <span class="bg-stone/20 text-charcoal text-[10px] uppercase tracking-widest px-2 py-0.5 block w-max">
+                                                Artist Line Ready
+                                            </span>
+                                        <% } %>
+                                    </td>
+                                    <td class="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                                        <a href="/agreements/<%- Number($agrRow?.['id']) %>?edit=1" class="inline-block px-3 py-1.5 border border-bronze bg-bronze/10 text-bronze text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition">
+                                            ✎ Edit Auth &amp; Count
+                                        </a>
+                                        <a href="/agreements/<%- Number($agrRow?.['id']) %>?download_pdf=1" target="_blank" class="inline-block px-3 py-1.5 bg-bronze text-white text-[10px] uppercase tracking-widest font-semibold hover:bg-obsidian transition">
+                                            ⬇ Download PDF
+                                        </a>
+                                        <a href="/agreements/<%- Number($agrRow?.['id']) %>?print=1" target="_blank" class="inline-block px-3 py-1.5 bg-obsidian text-ivory text-[10px] uppercase tracking-widest hover:bg-bronze transition">
+                                            🖨 Print / View
+                                        </a>
+                                        <a href="/agreements/<%- Number($agrRow?.['id']) %>/download" class="inline-block px-3 py-1.5 border border-obsidian text-obsidian text-[10px] uppercase tracking-widest hover:bg-obsidian hover:text-ivory transition">
+                                            ⬇ HTML
+                                        </a>
+                                        <form action="/admin/agreements/delete" method="POST" class="inline" onsubmit="return confirm('Delete this contract agreement?');">
+                                            <%- csrf_field() %>
+                                            <input type="hidden" name="agreement_id" value="<%- Number($agrRow?.['id']) %>">
                                             <button type="submit" class="px-2.5 py-1.5 border border-red-800 text-red-800 text-[10px] uppercase tracking-widest hover:bg-red-800 hover:text-white transition">
                                                 ✕
                                             </button>
@@ -701,6 +1083,169 @@
             addGeneratorLineItem(item);
         });
     }
+
+    function getAgrCurrencySymbol() {
+        var sel = document.getElementById('agr_currency_select');
+        var cur = sel ? sel.value : 'USD';
+        if (cur === 'EUR') return '€';
+        if (cur === 'GBP') return '£';
+        if (cur === 'CHF') return 'CHF ';
+        return '$';
+    }
+
+    function formatAgrMoney(val) {
+        var sym = getAgrCurrencySymbol();
+        var num = Number(val || 0);
+        return sym + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function recalcAgreementGenerator() {
+        var container = document.getElementById('agr_generator_items_container');
+        if (!container) return;
+        var amountInputs = container.querySelectorAll('input[name="item_amount[]"]');
+        var subtotal = 0;
+        var count = amountInputs.length;
+        amountInputs.forEach(function (inp) {
+            var v = parseFloat(inp.value);
+            if (!isNaN(v) && v > 0) subtotal += v;
+        });
+        subtotal = Math.round(subtotal * 100) / 100;
+        var vat = Math.round(subtotal * 0.15 * 100) / 100;
+        var perFee = Math.round((subtotal + vat) * 100) / 100;
+        var worksInput = document.getElementById('agr_total_artworks');
+        var totalArtworks = worksInput ? Math.max(1, parseInt(worksInput.value || '1', 10)) : 1;
+        var grandTotal = Math.round(perFee * totalArtworks * 100) / 100;
+
+        var cEl = document.getElementById('agr_gen_item_count');
+        var subEl = document.getElementById('agr_gen_per_sub');
+        var vatEl = document.getElementById('agr_gen_per_vat');
+        var feeEl = document.getElementById('agr_gen_per_fee');
+        var artCountEl = document.getElementById('agr_gen_art_count');
+        var artPluralEl = document.getElementById('agr_gen_art_plural');
+        var grandEl = document.getElementById('agr_gen_grand_total');
+
+        if (cEl) cEl.textContent = String(count);
+        if (subEl) subEl.textContent = formatAgrMoney(subtotal);
+        if (vatEl) vatEl.textContent = formatAgrMoney(vat);
+        if (feeEl) feeEl.textContent = formatAgrMoney(perFee);
+        if (artCountEl) artCountEl.textContent = String(totalArtworks);
+        if (artPluralEl) artPluralEl.textContent = totalArtworks === 1 ? '' : 's';
+        if (grandEl) grandEl.textContent = formatAgrMoney(grandTotal);
+    }
+
+    function addAgreementGeneratorItem(item) {
+        var container = document.getElementById('agr_generator_items_container');
+        if (!container) return;
+        var div = document.createElement('div');
+        div.className = 'agr-gen-item-row bg-white/5 border border-white/15 p-4 grid grid-cols-1 sm:grid-cols-12 gap-4 items-start';
+        div.setAttribute('data-key', item.key || 'custom');
+        div.innerHTML =
+            '<input type="hidden" name="item_key[]" value="' + String(item.key || 'custom').replace(/"/g, '&quot;') + '">' +
+            '<div class="sm:col-span-8 space-y-2">' +
+                '<label class="block text-[9px] uppercase tracking-widest text-bronzeLight font-semibold">Authentication Description Title *</label>' +
+                '<input type="text" name="item_title[]" required value="' + String(item.title || '').replace(/"/g, '&quot;') + '" class="w-full bg-[#0F0E0D] border border-white/25 px-3 py-2 text-sm font-mono font-bold text-white">' +
+                '<label class="block text-[9px] uppercase tracking-widest text-stone font-semibold">Forensic Protocol Sub-Bullets</label>' +
+                '<textarea name="item_description[]" rows="2" class="w-full bg-[#0F0E0D] border border-white/15 px-3 py-2 text-xs font-mono text-stone leading-relaxed"></textarea>' +
+            '</div>' +
+            '<div class="sm:col-span-3">' +
+                '<label class="block text-[9px] uppercase tracking-widest text-bronzeLight font-semibold sm:text-right mb-1">Per-Artwork Fee *</label>' +
+                '<input type="number" step="0.01" min="0" name="item_amount[]" required value="' + Number(item.amount || 0).toFixed(2) + '" oninput="recalcAgreementGenerator()" class="w-full bg-[#0F0E0D] border-2 border-bronze px-3 py-2.5 text-base font-mono font-bold text-bronzeLight text-right">' +
+            '</div>' +
+            '<div class="sm:col-span-1 flex sm:justify-end pt-5">' +
+                '<button type="button" onclick="removeAgreementGeneratorItem(this)" class="px-2.5 py-2 bg-red-950/60 border border-red-600/70 text-red-200 text-[10px] uppercase tracking-widest font-semibold hover:bg-red-700 hover:text-white transition">✕ Remove</button>' +
+            '</div>';
+        var ta = div.querySelector('textarea[name="item_description[]"]');
+        if (ta) ta.value = item.description || '';
+        container.appendChild(div);
+        recalcAgreementGenerator();
+    }
+
+    function removeAgreementGeneratorItem(btn) {
+        var container = document.getElementById('agr_generator_items_container');
+        if (!container) return;
+        var rows = container.querySelectorAll('.agr-gen-item-row');
+        if (rows.length <= 1) {
+            alert('At least 1 authentication description must remain on the agreement.');
+            return;
+        }
+        var row = btn.closest('.agr-gen-item-row');
+        if (row) row.remove();
+        recalcAgreementGenerator();
+    }
+
+    function resetDefaultAgreementItems() {
+        var container = document.getElementById('agr_generator_items_container');
+        if (!container) return;
+        container.innerHTML = '';
+        DEFAULT_GEN_ITEMS.forEach(function (item) {
+            addAgreementGeneratorItem(item);
+        });
+    }
+
+    function autoFillAgreementFromArtist(sel) {
+        var opt = sel.options[sel.selectedIndex];
+        if (!opt || opt.value === '0') return;
+        var fullEl = document.getElementById('agr_artist_full_name');
+        var profEl = document.getElementById('agr_artist_prof_name');
+        var emailEl = document.getElementById('agr_artist_email');
+        var countryEl = document.getElementById('agr_artist_country');
+        var addrEl = document.getElementById('agr_artist_address');
+        var discEl = document.getElementById('agr_artist_discipline');
+        var regEl = document.getElementById('agr_artist_reg_ref');
+        var worksEl = document.getElementById('agr_total_artworks');
+        var invSel = document.getElementById('agr_select_invoice');
+
+        if (fullEl && opt.getAttribute('data-full-name')) fullEl.value = opt.getAttribute('data-full-name');
+        if (profEl && opt.getAttribute('data-prof-name')) profEl.value = opt.getAttribute('data-prof-name');
+        if (emailEl) emailEl.value = opt.getAttribute('data-email') || '';
+        if (countryEl && opt.getAttribute('data-country')) countryEl.value = opt.getAttribute('data-country');
+        if (addrEl && opt.getAttribute('data-address')) addrEl.value = opt.getAttribute('data-address');
+        if (discEl && opt.getAttribute('data-discipline')) discEl.value = opt.getAttribute('data-discipline');
+        if (regEl && opt.getAttribute('data-reg-ref')) regEl.value = opt.getAttribute('data-reg-ref');
+        if (worksEl && opt.getAttribute('data-artworks-count')) {
+            worksEl.value = opt.getAttribute('data-artworks-count');
+        }
+
+        var latestInvId = opt.getAttribute('data-latest-invoice-id');
+        if (invSel && latestInvId && Number(latestInvId) > 0) {
+            invSel.value = latestInvId;
+            autoFillAgreementFromInvoice(invSel);
+        } else {
+            recalcAgreementGenerator();
+        }
+    }
+
+    function autoFillAgreementFromInvoice(sel) {
+        var opt = sel.options[sel.selectedIndex];
+        if (!opt || opt.value === '0') return;
+        var cur = opt.getAttribute('data-currency');
+        var srv = opt.getAttribute('data-service');
+        var itemsJson = opt.getAttribute('data-items');
+        var curSel = document.getElementById('agr_currency_select');
+        var srvInput = document.getElementById('agr_service_type');
+        if (curSel && cur) curSel.value = cur;
+        if (srvInput && srv) srvInput.value = srv;
+
+        if (itemsJson) {
+            try {
+                var parsed = JSON.parse(itemsJson);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    var container = document.getElementById('agr_generator_items_container');
+                    if (container) {
+                        container.innerHTML = '';
+                        parsed.forEach(function (item) {
+                            addAgreementGeneratorItem(item);
+                        });
+                    }
+                }
+            } catch (e) {}
+        }
+        recalcAgreementGenerator();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        recalcAgreementGenerator();
+    });
     </script>
 
     <!-- SECTION 1: Real Registered Artists, Public Profile Approval Gate & All Uploaded Artworks -->

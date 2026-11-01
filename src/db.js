@@ -42,6 +42,7 @@ const TABLES = [
   'audit_logs',
   'platform_settings',
   'authentication_invoices',
+  'contract_agreements',
   'wallet_withdrawals',
 ];
 
@@ -74,6 +75,7 @@ const ORDERED_RELATIONAL_TABLES = [
   'reports',
   'audit_logs',
   'authentication_invoices',
+  'contract_agreements',
   'wallet_withdrawals',
 ];
 
@@ -362,6 +364,7 @@ class DatabaseEngine {
           cols.authentication_invoices.crypto_wallet_address &&
           cols.authentication_invoices.payment_bank_address &&
           cols.authentication_invoices.line_items &&
+          cols.contract_agreements &&
           cols.wallet_withdrawals &&
           cols.artist_profiles.withdrawal_unlocked;
 
@@ -492,6 +495,7 @@ class DatabaseEngine {
       'artwork_submissions',
       'auctions',
       'authentication_invoices',
+      'contract_agreements',
       'wallet_withdrawals',
       'seller_payouts',
       'notifications',
@@ -881,6 +885,7 @@ class DatabaseEngine {
         await this.ensurePgSchema();
         // Delete child tables first so foreign keys are respected
         const dataTablesToClear = [
+          'contract_agreements',
           'authentication_invoices',
           'audit_logs',
           'reports',

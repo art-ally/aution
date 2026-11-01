@@ -1,0 +1,1009 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+.agr-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.35rem;
+}
+.agr-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+}
+.agr-sig-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.35rem;
+}
+@media screen and (max-width: 680px) {
+    .agr-grid-2, .agr-grid-3, .agr-sig-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.pdf-no-break,
+.contract-paper tr,
+.contract-paper thead,
+.contract-paper tfoot,
+.sig-box,
+.party-box,
+.stage-card,
+.commission-card,
+.remittance-box {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+}
+
+.contract-paper h2,
+.contract-paper h3 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+}
+
+/* PDF Export Mode (used by Download Official PDF button for exact A4 layout) */
+.pdf-export-mode {
+    width: 794px !important;
+    max-width: 794px !important;
+    margin: 0 auto !important;
+    padding: 20px 24px !important;
+    box-shadow: none !important;
+    background: #FBF9F5 !important;
+    color: #161514 !important;
+    box-sizing: border-box !important;
+}
+.pdf-export-mode .contract-paper-inner {
+    padding: 18px 20px !important;
+}
+.pdf-export-mode .letterhead-banner {
+    margin: -18px -20px 18px -20px !important;
+    padding: 18px 20px !important;
+}
+.pdf-export-mode .agr-grid-2,
+.pdf-export-mode .agr-sig-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 14px !important;
+}
+.pdf-export-mode .agr-grid-3 {
+    grid-template-columns: 1fr 1fr 1fr !important;
+    gap: 12px !important;
+}
+.pdf-export-mode .no-print {
+    display: none !important;
+}
+
+@page {
+    size: A4 portrait;
+    margin: 10mm 10mm;
+}
+
+@media print {
+    html, body, main, .section, .container {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #161514 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    header, footer, .announcement-bar, .flash-banner, .no-print {
+        display: none !important;
+    }
+    .contract-paper {
+        border: 2px solid #B8965A !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 16px 18px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        background: #FBF9F5 !important;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+    }
+    .contract-paper-inner {
+        border: 1px solid rgba(184, 150, 90, 0.55) !important;
+        padding: 18px 20px !important;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+    }
+    .letterhead-banner {
+        margin: -18px -20px 18px -20px !important;
+        padding: 18px 20px !important;
+    }
+    .agr-grid-2, .agr-sig-grid {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 14px !important;
+    }
+    .agr-grid-3 {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr !important;
+        gap: 12px !important;
+    }
+    .pdf-no-break,
+    .contract-paper tr,
+    .contract-paper thead,
+    .contract-paper tfoot,
+    .sig-box,
+    .party-box,
+    .stage-card,
+    .commission-card,
+    .remittance-box {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+    table {
+        page-break-inside: auto;
+    }
+    thead {
+        display: table-header-group;
+    }
+    tfoot {
+        display: table-footer-group;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+}
+</style>
+
+<%
+var $agr = $agreement || {};
+var $currency = $agr['currency'] || 'USD';
+var $lineItems = Array.isArray($agr['line_items']) ? $agr['line_items'] : [];
+var $schedule = Array.isArray($agr['artworks_schedule']) ? $agr['artworks_schedule'] : [];
+var $totalArtworks = Math.max(1, Number($agr['total_artworks'] ?? ($schedule.length || 1)));
+var $perSubtotal = Number($agr['per_artwork_subtotal'] ?? 0);
+var $vatRate = Number($agr['vat_rate'] ?? 15);
+var $perVat = Number($agr['per_artwork_vat'] ?? 0);
+var $perFee = Number($agr['per_artwork_fee'] ?? 0);
+var $totSubtotal = Number($agr['total_auth_subtotal'] ?? ($perSubtotal * $totalArtworks));
+var $totVat = Number($agr['total_auth_vat'] ?? ($perVat * $totalArtworks));
+var $totFee = Number($agr['total_auth_fee'] ?? ($perFee * $totalArtworks));
+var $commRate = Number($agr['commission_rate'] ?? 15);
+var $artistShare = Number($agr['artist_share_rate'] ?? 85);
+var $buyerPrem = Number($agr['buyer_premium_rate'] ?? 20);
+var $isCountersigned = Boolean($agr['artist_signed']);
+var $presetItems = Array.isArray($defaultAuthLineItems) ? $defaultAuthLineItems : [];
+var $safePdfFilename = 'ArtAlly-Contract-' + String($agr['agreement_number'] || 'AGR-AA-2026').replace(/[^a-zA-Z0-9_-]/g, '-') + '.pdf';
+%>
+
+<section class="section" style="padding: 2.5rem 0 4rem;">
+    <div class="container" style="max-width: 980px;">
+        <!-- Top Action Bar (Hidden on Print & PDF) -->
+        <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; background: var(--bg-elevated); padding: 1rem 1.25rem; border: 1px solid var(--border-hairline);">
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <% if (hasRole('admin')) { %>
+                    <a href="/admin/dashboard#agreement-generator" class="btn btn-outline btn-sm">&larr; Back to Admin Contract Generator</a>
+                <% } else { %>
+                    <a href="/artist/dashboard#contract-agreements" class="btn btn-outline btn-sm">&larr; Back to Artist Dashboard</a>
+                <% } %>
+                <% if (!empty($agr['invoice_id'])) { %>
+                    <a href="/invoices/<%- Number($agr['invoice_id']) %>" class="btn btn-outline btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);">
+                        📄 View Aligned Invoice (<%- e($agr['invoice_number']) %>)
+                    </a>
+                <% } %>
+            </div>
+            <div style="display: flex; gap: 0.65rem; flex-wrap: wrap;">
+                <% if (hasRole('admin')) { %>
+                    <button type="button" onclick="var el=document.getElementById('admin-agreement-breakdown-editor'); el.style.display = (el.style.display === 'none' ? 'block' : 'none');" class="btn btn-outline btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);">
+                        ✎ Edit Auth Descriptions &amp; Total Artworks
+                    </button>
+                <% } %>
+                <button type="button" id="btn-download-contract-pdf" onclick="downloadOfficialContractPdf()" class="btn btn-gold btn-sm">
+                    ⬇ Download Official PDF
+                </button>
+                <button type="button" onclick="window.print()" class="btn btn-outline btn-sm" style="border-color: #161514; color: #161514; font-weight: 700;">
+                    🖨 Print / Save as PDF
+                </button>
+                <a href="/agreements/<%- Number($agr['id'] || 0) %>/download" class="btn btn-outline btn-sm">
+                    ⬇ Download HTML Copy
+                </a>
+            </div>
+        </div>
+
+        <% if (hasRole('admin')) { %>
+        <!-- Admin Live Breakdown & Artwork Count Editor (Syncs Agreement + Linked Invoice) -->
+        <div id="admin-agreement-breakdown-editor" class="no-print" style="display: none; background: #181615; color: #F4EFE6; border: 2px solid #B8965A; padding: 1.75rem; margin-bottom: 1.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; border-bottom: 1px solid rgba(184, 150, 90, 0.35); padding-bottom: 1rem; margin-bottom: 1rem;">
+                <div>
+                    <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.18em; color: #C6A664; font-weight: 700; margin: 0 0 0.25rem;">
+                        Admin Live Contract &amp; Invoice Alignment Editor
+                    </p>
+                    <h3 style="font-family: var(--font-serif); font-size: 1.35rem; color: #FBF9F5; margin: 0;">
+                        Edit Authentication Descriptions &amp; Total Artworks for <%- e($agr['agreement_number']) %>
+                    </h3>
+                    <p style="font-size: 0.78rem; color: #A69F93; margin-top: 0.25rem;">
+                        Saving changes here updates both this Contract Agreement and its aligned Authentication Invoice (<%- e($agr['invoice_number']) %>) so both documents remain 100% synchronized.
+                    </p>
+                </div>
+                <button type="button" onclick="document.getElementById('admin-agreement-breakdown-editor').style.display='none'" style="background: transparent; border: 1px solid rgba(255,255,255,0.25); color: #D6D0C4; padding: 0.35rem 0.75rem; font-size: 0.75rem; cursor: pointer;">
+                    Close ✕
+                </button>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700; margin-bottom: 0.5rem;">
+                    + Quick-Add Preset Authentication Description or Custom Item:
+                </p>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.45rem;">
+                    <% for (const $pItem of $presetItems) { %>
+                        <button type="button"
+                            onclick='agrViewAddPresetItem(<%- JSON.stringify($pItem) %>)'
+                            style="background: rgba(198,166,100,0.14); border: 1px solid #C6A664; color: #FBF9F5; padding: 0.35rem 0.65rem; font-size: 0.72rem; cursor: pointer;">
+                            + <%- e($pItem.title) %> ($<%- Number($pItem.amount).toLocaleString('en-US', {minimumFractionDigits: 2}) %>)
+                        </button>
+                    <% } %>
+                    <button type="button"
+                        onclick="agrViewAddPresetItem({ key: 'custom', title: 'Custom Forensic / Authentication Verification Item', description: '- Specialized verification protocol.', amount: 500 })"
+                        style="background: #C6A664; border: 1px solid #C6A664; color: #161514; font-weight: 700; padding: 0.35rem 0.75rem; font-size: 0.72rem; cursor: pointer;">
+                        + Add Custom Description
+                    </button>
+                </div>
+            </div>
+
+            <form action="/admin/agreements/update-breakdown" method="POST">
+                <%- csrf_field() %>
+                <input type="hidden" name="agreement_id" value="<%- Number($agr['id']) %>">
+
+                <div style="background: rgba(198,166,100,0.12); border: 1px solid #C6A664; padding: 1rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <label style="display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700;">
+                            Total Number of Artworks Covered by Agreement *
+                        </label>
+                        <p style="font-size: 0.75rem; color: #D6D0C4; margin: 0.2rem 0 0;">
+                            Authentication payment is charged per each artwork. Total authentication payment = (Per-Artwork Fee incl. 15% VAT) &times; (Total Artworks).
+                        </p>
+                    </div>
+                    <div>
+                        <input type="number" id="agr-view-total-artworks" name="total_artworks" min="1" max="500" required value="<%- $totalArtworks %>" oninput="agrViewRecalc()" style="width: 130px; background: #0F0E0D; border: 2px solid #C6A664; color: #FFFFFF; padding: 0.5rem 0.75rem; font-family: var(--font-mono); font-size: 1.1rem; font-weight: 700; text-align: center;">
+                    </div>
+                </div>
+
+                <div id="agr-view-items-container" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
+                    <% for (let $idx = 0; $idx < $lineItems.length; $idx++) {
+                        const $item = $lineItems[$idx]; %>
+                        <div class="agr-view-item-row" data-key="<%- e($item.key || '') %>" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(198,166,100,0.4); padding: 0.85rem;">
+                            <input type="hidden" name="item_key[]" value="<%- e($item.key || 'item') %>">
+                            <div style="display: grid; grid-template-columns: 1fr 170px auto; gap: 0.75rem; align-items: start;">
+                                <div>
+                                    <label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; margin-bottom: 0.25rem;">Description Heading *</label>
+                                    <input type="text" name="item_title[]" required value="<%- e($item.title) %>" style="width: 100%; background: #0F0E0D; border: 1px solid rgba(255,255,255,0.22); color: #FFFFFF; padding: 0.45rem 0.6rem; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.45rem;">
+                                    <label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.25rem;">Sub-Bullet Breakdown Details</label>
+                                    <textarea name="item_description[]" rows="3" style="width: 100%; background: #0F0E0D; border: 1px solid rgba(255,255,255,0.18); color: #D6D0C4; padding: 0.45rem 0.6rem; font-family: var(--font-mono); font-size: 0.76rem;"><%- e($item.description) %></textarea>
+                                </div>
+                                <div>
+                                    <label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; margin-bottom: 0.25rem;">Per-Artwork Amount (<%- e($currency) %>) *</label>
+                                    <input type="number" step="0.01" min="0" name="item_amount[]" required value="<%- Number($item.amount || 0).toFixed(2) %>" oninput="agrViewRecalc()" style="width: 100%; background: #0F0E0D; border: 1px solid #C6A664; color: #C6A664; padding: 0.45rem 0.6rem; font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; text-align: right;">
+                                </div>
+                                <div style="padding-top: 1.25rem;">
+                                    <button type="button" onclick="agrViewRemoveRow(this)" style="background: rgba(180, 40, 40, 0.25); border: 1px solid #D9534F; color: #FFB4B4; padding: 0.45rem 0.65rem; font-size: 0.72rem; cursor: pointer;">
+                                        ✕ Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    <% } %>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; background: #0F0E0D; border: 1px solid #C6A664; padding: 1rem 1.25rem;">
+                    <div style="font-family: var(--font-mono); font-size: 0.82rem; color: #D6D0C4;">
+                        Per-Artwork Fee (incl. 15% VAT): <strong id="agr-view-per-fee" style="color: #FFF;"><%- format_money_exact($perFee, $currency) %></strong>
+                        &nbsp;&times;&nbsp; <strong id="agr-view-count-label" style="color: #C6A664;"><%- $totalArtworks %></strong> Artwork(s)
+                        &nbsp;=&nbsp; Grand Total Auth Due: <strong id="agr-view-grand-total" style="color: #C6A664; font-size: 1rem;"><%- format_money_exact($totFee, $currency) %></strong>
+                    </div>
+                    <button type="submit" class="btn btn-gold btn-sm">
+                        ✓ Save &amp; Sync Agreement + Invoice
+                    </button>
+                </div>
+            </form>
+        </div>
+        <% } %>
+
+        <!-- OFFICIAL ARTALLY LETTERHEADED CONTRACT AGREEMENT PAPER -->
+        <div id="contract-printable-area" class="contract-paper" style="background: #FBF9F5; color: #161514; padding: 2.5rem 2.75rem; border: 2px solid #B8965A; box-shadow: 0 24px 60px rgba(0,0,0,0.55); position: relative;">
+            <div class="contract-paper-inner" style="border: 1px solid rgba(184, 150, 90, 0.5); padding: 2.25rem;">
+
+                <!-- HEADER + TITLE + PARTIES BLOCK (KEPT TOGETHER ON PAGE 1) -->
+                <div class="pdf-no-break">
+                    <!-- ARTALLY OFFICIAL INSTITUTIONAL LETTERHEAD BANNER -->
+                    <div class="letterhead-banner" style="background: #161514; color: #FBF9F5; padding: 1.75rem 2rem; border-bottom: 3px solid #B8965A; margin: -2.25rem -2.25rem 1.85rem -2.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.25rem;">
+                        <div style="display: flex; align-items: center; gap: 1.1rem;">
+                            <!-- Institutional Crest Monogram -->
+                            <div style="width: 58px; height: 58px; border: 2px solid #C6A664; background: #0F0E0D; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: inset 0 0 0 2px rgba(198,166,100,0.25);">
+                                <span style="font-family: var(--font-serif); font-size: 1.45rem; font-weight: 700; color: #C6A664; letter-spacing: 0.08em; line-height: 1;">AA</span>
+                                <span style="font-size: 0.44rem; letter-spacing: 0.22em; color: #A69F93; text-transform: uppercase; margin-top: 2px;">GENEVA</span>
+                            </div>
+                            <div>
+                                <p style="font-size: 0.62rem; letter-spacing: 0.24em; text-transform: uppercase; color: #C6A664; margin: 0 0 0.2rem; font-weight: 700;">
+                                    ARTALLY · INTERNATIONAL FINE ART AUCTIONEERS &amp; CURATORIAL HOUSE
+                                </p>
+                                <h1 style="font-family: var(--font-serif); font-size: 1.95rem; color: #FBF9F5; font-weight: 600; letter-spacing: 0.14em; line-height: 1.05; margin: 0 0 0.25rem;">
+                                    ARTALLY
+                                </h1>
+                                <p style="font-size: 0.74rem; color: #D6D0C4; margin: 0;">
+                                    Rue du Rhône 42, 1204 Geneva, Switzerland · Salerooms: New York · London · Paris · <a href="mailto:Art-Ally@consultant.com" style="color: #C6A664; text-decoration: underline;">Art-Ally@consultant.com</a>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div style="text-align: right;">
+                            <div style="display: inline-block; padding: 0.28rem 0.75rem; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 0.4rem; border: 1px solid #C6A664; background: rgba(198, 166, 100, 0.18); color: #C6A664;">
+                                <%- $isCountersigned ? '✓ FULLY EXECUTED & COUNTERSIGNED' : '✓ PRE-SIGNED & SEALED BY ARTALLY' %>
+                            </div>
+                            <p style="font-family: var(--font-mono); font-size: 0.84rem; font-weight: 700; color: #FFFFFF; margin: 0;">
+                                Agreement Ref: <%- e($agr['agreement_number'] ?? 'AGR-AA-2026-0001') %>
+                            </p>
+                            <p style="font-family: var(--font-mono); font-size: 0.74rem; color: #C6A664; margin: 0.12rem 0 0;">
+                                Aligned Invoice: <%- e($agr['invoice_number'] ?? 'INV-AUTH-ALIGNED') %>
+                            </p>
+                            <p style="font-size: 0.72rem; color: #A69F93; margin: 0.12rem 0 0;">
+                                Date of Agreement: <%- e(substr($agr['platform_signed_at'] ?? $agr['created_at'] ?? gmdate('Y-m-d'), 0, 10)) %>
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Document Title Banner -->
+                    <div style="text-align: center; border-bottom: 2px solid #161514; padding-bottom: 1.15rem; margin-bottom: 1.5rem;">
+                        <p style="font-size: 0.68rem; letter-spacing: 0.22em; text-transform: uppercase; color: #8C6D32; font-weight: 700; margin: 0 0 0.3rem;">
+                            CURATORIAL CONNOISSEURSHIP, AI FORENSIC AUTHENTICATION &amp; TIMED DIGITAL AUCTION DIVISION
+                        </p>
+                        <h2 style="font-family: var(--font-serif); font-size: 1.65rem; color: #161514; font-weight: 600; letter-spacing: 0.02em; margin: 0;">
+                            ARTIST ARTWORK CONSIGNMENT, AUTHENTICATION &amp; DIGITAL AUCTION AGREEMENT
+                        </h2>
+                        <p style="font-size: 0.8rem; color: #57524C; margin: 0.35rem 0 0;">
+                            This Artist Artwork Consignment, Authentication and Digital Auction Agreement (the <strong>&ldquo;Agreement&rdquo;</strong>) is entered into between the following Parties:
+                        </p>
+                    </div>
+
+                    <!-- 1. THE DIGITAL AUCTION PLATFORM & 2. THE REGISTERED ARTIST -->
+                    <div class="agr-grid-2" style="margin-bottom: 1.65rem;">
+                        <!-- Party 1: ArtAlly -->
+                        <div class="party-box" style="background: rgba(22, 21, 20, 0.03); border: 1px solid #DCD5C9; padding: 1.15rem 1.25rem;">
+                            <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; color: #8C6D32; font-weight: 700; margin: 0 0 0.55rem; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.4rem;">
+                                1. THE DIGITAL AUCTION PLATFORM (&ldquo;ARTALLY&rdquo;)
+                            </p>
+                            <div style="font-size: 0.81rem; color: #2B2927; line-height: 1.6;">
+                                <p style="margin: 0.18rem 0;"><strong>Platform / Company Name:</strong> ArtAlly</p>
+                                <p style="margin: 0.18rem 0;"><strong>Registered Legal Name:</strong> ArtAlly International Fine Art Auctioneers &amp; Curatorial House Ltd.</p>
+                                <p style="margin: 0.18rem 0;"><strong>Registered Address:</strong> Rue du Rhône 42, 1204 Geneva, Switzerland</p>
+                                <p style="margin: 0.18rem 0;"><strong>Global Salerooms:</strong> Geneva · New York · London · Paris</p>
+                                <p style="margin: 0.18rem 0;"><strong>Registration Number:</strong> CHE-418.920.315 (Geneva Commercial Registry)</p>
+                                <p style="margin: 0.18rem 0;"><strong>Official Email:</strong> <a href="mailto:Art-Ally@consultant.com" style="color: #8C6D32; font-weight: 600;">Art-Ally@consultant.com</a></p>
+                                <p style="margin: 0.4rem 0 0; font-size: 0.75rem; color: #57524C; font-style: italic;">Hereinafter referred to as <strong>&ldquo;ArtAlly&rdquo;</strong> or the <strong>&ldquo;Platform.&rdquo;</strong></p>
+                            </div>
+                        </div>
+
+                        <!-- Party 2: Registered Artist (Auto-Populated from Registration) -->
+                        <div class="party-box" style="background: rgba(184, 150, 90, 0.06); border: 1px solid #B8965A; padding: 1.15rem 1.25rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(184, 150, 90, 0.4); padding-bottom: 0.4rem; margin-bottom: 0.55rem; gap: 0.4rem;">
+                                <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; color: #8C6D32; font-weight: 700; margin: 0;">
+                                    2. THE REGISTERED ARTIST / ARTWORK OWNER
+                                </p>
+                                <span style="font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em; background: #161514; color: #C6A664; padding: 0.14rem 0.45rem; font-weight: 700; white-space: nowrap;">
+                                    Auto-Filled from Registration
+                                </span>
+                            </div>
+                            <div style="font-size: 0.81rem; color: #2B2927; line-height: 1.6;">
+                                <p style="margin: 0.18rem 0;"><strong>Full Legal Name:</strong> <span style="font-weight: 700; color: #161514;"><%- e($agr['artist_full_name']) %></span></p>
+                                <p style="margin: 0.18rem 0;"><strong>Professional / Studio Name:</strong> <%- e($agr['artist_professional_name']) %></p>
+                                <p style="margin: 0.18rem 0;"><strong>Registered Address / Studio:</strong> <%- e($agr['artist_address']) %></p>
+                                <p style="margin: 0.18rem 0;"><strong>Country:</strong> <%- e($agr['artist_country']) %></p>
+                                <p style="margin: 0.18rem 0;"><strong>Registered Email:</strong> <%- e($agr['artist_email'] || 'Verified on Studio File') %></p>
+                                <p style="margin: 0.18rem 0;"><strong>Artistic Discipline:</strong> <%- e($agr['artist_discipline']) %></p>
+                                <p style="margin: 0.18rem 0;"><strong>Registration / Studio ID:</strong> <span style="font-family: var(--font-mono); font-size: 0.78rem; color: #8C6D32; font-weight: 700;"><%- e($agr['artist_registration_ref']) %></span></p>
+                                <p style="margin: 0.4rem 0 0; font-size: 0.75rem; color: #57524C; font-style: italic;">Hereinafter referred to as the <strong>&ldquo;Artist.&rdquo;</strong> ArtAlly and the Artist are collectively referred to as the <strong>&ldquo;Parties.&rdquo;</strong></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. PURPOSE, NATURE & THE ARTALLY CURATORIAL AUCTION WORKFLOW -->
+                <div class="pdf-no-break" style="margin-bottom: 1.55rem;">
+                    <h3 style="font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #161514; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.35rem; margin: 0 0 0.65rem;">
+                        3. PURPOSE, NATURE &amp; THE ARTALLY CURATORIAL AUCTION PROCESS
+                    </h3>
+                    <p style="font-size: 0.84rem; color: #2B2927; line-height: 1.62; margin: 0 0 0.65rem;">
+                        This Agreement sets out the terms on which the Registered Artist consigns identified original artwork(s) to <strong>ArtAlly</strong> for independent curatorial connoisseurship, AI-powered forensic authentication, international collector presentation, and timed digital auction sale through ArtAlly&rsquo;s institutional marketplace:
+                    </p>
+                    <div class="agr-grid-2" style="gap: 0.75rem; margin-bottom: 0.65rem;">
+                        <div class="stage-card" style="background: rgba(22,21,20,0.025); border-left: 3px solid #B8965A; padding: 0.65rem 0.85rem; font-size: 0.79rem; line-height: 1.5;">
+                            <strong style="color: #161514; display: block; margin-bottom: 0.12rem;">Stage 01 · Studio Registration &amp; Dossier</strong>
+                            The Artist registers on ArtAlly and submits complete artwork metadata, high-resolution studio photographs, condition details, provenance, and proposed reserve valuation.
+                        </div>
+                        <div class="stage-card" style="background: rgba(22,21,20,0.025); border-left: 3px solid #B8965A; padding: 0.65rem 0.85rem; font-size: 0.79rem; line-height: 1.5;">
+                            <strong style="color: #161514; display: block; margin-bottom: 0.12rem;">Stage 02 · Contract Agreement &amp; Per-Artwork Auth Payment</strong>
+                            Upon execution of this Agreement and confirmation of the per-artwork authentication payment (multiplied by the total artworks), ArtAlly initiates formal verification.
+                        </div>
+                        <div class="stage-card" style="background: rgba(22,21,20,0.025); border-left: 3px solid #B8965A; padding: 0.65rem 0.85rem; font-size: 0.79rem; line-height: 1.5;">
+                            <strong style="color: #161514; display: block; margin-bottom: 0.12rem;">Stage 03 · Curatorial &amp; AI Forensic Vetting + 72-Hr Preview</strong>
+                            Every consigned artwork undergoes ArtAlly&rsquo;s mandatory multi-layer forensic, provenance, Digital Art Passport (COA), and DoD encryption protocol, then enters the <strong>72-hour collector preview window</strong>.
+                        </div>
+                        <div class="stage-card" style="background: rgba(22,21,20,0.025); border-left: 3px solid #B8965A; padding: 0.65rem 0.85rem; font-size: 0.79rem; line-height: 1.5;">
+                            <strong style="color: #161514; display: block; margin-bottom: 0.12rem;">Stage 04 · 15% / 85% Split &amp; Studio Treasury Wallet</strong>
+                            On each completed sale, ArtAlly retains a <strong><%- $commRate %>% commission</strong> and disburses the Artist&rsquo;s <strong><%- $artistShare %>% net share</strong> of the final hammer price to the Artist&rsquo;s Studio Treasury Wallet.
+                        </div>
+                    </div>
+                    <p style="font-size: 0.81rem; color: #57524C; line-height: 1.55; margin: 0;">
+                        This Agreement constitutes a professional consignment and disclosed agency arrangement. The Artist retains legal ownership of each consigned artwork until an auction sale is completed and buyer funds have cleared in full.
+                    </p>
+                </div>
+
+                <!-- 4. ARTWORK DETAILS, OWNERSHIP & AUTHORITY TO CONSIGN -->
+                <div class="pdf-no-break" style="margin-bottom: 1.55rem;">
+                    <h3 style="font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #161514; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.35rem; margin: 0 0 0.65rem;">
+                        4. ARTWORK IDENTIFICATION, OWNERSHIP &amp; AUTHORITY TO CONSIGN
+                    </h3>
+                    <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.6; margin: 0 0 0.45rem;">
+                        <strong>4.1 Artwork Schedule:</strong> Complete specifications for each consigned artwork (<%- $totalArtworks %> artwork<%- $totalArtworks === 1 ? '' : 's' %> covered under this Agreement) are recorded in <strong>Schedule A (Consigned Artwork &amp; Valuation Schedule)</strong>, which forms an integral part of this Agreement.
+                    </p>
+                    <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.6; margin: 0;">
+                        <strong>4.2 Warranties of Ownership &amp; Authenticity:</strong> The Artist represents and warrants that they are the original creator and sole lawful owner of each consigned artwork; that each artwork is authentic and not subject to any undisclosed lien, security interest, encumbrance, or third-party dispute; and that the Artist has full legal authority to consign the artwork(s) for verification and sale through ArtAlly.
+                    </p>
+                </div>
+
+                <!-- 5. AUTHENTICATION PROCESS & PER-ARTWORK PAYMENT AGREEMENT (ALIGNED WITH INVOICE) -->
+                <div style="margin-bottom: 1.65rem;">
+                    <div class="pdf-no-break">
+                        <h3 style="font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #161514; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.35rem; margin: 0 0 0.65rem;">
+                            5. MANDATORY AUTHENTICATION PROCESS &amp; PER-ARTWORK FEE AGREEMENT (ALIGNED WITH INVOICE <%- e($agr['invoice_number']) %>)
+                        </h3>
+                        <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.62; margin: 0 0 0.5rem;">
+                            <strong>5.1 Independent Curatorial &amp; AI Verification Protocol:</strong> Every artwork consigned to ArtAlly must undergo and pass ArtAlly&rsquo;s Curatorial Connoisseurship &amp; AI-Powered Forensic Authentication process prior to public auction listing. The exact authentication descriptions performed by ArtAlly are derived directly from the Artist&rsquo;s aligned Authentication Invoice (<strong><%- e($agr['invoice_number']) %></strong>) as itemized below.
+                        </p>
+                        <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.62; margin: 0 0 0.85rem;">
+                            <strong>5.2 Per-Artwork Authentication Payment &amp; Total Artwork Calculation:</strong> The Parties expressly agree that the authentication payment is charged <strong>per each individual artwork</strong> (<strong style="color: #8C6D32;"><%- format_money_exact($perFee, $currency) %> <%- e($currency) %> per artwork</strong>, inclusive of fixed <%- $vatRate %>% VAT), and the <strong>Grand Total Authentication Payment Due</strong> depends on the <strong>total number of artworks</strong> covered by this Agreement (<strong style="color: #161514;"><%- $totalArtworks %> artwork<%- $totalArtworks === 1 ? '' : 's' %> &times; <%- format_money_exact($perFee, $currency) %> = <%- format_money_exact($totFee, $currency) %> <%- e($currency) %></strong>).
+                        </p>
+                    </div>
+
+                    <!-- Aligned Authentication Descriptions & Per-Artwork / Total Artworks Table -->
+                    <div class="pdf-no-break" style="background: #141215; color: #FBF9F5; border: 1px solid #B8965A; padding: 1.25rem 1.45rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; border-bottom: 1px solid rgba(198,166,100,0.45); padding-bottom: 0.65rem; margin-bottom: 0.65rem;">
+                            <div>
+                                <span style="font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700;">
+                                    OFFICIAL AUTHENTICATION SCHEDULE · ALIGNED WITH INVOICE <%- e($agr['invoice_number']) %>
+                                </span>
+                                <p style="font-size: 0.78rem; color: #D6D0C4; margin: 0.12rem 0 0;">
+                                    Service Tier: <strong style="color: #FFFFFF;"><%- e($agr['service_type']) %></strong>
+                                </p>
+                            </div>
+                            <span style="font-family: var(--font-mono); font-size: 0.72rem; padding: 0.22rem 0.6rem; background: rgba(198,166,100,0.16); border: 1px solid #C6A664; color: #C6A664;">
+                                TOTAL ARTWORKS: <%- $totalArtworks %> WORK<%- $totalArtworks === 1 ? '' : 'S' %>
+                            </span>
+                        </div>
+
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid rgba(198, 166, 100, 0.4);">
+                                    <th style="text-align: left; padding: 0.45rem 0.35rem 0.65rem; font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.13em; color: #C6A664;">
+                                        AUTHENTICATION DESCRIPTION (SYNCED WITH INVOICE)
+                                    </th>
+                                    <th style="text-align: right; padding: 0.45rem 0.35rem 0.65rem; font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.13em; color: #C6A664;">
+                                        FEE PER 1 ARTWORK (<%- e($currency) %>)
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% for (let $i = 0; $i < $lineItems.length; $i++) {
+                                    const $item = $lineItems[$i]; %>
+                                <tr class="pdf-no-break" style="border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                    <td style="padding: 0.75rem 0.35rem; vertical-align: top;">
+                                        <p style="font-family: var(--font-mono); font-weight: 700; color: #FFFFFF; font-size: 0.86rem; margin: 0 0 0.25rem;">
+                                            0<%- $i + 1 %>. <%- e($item['title'] ?? '') %>
+                                        </p>
+                                        <% if (!empty($item['description'])) { %>
+                                        <div style="font-family: var(--font-mono); font-size: 0.75rem; color: #E2DDD5; line-height: 1.55;">
+                                            <%- nl2br(e($item['description'])) %>
+                                        </div>
+                                        <% } %>
+                                    </td>
+                                    <td style="padding: 0.75rem 0.35rem; vertical-align: top; text-align: right; font-family: var(--font-mono); font-size: 0.92rem; font-weight: 700; color: #FFFFFF; white-space: nowrap;">
+                                        <%- format_money_exact(Number($item['amount'] ?? 0), $currency) %>
+                                    </td>
+                                </tr>
+                                <% } %>
+                            </tbody>
+                            <tfoot class="pdf-no-break">
+                                <tr style="border-top: 2px dashed rgba(255, 255, 255, 0.35);">
+                                    <td style="padding: 0.65rem 0.35rem 0.25rem; font-family: var(--font-mono); font-size: 0.76rem; color: #D6D0C4;">
+                                        PER-ARTWORK SUBTOTAL (<%- $lineItems.length %> AUTHENTICATION DESCRIPTION<%- $lineItems.length === 1 ? '' : 'S' %>)
+                                    </td>
+                                    <td style="padding: 0.65rem 0.35rem 0.25rem; text-align: right; font-family: var(--font-mono); font-size: 0.9rem; font-weight: 700; color: #FFFFFF;">
+                                        <%- format_money_exact($perSubtotal, $currency) %>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 0.25rem 0.35rem 0.65rem; font-family: var(--font-mono); font-size: 0.76rem; color: #C6A664;">
+                                        FIXED VAT (<%- $vatRate %>%) PER ARTWORK
+                                    </td>
+                                    <td style="padding: 0.25rem 0.35rem 0.65rem; text-align: right; font-family: var(--font-mono); font-size: 0.9rem; font-weight: 700; color: #C6A664;">
+                                        <%- format_money_exact($perVat, $currency) %>
+                                    </td>
+                                </tr>
+                                <tr style="border-top: 1px solid rgba(198,166,100,0.45); border-bottom: 2px dashed rgba(255, 255, 255, 0.35); background: rgba(198,166,100,0.08);">
+                                    <td style="padding: 0.7rem 0.45rem; font-family: var(--font-mono); font-size: 0.82rem; font-weight: 700; color: #FFFFFF;">
+                                        AUTHENTICATION FEE PER EACH ARTWORK (1 ARTWORK INCL. <%- $vatRate %>% VAT)
+                                    </td>
+                                    <td style="padding: 0.7rem 0.45rem; text-align: right; font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700; color: #C6A664;">
+                                        <%- format_money_exact($perFee, $currency) %> <span style="font-size: 0.7rem;"><%- e($currency) %></span>
+                                    </td>
+                                </tr>
+                                <tr style="background: #0F0E0D;">
+                                    <td style="padding: 0.85rem 0.45rem; font-family: var(--font-mono); font-size: 0.84rem; font-weight: 700; color: #FFFFFF;">
+                                        GRAND TOTAL AUTHENTICATION PAYMENT DUE (<%- $totalArtworks %> ARTWORK<%- $totalArtworks === 1 ? '' : 'S' %> &times; <%- format_money_exact($perFee, $currency) %>)
+                                        <span style="display: block; font-size: 0.72rem; color: #A69F93; font-weight: 400; margin-top: 0.15rem;">
+                                            Total Subtotal (<%- $totalArtworks %> &times; <%- format_money_exact($perSubtotal, $currency) %> = <%- format_money_exact($totSubtotal, $currency) %>) + Total 15% VAT (<%- format_money_exact($totVat, $currency) %>)
+                                        </span>
+                                    </td>
+                                    <td style="padding: 0.85rem 0.45rem; text-align: right; font-family: var(--font-mono); font-size: 1.25rem; font-weight: 700; color: #C6A664; white-space: nowrap;">
+                                        <%- format_money_exact($totFee, $currency) %> <span style="font-size: 0.74rem; color: #FFFFFF;"><%- e($currency) %></span>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <% var $hasBank = !empty($agr['payment_account_number']) || !empty($agr['payment_bank_name']);
+                       var $hasCrypto = !empty($agr['crypto_wallet_address']) || !empty($agr['crypto_currency']); %>
+                    <% if ($hasBank || $hasCrypto) { %>
+                    <div class="remittance-box pdf-no-break" style="background: #1C1A18; color: #F4EFE6; border: 1px solid #B8965A; border-top: none; padding: 0.9rem 1.35rem; font-size: 0.78rem;">
+                        <p style="font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700; margin: 0 0 0.4rem;">
+                            Designated Authentication Fee Remittance Channels (Aligned with Invoice <%- e($agr['invoice_number']) %>):
+                        </p>
+                        <div class="agr-grid-2" style="gap: 0.8rem;">
+                            <% if ($hasBank) { %>
+                            <div>
+                                <strong style="color: #C6A664;">🏛 Bank Wire Transfer:</strong>
+                                <div style="font-family: var(--font-mono); font-size: 0.75rem; color: #FFFFFF; margin-top: 0.12rem;">
+                                    <%- e($agr['payment_bank_name']) %> · Beneficiary: <%- e($agr['payment_account_name']) %><br>
+                                    Account / IBAN: <span style="color: #C6A664; font-weight: 700;"><%- e($agr['payment_account_number']) %></span>
+                                    <%- !empty($agr['payment_routing_details']) ? ' · SWIFT/Routing: ' + e($agr['payment_routing_details']) : '' %>
+                                </div>
+                            </div>
+                            <% } %>
+                            <% if ($hasCrypto) { %>
+                            <div>
+                                <strong style="color: #C6A664;">₿ Cryptocurrency Remittance:</strong>
+                                <div style="font-family: var(--font-mono); font-size: 0.75rem; color: #FFFFFF; margin-top: 0.12rem; word-break: break-all;">
+                                    <%- e($agr['crypto_currency']) %> (<%- e($agr['crypto_network']) %>)<br>
+                                    Wallet: <span style="color: #C6A664; font-weight: 700;"><%- e($agr['crypto_wallet_address']) %></span>
+                                </div>
+                            </div>
+                            <% } %>
+                        </div>
+                    </div>
+                    <% } %>
+                </div>
+
+                <!-- 6. AUTHORISATION TO LIST, MARKET, EXHIBIT & AUCTION (RESERVE PRICE & 72-HOUR PREVIEW) -->
+                <div class="pdf-no-break" style="margin-bottom: 1.55rem;">
+                    <h3 style="font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #161514; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.35rem; margin: 0 0 0.65rem;">
+                        6. AUTHORISATION TO LIST, MARKET &amp; AUCTION · RESERVE PRICE PROTECTION
+                    </h3>
+                    <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.6; margin: 0 0 0.45rem;">
+                        <strong>6.1 Saleroom Authority &amp; 72-Hour Preview:</strong> The Artist authorizes ArtAlly to prepare catalogue entries, display imagery and provenance, present each authenticated work in a <strong>72-hour collector exhibition preview</strong>, and conduct timed digital auctions with institutional bidding increments and automatic <strong>5-minute anti-sniping extensions</strong>.
+                    </p>
+                    <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.6; margin: 0;">
+                        <strong>6.2 Reserve Price Guarantee:</strong> ArtAlly shall not accept a final bid below the agreed Reserve Price recorded in Schedule A without the Artist&rsquo;s approval. If bidding closes below the Reserve Price, the artwork is recorded as <strong>Unsold</strong>, no sales commission is charged, and ownership remains with the Artist.
+                    </p>
+                </div>
+
+                <!-- 7. PERCENTAGE COMMISSION AGREEMENT (15% ARTALLY / 85% ARTIST SHARE) -->
+                <div class="pdf-no-break" style="margin-bottom: 1.55rem;">
+                    <h3 style="font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #161514; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.35rem; margin: 0 0 0.65rem;">
+                        7. PERCENTAGE COMMISSION AGREEMENT (<%- $commRate %>% PLATFORM COMMISSION / <%- $artistShare %>% ARTIST SHARE)
+                    </h3>
+                    <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.6; margin: 0 0 0.75rem;">
+                        In consideration of ArtAlly&rsquo;s auction administration, international collector marketing, curatorial presentation, and escrow settlement services, the Parties agree to the following percentage distribution on the final hammer price of each successfully sold artwork:
+                    </p>
+
+                    <div class="agr-grid-3" style="margin-bottom: 0.75rem;">
+                        <div class="commission-card" style="background: #161514; color: #FBF9F5; border: 1px solid #B8965A; padding: 0.95rem 1.1rem;">
+                            <span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; font-weight: 700; display: block;">Artist&rsquo;s Net Hammer Share</span>
+                            <span style="font-family: var(--font-serif); font-size: 1.9rem; font-weight: 700; color: #FFFFFF; display: block; margin: 0.1rem 0;"><%- $artistShare %>%</span>
+                            <span style="font-size: 0.75rem; color: #D6D0C4;">Eighty-five percent (85%) of the final hammer price credited to the Artist&rsquo;s Studio Wallet.</span>
+                        </div>
+                        <div class="commission-card" style="background: rgba(22, 21, 20, 0.04); border: 1px solid #DCD5C9; padding: 0.95rem 1.1rem;">
+                            <span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #8C6D32; font-weight: 700; display: block;">ArtAlly Platform Commission</span>
+                            <span style="font-family: var(--font-serif); font-size: 1.9rem; font-weight: 700; color: #161514; display: block; margin: 0.1rem 0;"><%- $commRate %>%</span>
+                            <span style="font-size: 0.75rem; color: #57524C;">Fifteen percent (15%) of the final hammer price retained only upon a completed sale.</span>
+                        </div>
+                        <div class="commission-card" style="background: rgba(22, 21, 20, 0.04); border: 1px solid #DCD5C9; padding: 0.95rem 1.1rem;">
+                            <span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #8C6D32; font-weight: 700; display: block;">Separate Buyer&rsquo;s Premium</span>
+                            <span style="font-family: var(--font-serif); font-size: 1.9rem; font-weight: 700; color: #161514; display: block; margin: 0.1rem 0;">+<%- $buyerPrem %>%</span>
+                            <span style="font-size: 0.75rem; color: #57524C;">Paid separately by the winning buyer above the hammer price; does not reduce the Artist&rsquo;s 85%.</span>
+                        </div>
+                    </div>
+
+                    <p style="font-size: 0.79rem; color: #57524C; background: rgba(184,150,90,0.08); border: 1px solid #DCD5C9; padding: 0.55rem 0.85rem; margin: 0;">
+                        <strong>Financial Illustration:</strong> If an artwork achieves a final hammer price of <strong><%- format_money_exact(10000, $currency) %></strong>, ArtAlly&rsquo;s <%- $commRate %>% commission is <strong><%- format_money_exact(1500, $currency) %></strong> and the Artist&rsquo;s <%- $artistShare %>% net share is <strong><%- format_money_exact(8500, $currency) %></strong>. The <%- $commRate %>% commission rate is fixed and may not be altered for any consigned lot without the Artist&rsquo;s written agreement.
+                    </p>
+                </div>
+
+                <!-- 8. PAYMENT TO THE ARTIST, STUDIO TREASURY WALLET & WITHDRAWAL -->
+                <div class="pdf-no-break" style="margin-bottom: 1.55rem;">
+                    <h3 style="font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #161514; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.35rem; margin: 0 0 0.65rem;">
+                        8. ARTIST PAYMENT, STUDIO TREASURY WALLET &amp; WITHDRAWAL SETTLEMENT
+                    </h3>
+                    <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.6; margin: 0 0 0.45rem;">
+                        <strong>8.1 Escrow Collection &amp; Studio Wallet Credit:</strong> ArtAlly collects the winning buyer&rsquo;s payment through its Private Client Escrow &amp; Clearing arrangements. Upon cleared receipt of buyer funds and completion of compliance verification, ArtAlly disburses the Artist&rsquo;s <strong>85% net proceeds</strong> directly into the Artist&rsquo;s <strong>ArtAlly Studio Treasury Wallet</strong>.
+                    </p>
+                    <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.6; margin: 0;">
+                        <strong>8.2 Bank Wire &amp; Cryptocurrency Withdrawal:</strong> Once withdrawal access is authorized on the Artist&rsquo;s Studio Treasury Wallet, the Artist may remit their available balance to their nominated <strong>Bank Wire Account (IBAN / SWIFT / Routing)</strong> or <strong>Cryptocurrency Wallet (USDT, USDC, BTC, ETH, SOL)</strong>. Standard treasury clearing and settlement completes within <strong>2 to 7 business days</strong>.
+                    </p>
+                </div>
+
+                <!-- 9. COPYRIGHT, LOGISTICS, EXCLUSIVITY & GOVERNING LAW -->
+                <div class="pdf-no-break" style="margin-bottom: 1.65rem;">
+                    <h3 style="font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #161514; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.35rem; margin: 0 0 0.65rem;">
+                        9. COPYRIGHT, LOGISTICS, EXCLUSIVITY, CONFIDENTIALITY &amp; GOVERNING LAW
+                    </h3>
+                    <div style="font-size: 0.82rem; color: #2B2927; line-height: 1.6; display: grid; grid-template-columns: 1fr; gap: 0.4rem;">
+                        <p style="margin: 0;"><strong>9.1 Copyright &amp; Archival Licence:</strong> The Artist retains full copyright and moral rights in the artwork(s) and grants ArtAlly a non-exclusive, royalty-free licence to display, reproduce, and distribute photographs and descriptions of the artwork(s) solely for auction cataloguing, collector promotion, and completed-sale archival records.</p>
+                        <p style="margin: 0;"><strong>9.2 White-Glove Delivery, Crating &amp; Transit Insurance:</strong> Following a completed sale, ArtAlly coordinates white-glove museum crating, condition reporting, and insured dispatch from the Artist&rsquo;s studio or ArtAlly custody to the buyer.</p>
+                        <p style="margin: 0;"><strong>9.3 Exclusivity &amp; Withdrawal:</strong> Consignment arrangement: <strong><%- e($agr['exclusivity_type'] || 'Non-Exclusive') %></strong> (<%- e($agr['exclusivity_period'] || 'Duration of Scheduled Auction Cycle') %>). While an active auction or binding sale is in progress, the Artist shall not sell or transfer the same artwork in a manner that conflicts with the auction.</p>
+                        <p style="margin: 0;"><strong>9.4 Governing Law &amp; Dispute Resolution:</strong> The Parties shall resolve any dispute amicably in good faith within thirty (30) days, failing which the Agreement shall be governed by the <strong><%- e($agr['governing_law']) %></strong>, under the jurisdiction of the <strong><%- e($agr['dispute_forum']) %></strong>.</p>
+                    </div>
+                </div>
+
+                <!-- SCHEDULE A: CONSIGNED ARTWORK & VALUATION SCHEDULE -->
+                <div class="pdf-no-break" style="margin-bottom: 1.75rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; border-bottom: 2px solid #161514; padding-bottom: 0.45rem; margin-bottom: 0.75rem;">
+                        <h3 style="font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #161514; margin: 0;">
+                            SCHEDULE A: CONSIGNED ARTWORK &amp; VALUATION SCHEDULE (<%- $totalArtworks %> ARTWORK<%- $totalArtworks === 1 ? '' : 'S' %>)
+                        </h3>
+                        <span style="font-family: var(--font-mono); font-size: 0.72rem; color: #8C6D32; font-weight: 700;">
+                            Per-Artwork Auth Fee: <%- format_money_exact($perFee, $currency) %> · Total (<%- $totalArtworks %>): <%- format_money_exact($totFee, $currency) %>
+                        </span>
+                    </div>
+
+                    <div style="border: 1px solid #161514;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+                            <thead>
+                                <tr style="background: #161514; color: #FBF9F5; font-family: var(--font-sans); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em;">
+                                    <th style="padding: 0.6rem 0.65rem; text-align: left;">Lot / Ref</th>
+                                    <th style="padding: 0.6rem 0.65rem; text-align: left;">Artwork Title, Medium, Dimensions &amp; Provenance</th>
+                                    <th style="padding: 0.6rem 0.65rem; text-align: left;">Reserve / Valuation</th>
+                                    <th style="padding: 0.6rem 0.65rem; text-align: left;">Commission Split</th>
+                                    <th style="padding: 0.6rem 0.65rem; text-align: right;">Auth Fee / Work</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% for (let $wIdx = 0; $wIdx < $schedule.length; $wIdx++) {
+                                    const $w = $schedule[$wIdx]; %>
+                                <tr class="pdf-no-break" style="border-bottom: 1px solid #DCD5C9; background: <%- $wIdx % 2 === 0 ? '#FFFDF9' : 'rgba(22,21,20,0.02)' %>;">
+                                    <td style="padding: 0.65rem; font-family: var(--font-mono); font-size: 0.74rem; font-weight: 700; vertical-align: top;">
+                                        #<%- $wIdx + 1 %><br>
+                                        <span style="color: #8C6D32;"><%- e($w['reference_code'] ?? '') %></span>
+                                    </td>
+                                    <td style="padding: 0.65rem; vertical-align: top;">
+                                        <p style="font-family: var(--font-serif); font-size: 1rem; font-weight: 600; font-style: italic; color: #161514; margin: 0 0 0.18rem;">
+                                            &ldquo;<%- e($w['title'] ?? 'Consigned Artwork') %>&rdquo;
+                                        </p>
+                                        <p style="font-size: 0.75rem; color: #433F3B; margin: 0 0 0.12rem;">
+                                            <strong>Artist:</strong> <%- e($w['artist_name'] ?? $agr['artist_professional_name']) %> · <strong>Year:</strong> <%- e($w['year_created'] ?? '') %> · <strong>Medium:</strong> <%- e($w['medium'] ?? '') %> · <strong>Dimensions:</strong> <%- e($w['dimensions'] ?? '') %>
+                                        </p>
+                                        <p style="font-size: 0.72rem; color: #8C6D32; margin: 0;">
+                                            <%- e($w['classification'] ?? 'Original Unique Work (1/1)') %> · <%- e($w['signature_marks'] ?? 'Signed by Artist') %> · <%- e($w['provenance'] ?? 'Direct from Artist Studio') %>
+                                        </p>
+                                    </td>
+                                    <td style="padding: 0.65rem; font-family: var(--font-mono); font-size: 0.78rem; vertical-align: top;">
+                                        <strong>Reserve:</strong> <%- format_money_exact(Number($w['reserve_price'] ?? 0), $currency) %><br>
+                                        <span style="font-size: 0.7rem; color: #57524C;">Open: <%- format_money_exact(Number($w['opening_bid'] ?? 0), $currency) %></span>
+                                    </td>
+                                    <td style="padding: 0.65rem; font-size: 0.74rem; vertical-align: top;">
+                                        <span style="color: #57524C;">ArtAlly: <%- $commRate %>%</span><br>
+                                        <strong style="color: #1B4332;">Artist Share: <%- $artistShare %>%</strong>
+                                    </td>
+                                    <td style="padding: 0.65rem; text-align: right; font-family: var(--font-mono); font-size: 0.84rem; font-weight: 700; color: #8C6D32; vertical-align: top; white-space: nowrap;">
+                                        <%- format_money_exact($perFee, $currency) %>
+                                    </td>
+                                </tr>
+                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 10. ARTIST'S DECLARATION & INSTITUTIONAL SIGNATURES (NEVER SPLIT ACROSS PAGES) -->
+                <div class="pdf-no-break">
+                    <h3 style="font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #161514; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.35rem; margin: 0 0 0.65rem;">
+                        10. ARTIST&rsquo;S DECLARATION, CONSENT &amp; EXECUTION SIGNATURES
+                    </h3>
+                    <p style="font-size: 0.81rem; color: #2B2927; line-height: 1.58; margin: 0 0 1.1rem;">
+                        By executing this Agreement below, the Artist confirms that they have read and understood this Agreement; have the legal right and authority to consign the identified artwork(s); authorize ArtAlly to authenticate, catalogue, market, and auction the artwork(s) on the agreed terms; agree to the mandatory per-artwork authentication fee of <strong><%- format_money_exact($perFee, $currency) %> per artwork</strong> (Grand Total of <strong><%- format_money_exact($totFee, $currency) %> <%- e($currency) %></strong> for <strong><%- $totalArtworks %> artwork<%- $totalArtworks === 1 ? '' : 's' %></strong>, aligned with Invoice <strong><%- e($agr['invoice_number']) %></strong>); and accept the <strong><%- $commRate %>% ArtAlly Commission / <%- $artistShare %>% Artist Net Share</strong> percentage agreement.
+                    </p>
+
+                    <div class="agr-sig-grid">
+                        <!-- LEFT: FOR ARTALLY (ALREADY PRE-SIGNED & STAMPED) -->
+                        <div class="sig-box" style="background: #FFFDF9; border: 2px solid #161514; padding: 1.25rem; position: relative;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.45rem; margin-bottom: 0.75rem; gap: 0.4rem;">
+                                <span style="font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.13em; color: #8C6D32; font-weight: 700;">
+                                    FOR THE DIGITAL AUCTION PLATFORM (ARTALLY)
+                                </span>
+                                <span style="font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em; background: #1A2E22; color: #FBF9F5; padding: 0.15rem 0.5rem; font-weight: 700; white-space: nowrap;">
+                                    ✓ Signed &amp; Sealed
+                                </span>
+                            </div>
+
+                            <div style="font-size: 0.78rem; color: #2B2927; line-height: 1.55; margin-bottom: 0.75rem;">
+                                <p style="margin: 0.12rem 0;"><strong>Platform Legal Name:</strong> ArtAlly International Fine Art Auctioneers Ltd.</p>
+                                <p style="margin: 0.12rem 0;"><strong>Authorised Representative:</strong> <%- e($agr['platform_signatory_name'] ?? 'Dr. Henri Vance') %></p>
+                                <p style="margin: 0.12rem 0;"><strong>Position / Title:</strong> <%- e($agr['platform_signatory_title'] ?? 'Chief Curatorial Director & Head of Authentication') %></p>
+                            </div>
+
+                            <!-- Pre-Signed Handwritten Signature SVG + Embossed Corporate Stamp -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; border-top: 1px dashed #DCD5C9; border-bottom: 1px solid #161514; padding: 0.65rem 0; margin-bottom: 0.55rem;">
+                                <div>
+                                    <span style="font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: #6E6A63; display: block; margin-bottom: 0.12rem;">Authorised Executive Signature:</span>
+                                    <svg width="195" height="50" viewBox="0 0 240 60" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;">
+                                        <path d="M14 44C22 25 32 14 38 14C44 14 35 42 42 42C49 42 58 24 65 24C70 24 66 39 74 39C83 39 95 16 104 16C109 16 101 44 108 44C116 44 126 26 134 28C141 30 137 41 145 40C154 39 168 18 176 15C182 13 174 43 184 42C193 41 206 25 218 23C224 22 229 27 234 24" stroke="#14284B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M26 49C74 46 148 42 226 36" stroke="#14284B" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="220 10"/>
+                                    </svg>
+                                    <span style="font-family: var(--font-serif); font-size: 0.88rem; font-style: italic; color: #14284B; font-weight: 600;">
+                                        <%- e($agr['platform_signatory_name'] ?? 'Dr. Henri Vance') %>, Chief Curatorial Director
+                                    </span>
+                                </div>
+
+                                <!-- Official Circular Embossed ArtAlly Corporate Seal -->
+                                <div style="width: 82px; height: 82px; border-radius: 50%; border: 2px double #8C6D32; background: rgba(184, 150, 90, 0.1); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 5px; flex-shrink: 0; transform: rotate(-6deg);">
+                                    <span style="font-size: 0.44rem; letter-spacing: 0.14em; text-transform: uppercase; color: #8C6D32; font-weight: 700;">ARTALLY · GENEVA</span>
+                                    <span style="font-family: var(--font-serif); font-size: 0.68rem; font-weight: 700; color: #161514; margin: 2px 0; border-top: 1px solid #8C6D32; border-bottom: 1px solid #8C6D32; padding: 1px 4px;">OFFICIAL SEAL</span>
+                                    <span style="font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase; color: #705522; font-weight: 700;">CURATORIAL &amp; LEGAL</span>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: #57524C;">
+                                <span><strong>Date Signed:</strong> <%- e(substr($agr['platform_signed_at'] ?? $agr['created_at'] ?? gmdate('Y-m-d'), 0, 10)) %></span>
+                                <span style="font-family: var(--font-mono); color: #8C6D32; font-weight: 700;">SEAL: AA-CH-418920</span>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT: FOR THE REGISTERED ARTIST (AUTO-FILLED DETAILS + DIGITAL COUNTERSIGNATURE) -->
+                        <div class="sig-box" style="background: #FFFDF9; border: 2px solid #B8965A; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.45rem; margin-bottom: 0.75rem; gap: 0.4rem;">
+                                    <span style="font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.13em; color: #8C6D32; font-weight: 700;">
+                                        FOR THE REGISTERED ARTIST / ARTWORK OWNER
+                                    </span>
+                                    <span style="font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em; background: <%- $isCountersigned ? '#1A2E22' : '#8C6D32' %>; color: #FFFFFF; padding: 0.15rem 0.5rem; font-weight: 700; white-space: nowrap;">
+                                        <%- $isCountersigned ? '✓ Artist Countersigned' : 'Awaiting Artist Signature' %>
+                                    </span>
+                                </div>
+
+                                <div style="font-size: 0.78rem; color: #2B2927; line-height: 1.55; margin-bottom: 0.75rem;">
+                                    <p style="margin: 0.12rem 0;"><strong>Artist&rsquo;s Full Legal Name:</strong> <%- e($agr['artist_full_name']) %></p>
+                                    <p style="margin: 0.12rem 0;"><strong>Professional / Studio Name:</strong> <%- e($agr['artist_professional_name']) %></p>
+                                    <p style="margin: 0.12rem 0;"><strong>Email &amp; Country:</strong> <%- e($agr['artist_email'] || 'On File') %> (<%- e($agr['artist_country']) %>)</p>
+                                </div>
+
+                                <div style="border-top: 1px dashed #DCD5C9; border-bottom: 1px solid #161514; padding: 0.75rem 0; margin-bottom: 0.55rem; min-height: 82px; display: flex; flex-direction: column; justify-content: center;">
+                                    <span style="font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: #6E6A63; display: block; margin-bottom: 0.2rem;">Artist Signature:</span>
+                                    <% if ($isCountersigned) { %>
+                                        <p style="font-family: var(--font-serif); font-size: 1.6rem; font-style: italic; color: #161514; margin: 0.1rem 0;">
+                                            <%- e($agr['artist_signature_text'] || $agr['artist_full_name']) %>
+                                        </p>
+                                        <span style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: #2D6A4F; font-weight: 700;">
+                                            ✓ Electronically Countersigned &amp; Accepted (<%- e(substr($agr['artist_signed_at'] ?? '', 0, 16)) %> UTC)
+                                        </span>
+                                    <% } else { %>
+                                        <div style="height: 32px; border-bottom: 1px dotted #8C6D32; margin-bottom: 0.3rem;"></div>
+                                        <span style="font-size: 0.68rem; color: #8C6D32; font-style: italic;">
+                                            Sign above on printed copy or countersign electronically below
+                                        </span>
+                                    <% } %>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.74rem; color: #57524C; margin-bottom: 0.4rem;">
+                                    <span><strong>Date:</strong> <%- e(substr($agr['artist_signed_at'] ?? $agr['platform_signed_at'] ?? gmdate('Y-m-d'), 0, 10)) %></span>
+                                    <span style="font-family: var(--font-mono);"><%- e($agr['artist_registration_ref']) %></span>
+                                </div>
+
+                                <% if (!$isCountersigned) { %>
+                                <form action="/agreements/<%- Number($agr['id']) %>/sign" method="POST" class="no-print" style="margin-top: 0.45rem; padding-top: 0.55rem; border-top: 1px solid #DCD5C9; display: flex; gap: 0.45rem;">
+                                    <%- csrf_field() %>
+                                    <input type="text" name="artist_signature_text" required value="<%- e($agr['artist_full_name']) %>" placeholder="Type Full Legal Name to Sign" style="flex: 1; border: 1px solid #B8965A; background: #FFFFFF; padding: 0.35rem 0.55rem; font-family: var(--font-serif); font-style: italic; font-size: 0.85rem; color: #161514;">
+                                    <button type="submit" class="btn btn-gold btn-sm" style="white-space: nowrap;">
+                                        ✍ Countersign Now
+                                    </button>
+                                </form>
+                                <% } %>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Official Letterhead Archival Footer -->
+                    <div style="margin-top: 1.5rem; padding-top: 0.85rem; border-top: 1px solid #DCD5C9; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.65rem; font-size: 0.7rem; color: #6E6A63;">
+                        <span>ArtAlly International Fine Art Auctioneers &amp; Curatorial House · Official Letterhead Contract (<%- e($agr['agreement_number']) %>)</span>
+                        <span>Aligned with Authentication Invoice <%- e($agr['invoice_number']) %> · <%- $commRate %>% Commission / <%- $artistShare %>% Artist Share</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+function agrViewFormatMoney(val) {
+    var num = Number(val || 0);
+    return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function agrViewRecalc() {
+    var container = document.getElementById('agr-view-items-container');
+    if (!container) return;
+    var inputs = container.querySelectorAll('input[name="item_amount[]"]');
+    var subtotal = 0;
+    inputs.forEach(function (inp) {
+        var v = parseFloat(inp.value);
+        if (!isNaN(v) && v > 0) subtotal += v;
+    });
+    var vat = Math.round(subtotal * 0.15 * 100) / 100;
+    var perFee = Math.round((subtotal + vat) * 100) / 100;
+    var countEl = document.getElementById('agr-view-total-artworks');
+    var count = countEl ? Math.max(1, parseInt(countEl.value || '1', 10)) : 1;
+    var grandTotal = Math.round(perFee * count * 100) / 100;
+
+    var perEl = document.getElementById('agr-view-per-fee');
+    var lblEl = document.getElementById('agr-view-count-label');
+    var totEl = document.getElementById('agr-view-grand-total');
+    if (perEl) perEl.textContent = agrViewFormatMoney(perFee);
+    if (lblEl) lblEl.textContent = String(count);
+    if (totEl) totEl.textContent = agrViewFormatMoney(grandTotal);
+}
+
+function agrViewRemoveRow(btn) {
+    var container = document.getElementById('agr-view-items-container');
+    if (!container) return;
+    var rows = container.querySelectorAll('.agr-view-item-row');
+    if (rows.length <= 1) {
+        alert('At least 1 authentication description must remain.');
+        return;
+    }
+    var row = btn.closest('.agr-view-item-row');
+    if (row) row.remove();
+    agrViewRecalc();
+}
+
+function agrViewAddPresetItem(item) {
+    var container = document.getElementById('agr-view-items-container');
+    if (!container) return;
+    var div = document.createElement('div');
+    div.className = 'agr-view-item-row';
+    div.setAttribute('data-key', item.key || 'custom');
+    div.style.cssText = 'background: rgba(255,255,255,0.04); border: 1px solid rgba(198,166,100,0.4); padding: 0.85rem;';
+    div.innerHTML =
+        '<input type="hidden" name="item_key[]" value="' + (item.key || 'custom').replace(/"/g, '&quot;') + '">' +
+        '<div style="display: grid; grid-template-columns: 1fr 170px auto; gap: 0.75rem; align-items: start;">' +
+            '<div>' +
+                '<label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; margin-bottom: 0.25rem;">Description Heading *</label>' +
+                '<input type="text" name="item_title[]" required value="' + String(item.title || '').replace(/"/g, '&quot;') + '" style="width: 100%; background: #0F0E0D; border: 1px solid rgba(255,255,255,0.22); color: #FFFFFF; padding: 0.45rem 0.6rem; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.45rem;">' +
+                '<label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93; margin-bottom: 0.25rem;">Sub-Bullet Breakdown Details</label>' +
+                '<textarea name="item_description[]" rows="3" style="width: 100%; background: #0F0E0D; border: 1px solid rgba(255,255,255,0.18); color: #D6D0C4; padding: 0.45rem 0.6rem; font-family: var(--font-mono); font-size: 0.76rem;"></textarea>' +
+            '</div>' +
+            '<div>' +
+                '<label style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; margin-bottom: 0.25rem;">Per-Artwork Amount *</label>' +
+                '<input type="number" step="0.01" min="0" name="item_amount[]" required value="' + Number(item.amount || 0).toFixed(2) + '" oninput="agrViewRecalc()" style="width: 100%; background: #0F0E0D; border: 1px solid #C6A664; color: #C6A664; padding: 0.45rem 0.6rem; font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; text-align: right;">' +
+            '</div>' +
+            '<div style="padding-top: 1.25rem;">' +
+                '<button type="button" onclick="agrViewRemoveRow(this)" style="background: rgba(180, 40, 40, 0.25); border: 1px solid #D9534F; color: #FFB4B4; padding: 0.45rem 0.65rem; font-size: 0.72rem; cursor: pointer;">✕ Remove</button>' +
+            '</div>' +
+        '</div>';
+    var ta = div.querySelector('textarea[name="item_description[]"]');
+    if (ta) ta.value = item.description || '';
+    container.appendChild(div);
+    agrViewRecalc();
+}
+
+function downloadOfficialContractPdf() {
+    var el = document.getElementById('contract-printable-area');
+    if (!el) {
+        window.print();
+        return;
+    }
+    if (typeof html2pdf === 'undefined') {
+        window.print();
+        return;
+    }
+
+    var btn = document.getElementById('btn-download-contract-pdf');
+    var origText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Generating Clean Multi-Page PDF...';
+    }
+
+    el.classList.add('pdf-export-mode');
+
+    // Smart Page-Break Spacer Engine: ensure no .pdf-no-break block, table, or signature crosses an A4 page boundary
+    var adjustedElements = [];
+    try {
+        var pageWidthPx = 794;
+        // Printable A4 height corresponding to 794px width with 8mm top/bottom margin
+        var pageHeightPx = Math.floor(pageWidthPx * (281 / 194));
+        var blocks = el.querySelectorAll('.pdf-no-break');
+        for (var i = 0; i < blocks.length; i++) {
+            var blk = blocks[i];
+            // Skip nested .pdf-no-break if an ancestor .pdf-no-break already wraps it
+            var parentNoBreak = blk.parentElement ? blk.parentElement.closest('.pdf-no-break') : null;
+            if (parentNoBreak && el.contains(parentNoBreak)) continue;
+
+            var rootRect = el.getBoundingClientRect();
+            var blkRect = blk.getBoundingClientRect();
+            var relTop = blkRect.top - rootRect.top;
+            var height = blkRect.height;
+            var relBottom = relTop + height;
+
+            var startPage = Math.floor(relTop / pageHeightPx);
+            var endPage = Math.floor((relBottom - 4) / pageHeightPx);
+
+            if (startPage !== endPage && height < pageHeightPx * 0.92) {
+                var pushDown = (startPage + 1) * pageHeightPx - relTop + 14;
+                var prevMargin = blk.style.marginTop || '';
+                var computedMargin = parseFloat(window.getComputedStyle(blk).marginTop || '0') || 0;
+                blk.style.marginTop = (computedMargin + pushDown) + 'px';
+                adjustedElements.push({ el: blk, prevMargin: prevMargin });
+            }
+        }
+    } catch (e) {
+        console.warn('PDF page-break pre-calculation notice:', e);
+    }
+
+    var opt = {
+        margin: [8, 8, 8, 8],
+        filename: '<%- e($safePdfFilename) %>',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+            scale: 2,
+            useCORS: true,
+            letterRendering: true,
+            backgroundColor: '#FBF9F5',
+            windowWidth: 820
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['.pdf-no-break', 'tr', 'tfoot', '.sig-box'] }
+    };
+
+    html2pdf().set(opt).from(el).save().then(function () {
+        adjustedElements.forEach(function (item) {
+            item.el.style.marginTop = item.prevMargin;
+        });
+        el.classList.remove('pdf-export-mode');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origText;
+        }
+    }).catch(function () {
+        adjustedElements.forEach(function (item) {
+            item.el.style.marginTop = item.prevMargin;
+        });
+        el.classList.remove('pdf-export-mode');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origText;
+        }
+        window.print();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('edit') === '1') {
+        var ed = document.getElementById('admin-agreement-breakdown-editor');
+        if (ed) ed.style.display = 'block';
+    }
+    if (params.get('download_pdf') === '1') {
+        setTimeout(function () {
+            downloadOfficialContractPdf();
+        }, 450);
+    } else if (params.get('print') === '1') {
+        setTimeout(function () {
+            window.print();
+        }, 350);
+    }
+});
+</script>
