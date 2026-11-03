@@ -1746,7 +1746,7 @@ var $counterSubmissionsCount = $counterSubsList.length;
                                         var $reservePrice = Number(($auc?.['reserve_price'] ?? $work?.['reserve_price'] ?? $agreedPrice));
                                         var $priceAgreementStatus = $work?.['price_agreement_status'] ?? $sub?.['price_agreement_status'] ?? 'pending';
                                         var $negotiationMessages = $sub?.['negotiation_messages'] ?? []; %>
-                                        <div class="bg-white border border-hairline p-5 grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                                        <div id="artist-work-<%- Number($work?.['id']) %>" class="bg-white border border-hairline p-5 grid grid-cols-1 xl:grid-cols-12 gap-6 items-start transition-all duration-300">
                                             <!-- Uploaded Images & Artwork Details -->
                                             <div class="xl:col-span-4 space-y-3">
                                                 <div class="flex items-start space-x-4">
@@ -1832,6 +1832,13 @@ var $counterSubmissionsCount = $counterSubsList.length;
                                                         <div class="bg-[#FDFBF7] border border-bronze p-1.5 -m-1.5">
                                                             <label class="block text-[10px] uppercase tracking-widest text-bronze font-bold mb-1">🔔 Bid Update Price ($)</label>
                                                             <input type="number" step="50" name="current_bid" value="<%- $currentBid %>" class="w-full bg-white border-2 border-obsidian px-2.5 py-1.5 font-serif text-base font-bold text-obsidian">
+                                                            <div class="flex items-center gap-1 mt-1.5">
+                                                                <span class="text-[9px] uppercase tracking-wider text-stone font-semibold">Step:</span>
+                                                                <button type="button" onclick="incrementBidField(this, 50)" class="px-1.5 py-0.5 text-[9px] bg-alabaster border border-hairline hover:bg-obsidian hover:text-white transition font-mono font-bold" title="Add $50">+50</button>
+                                                                <button type="button" onclick="incrementBidField(this, 100)" class="px-1.5 py-0.5 text-[9px] bg-alabaster border border-hairline hover:bg-obsidian hover:text-white transition font-mono font-bold" title="Add $100">+100</button>
+                                                                <button type="button" onclick="incrementBidField(this, 250)" class="px-1.5 py-0.5 text-[9px] bg-alabaster border border-hairline hover:bg-obsidian hover:text-white transition font-mono font-bold" title="Add $250">+250</button>
+                                                                <button type="button" onclick="incrementBidField(this, 500)" class="px-1.5 py-0.5 text-[9px] bg-alabaster border border-hairline hover:bg-obsidian hover:text-white transition font-mono font-bold" title="Add $500">+500</button>
+                                                            </div>
                                                         </div>
 
                                                         <div>
@@ -1841,24 +1848,33 @@ var $counterSubmissionsCount = $counterSubsList.length;
 
                                                         <div>
                                                             <label class="block text-[10px] uppercase tracking-widest text-obsidian font-semibold mb-1">Status Changer</label>
-                                                            <select name="auction_state" class="w-full bg-ivory border border-obsidian px-2 py-2 font-semibold text-xs">
-                                                                <option value="unscheduled" <%- $aucState === 'unscheduled' ? 'selected' : '' %>>Pending Review</option>
-                                                                <option value="upcoming" <%- $aucState === 'upcoming' ? 'selected' : '' %>>Upcoming (Not Started)</option>
-                                                                <option value="active" <%- $aucState === 'active' ? 'selected' : '' %>>● Auction Started (Live)</option>
-                                                                <option value="closed_sold" <%- $aucState === 'closed_sold' ? 'selected' : '' %>>✓ SOLD (Auction Ended)</option>
+                                                            <select name="auction_state" class="w-full bg-ivory border-2 border-obsidian px-2 py-2 font-semibold text-xs">
+                                                                <option value="pending" <%- ($aucState === 'pending' || $aucState === 'unscheduled') ? 'selected' : '' %>>⏳ Pending</option>
+                                                                <option value="processing" <%- $aucState === 'processing' ? 'selected' : '' %>>⚙ Processing</option>
+                                                                <option value="active" <%- $aucState === 'active' ? 'selected' : '' %>>● Live Bidding (Active / Reactivate)</option>
+                                                                <option value="closed_sold" <%- ($aucState === 'closed_sold' || $aucState === 'sold') ? 'selected' : '' %>>✓ SOLD (Auction Ended)</option>
                                                                 <option value="closed_unsold" <%- $aucState === 'closed_unsold' ? 'selected' : '' %>>✕ Ended — Unsold</option>
+                                                                <option value="upcoming" <%- $aucState === 'upcoming' ? 'selected' : '' %>>Upcoming (Scheduled)</option>
                                                             </select>
                                                         </div>
                                                     </div>
 
-                                                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2">
+                                                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2">
                                                         <input type="text" name="admin_feedback" value="<%- e($sub?.['admin_feedback'] ?? '') %>" placeholder="Note to artist regarding bid alert, agreed price & schedule..." class="flex-1 bg-ivory border border-hairline px-3 py-2 text-xs">
-                                                        <button type="submit" name="bid_action" value="update_bid_alert" class="bg-bronze text-white px-4 py-2.5 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronzeDark transition whitespace-nowrap">
-                                                            🔔 Update Bid Price &amp; Alert Artist
-                                                        </button>
-                                                        <button type="submit" name="bid_action" value="standard" class="bg-obsidian text-ivory px-4 py-2.5 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition whitespace-nowrap">
-                                                            Save All &amp; Status
-                                                        </button>
+                                                        <div class="flex flex-wrap items-center gap-1.5">
+                                                            <button type="submit" name="bid_action" value="increment_step" class="bg-ivory border border-obsidian text-obsidian px-3 py-2 text-[10px] uppercase tracking-widest font-bold hover:bg-obsidian hover:text-ivory transition whitespace-nowrap" title="Add 1 standard increment step to current bid">
+                                                                + 1 Step Increment
+                                                            </button>
+                                                            <button type="submit" name="bid_action" value="update_bid_alert" class="bg-bronze text-white px-3 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronzeDark transition whitespace-nowrap" title="Save updated bid and alert artist">
+                                                                🔔 Update Bid &amp; Alert Artist
+                                                            </button>
+                                                            <button type="submit" name="bid_action" value="standard" class="bg-obsidian text-ivory px-3 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition whitespace-nowrap" title="Save all fields and apply Status Changer">
+                                                                Save Status &amp; Settings
+                                                            </button>
+                                                            <button type="submit" name="bid_action" value="delete_live_bid" onclick="return confirm('Delete all live bids on this artwork lot and reset bid back to starting bid?');" class="border border-red-800 text-red-700 bg-white hover:bg-red-800 hover:text-white px-2.5 py-2 text-[10px] uppercase tracking-widest font-bold transition whitespace-nowrap" title="Delete live bids on this lot and reset to starting bid">
+                                                                🗑 Delete Live Bid
+                                                            </button>
+                                                        </div>
                                                     </div>
 
                                                     <!-- Auction & Audit Desk Two-Way Thread (Artist ↔ Backend Response) -->
@@ -2020,10 +2036,10 @@ var $counterSubmissionsCount = $counterSubsList.length;
     <section id="auctions" class="bg-white border border-hairline p-8 space-y-6">
         <div class="border-b border-hairline pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Live Bidding &amp; Sold Status Controller</p>
-                <h2 class="font-serif text-3xl text-obsidian">Increase Live Bid Prices &amp; Change Status to SOLD</h2>
+                <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Live Monitor &amp; Bidding Status Room</p>
+                <h2 class="font-serif text-3xl text-obsidian">Live Bid &amp; Sold Control</h2>
             </div>
-            <span class="text-xs text-stone">Increase the live bid price by one increment (+1 Step), set any custom bid amount, or change status directly to <strong>SOLD</strong>.</span>
+            <span class="text-xs text-stone max-w-md text-right">Governed by each artwork's <strong>Status Changer</strong> &amp; <strong>Bid Increasement</strong> in the <a href="#artists" onclick="if(typeof show==='function'){show('artists','artists');}else{location.hash='#artists';}" class="text-bronze underline font-semibold">Registered Artists</a> tab.</span>
         </div>
 
         <% if (empty($auctions)) { %>
@@ -2038,13 +2054,12 @@ var $counterSubmissionsCount = $counterSubsList.length;
                             <th class="py-3 pr-4">Agreed Price</th>
                             <th class="py-3 pr-4">Current Live Bid</th>
                             <th class="py-3 pr-4">Current Status</th>
-                            <th class="py-3 text-right">Live Bid Adjuster &amp; Status Controls</th>
+                            <th class="py-3 text-right">Master Control (Artist Work)</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-hairline">
                         <% for (const $auc of Object.values($auctions || [])) { %>
-                            <% var $curBid = Number(($auc?.['current_bid'] ?? 0));
-                            var $nextStep = $curBid + calculate_bid_increment($curBid); %>
+                            <% var $curBid = Number(($auc?.['current_bid'] ?? 0)); %>
                             <tr>
                                 <td class="py-4 pr-4">
                                     <span class="font-mono text-[10px] font-semibold text-bronze block"><%- e($auc?.['lot_number']) %></span>
@@ -2079,53 +2094,12 @@ var $counterSubmissionsCount = $counterSubsList.length;
                                     <% } %>
                                 </td>
                                 <td class="py-4 text-right">
-                                    <div class="flex flex-col items-end gap-2.5">
-                                        <!-- Live Bid Increaser & Custom Bid -->
-                                        <form action="/admin/auctions/live-control" method="POST" class="flex flex-wrap items-center justify-end gap-1.5">
-                                            <%- csrf_field() %>
-                                            <input type="hidden" name="auction_id" value="<%- Number($auc?.['id']) %>">
-
-                                            <button type="submit" name="action_type" value="increase_bid" class="bg-ivory border border-obsidian text-obsidian px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-semibold hover:bg-obsidian hover:text-ivory transition" title="Increase by next increment">
-                                                + Step (<%- format_money($nextStep) %>)
-                                            </button>
-
-                                            <input type="number" step="50" name="custom_bid_amount" value="<%- $curBid %>" class="w-24 bg-ivory border border-hairline px-2 py-1.5 text-xs font-semibold text-right">
-
-                                            <button type="submit" name="action_type" value="set_custom_bid" class="bg-obsidian text-ivory px-2.5 py-1.5 text-[10px] uppercase tracking-widest hover:bg-bronze transition">
-                                                Set Bid
-                                            </button>
-                                        </form>
-
-                                        <!-- Status Controller: Pending, Processing, Sold, Reactivate Bidding -->
-                                        <form action="/admin/auctions/live-control" method="POST" class="flex flex-wrap items-center justify-end gap-1.5">
-                                            <%- csrf_field() %>
-                                            <input type="hidden" name="auction_id" value="<%- Number($auc?.['id']) %>">
-
-                                            <!-- Reactivate Bidding -->
-                                            <button type="submit" name="action_type" value="reactivate_bidding" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold transition <%- $st === 'active' ? 'bg-[#1A2E22] text-[#55E59C] border border-[#2D6A4F] opacity-60 pointer-events-none' : 'bg-[#14261C] border border-[#2D6A4F] text-[#55E59C] hover:bg-[#2D6A4F] hover:text-white' %>" title="Activate/Reopen live bidding timer">
-                                                ⚡ Reactivate Bidding
-                                            </button>
-
-                                            <!-- Mark Sold -->
-                                            <button type="submit" name="action_type" value="mark_sold" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold transition <%- ($st === 'closed_sold' || $st === 'sold') ? 'bg-obsidian text-bronzeLight border border-bronze opacity-60 pointer-events-none' : 'bg-obsidian text-bronzeLight border border-bronze hover:bg-bronze hover:text-white' %>" title="Close lot as SOLD">
-                                                ✓ Mark Sold
-                                            </button>
-
-                                            <!-- Set Pending -->
-                                            <button type="submit" name="action_type" value="mark_pending" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold transition <%- $st === 'pending' ? 'bg-[#2E2416] text-[#FCD34D] border border-[#D97706] opacity-60 pointer-events-none' : 'bg-white border border-[#D97706] text-[#B45309] hover:bg-[#2E2416] hover:text-[#FCD34D]' %>" title="Change status back to Pending">
-                                                ⏳ Pending
-                                            </button>
-
-                                            <!-- Set Processing -->
-                                            <button type="submit" name="action_type" value="mark_processing" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold transition <%- $st === 'processing' ? 'bg-[#1E2530] text-[#93C5FD] border border-[#3B82F6] opacity-60 pointer-events-none' : 'bg-white border border-[#3B82F6] text-[#1D4ED8] hover:bg-[#1E2530] hover:text-[#93C5FD]' %>" title="Change status to Processing">
-                                                ⚙ Processing
-                                            </button>
-
-                                            <!-- Delete Live Bid -->
-                                            <button type="submit" name="action_type" value="delete_live_bid" onclick="return confirm('Delete all live bids on Lot <%- e($auc?.['lot_number']) %> and reset the bid price back to starting bid?');" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold border border-red-800 text-red-700 bg-white hover:bg-red-800 hover:text-white transition" title="Delete live bids on this lot and reset to starting bid">
-                                                🗑 Delete Live Bid
-                                            </button>
-                                        </form>
+                                    <div class="inline-flex flex-col items-end gap-1.5">
+                                        <button type="button" onclick="focusArtistArtwork('<%- Number($auc?.['artist_id'] ?? $auc?.['artwork']?.['artist_id']) %>', '<%- Number($auc?.['artwork_id']) %>')" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold bg-obsidian text-ivory hover:bg-bronze transition border border-obsidian" title="Go to Status Changer &amp; Bid Increaser under this artist's work">
+                                            <span>⚙ Status Changer &amp; Bids</span>
+                                            <span>&rarr;</span>
+                                        </button>
+                                        <span class="text-[9px] uppercase tracking-wider text-stone">Controlled in Registered Artist</span>
                                     </div>
                                 </td>
                             </tr>
@@ -2926,6 +2900,53 @@ var $counterSubmissionsCount = $counterSubsList.length;
             if (topBadge) topBadge.style.display = 'none';
         }
     } catch (e) {}
+
+    // Focus an artist's specific artwork and open its drawer from Live Bid & Sold Control
+    window.focusArtistArtwork = function (artistId, artworkId) {
+        show('artists', 'artists');
+        window.location.hash = '#artists';
+        var drawer = document.querySelector('.adm-artist-drawer[data-artist-card-id="' + artistId + '"]');
+        if (drawer) {
+            var body = drawer.querySelector('.adm-artist-body');
+            if (body) body.style.display = 'block';
+            var arrow = drawer.querySelector('.adm-arrow-indicator');
+            if (arrow) arrow.textContent = '▲';
+            var worksPane = drawer.querySelector('.adm-pane-works');
+            var msgsPane = drawer.querySelector('.adm-pane-messages');
+            if (worksPane) worksPane.style.display = 'block';
+            if (msgsPane) msgsPane.style.display = 'none';
+            drawer.querySelectorAll('.adm-opt-btn').forEach(function (b, idx) {
+                if (idx === 0) {
+                    b.classList.add('is-active', 'bg-obsidian', 'text-ivory', 'border-obsidian');
+                    b.classList.remove('bg-white', 'text-stone', 'border-hairline');
+                } else {
+                    b.classList.remove('is-active', 'bg-obsidian', 'text-ivory', 'border-obsidian');
+                    b.classList.add('bg-white', 'text-stone', 'border-hairline');
+                }
+            });
+        }
+        setTimeout(function () {
+            var el = document.getElementById('artist-work-' + artworkId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('ring-2', 'ring-bronze');
+                setTimeout(function () {
+                    el.classList.remove('ring-2', 'ring-bronze');
+                }, 3000);
+            }
+        }, 120);
+    };
+
+    // Real-time quick bid increaser helper
+    window.incrementBidField = function (btn, step) {
+        var form = btn.closest('form');
+        if (!form) return;
+        var input = form.querySelector('input[name="current_bid"]');
+        if (!input) return;
+        var cur = parseFloat(input.value) || 0;
+        input.value = Math.max(0, cur + Number(step));
+        input.focus();
+    };
 
     route();
 })();

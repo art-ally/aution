@@ -3055,9 +3055,10 @@ app.post('/admin/artworks/control', (req, res) => {
     req.body.agreed_price ?? artwork.agreed_price ?? artwork.reserve_price ?? 5000
   );
   const startingBid = Math.max(100, Number(req.body.starting_bid ?? artwork.starting_bid ?? 1000));
-  const currentBid = Math.max(100, Number(req.body.current_bid ?? startingBid));
+  let currentBid = Math.max(100, Number(req.body.current_bid ?? startingBid));
   const reservePrice = Math.max(0, Number(req.body.reserve_price ?? agreedPrice));
   let auctionState = String(req.body.auction_state || 'active').trim();
+  if (auctionState === 'unscheduled') auctionState = 'pending';
   const bidAction = String(req.body.bid_action || '').trim();
   const auctionTitle = String(req.body.auction_title || 'Curated Timed Sale').trim();
   const lotNumber = String(
@@ -3068,25 +3069,80 @@ app.post('/admin/artworks/control', (req, res) => {
   const deskReply = String(req.body.desk_reply || '').trim();
 
   const existingAuction = db.findBy('auctions', 'artwork_id', artworkId);
+
+  // Action: Delete / Reset Live Bids on this artwork
+  if (bidAction === 'delete_live_bid') {
+    if (existingAuction) {
+      const deletedBids = db.where('bids', (b) => Number(b.auction_id) === Number(existingAuction.id));
+      for (const b of deletedBids) {
+        db.delete('bids', b.id);
+      }
+      db.update('auctions', existingAuction.id, {
+        current_bid: startingBid,
+        bid_count: 0,
+        reserve_met: false,
+        highest_bidder_id: null,
+      });
+    }
+    db.update('artworks', artworkId, {
+      current_bid: startingBid,
+    });
+    const sub = db.findBy('artwork_submissions', 'artwork_id', artworkId);
+    if (sub) {
+      db.update('artwork_submissions', sub.id, {
+        current_bid: startingBid,
+      });
+    }
+    logAudit(
+      db,
+      admin,
+      'LIVE_BID_DELETED',
+      'artwork',
+      artworkId,
+      `Deleted all live bids on "${artwork.title}" and reset bid to starting bid ${helpers.format_money(startingBid)}.`,
+      req.ip
+    );
+    req.setFlash(
+      'success',
+      `Live bids deleted on "${artwork.title}". Current bid reset to starting bid (${helpers.format_money(startingBid)}).`
+    );
+    return res.redirect('/admin/dashboard#artists');
+  }
+
+  // Action: Increment Bid by 1 standard step
+  if (bidAction === 'increment_step' || bidAction === 'increment_bid') {
+    const incStep = helpers.calculate_bid_increment ? helpers.calculate_bid_increment(currentBid) : (currentBid < 1000 ? 50 : 100);
+    currentBid = currentBid + incStep;
+  }
+
   const previousBid = Number(
     existingAuction?.current_bid ?? artwork.current_bid ?? artwork.starting_bid ?? 0
   );
   const isBidPriceUpdated =
     bidAction === 'update_bid_alert' ||
+    bidAction === 'increment_step' ||
+    bidAction === 'increment_bid' ||
     (bidAction !== 'send_desk_reply' && Math.abs(currentBid - previousBid) >= 0.01);
   const isDeskReply = bidAction === 'send_desk_reply' || deskReply !== '';
 
-  if (isBidPriceUpdated && auctionState === 'unscheduled') {
+  if (bidAction === 'update_bid_alert' && (auctionState === 'pending' || auctionState === 'unscheduled')) {
     auctionState = 'active';
   }
 
   const artworkStatus =
-    auctionState === 'unscheduled'
+    ['unscheduled', 'pending'].includes(auctionState)
       ? 'under_review'
+      : auctionState === 'processing'
+      ? 'processing'
       : auctionState === 'closed_sold'
       ? 'sold'
       : 'published';
-  const subStatus = auctionState === 'unscheduled' ? 'under_review' : 'published';
+  const subStatus =
+    ['unscheduled', 'pending'].includes(auctionState)
+      ? 'under_review'
+      : auctionState === 'processing'
+      ? 'processing'
+      : 'published';
 
   db.update('artworks', artworkId, {
     agreed_price: agreedPrice,
@@ -3142,7 +3198,19 @@ app.post('/admin/artworks/control', (req, res) => {
     });
   }
 
-  if (auctionState !== 'unscheduled') {
+  let auctionRecord = null;
+  if (['unscheduled', 'pending'].includes(auctionState)) {
+    if (existingAuction) {
+      auctionRecord = db.update('auctions', existingAuction.id, {
+        starting_bid: startingBid,
+        current_bid: currentBid,
+        agreed_price: agreedPrice,
+        reserve_price: reservePrice,
+        status: 'pending',
+        closed_at: null,
+      });
+    }
+  } else {
     const startsAt =
       auctionState === 'upcoming'
         ? helpers.gmdate('Y-m-d H:i:s', helpers.strtotime('+2 days'))
@@ -3151,7 +3219,6 @@ app.post('/admin/artworks/control', (req, res) => {
       ? helpers.gmdate('Y-m-d H:i:s', helpers.strtotime('-1 minute'))
       : helpers.gmdate('Y-m-d H:i:s', helpers.strtotime(`+${durationDays} days`));
 
-    let auctionRecord;
     if (existingAuction) {
       const newBidCount = Number(existingAuction.bid_count || 0) + (isBidPriceUpdated ? 1 : 0);
       auctionRecord = db.update('auctions', existingAuction.id, {
@@ -3166,6 +3233,7 @@ app.post('/admin/artworks/control', (req, res) => {
         status: auctionState,
         starts_at: startsAt,
         ends_at: endsAt,
+        closed_at: ['closed_sold', 'closed_unsold'].includes(auctionState) ? formatUtcNow() : null,
       });
     } else {
       auctionRecord = db.insert('auctions', {
@@ -3189,6 +3257,7 @@ app.post('/admin/artworks/control', (req, res) => {
         anti_sniping_enabled: true,
         featured: true,
         is_seeded: false,
+        closed_at: ['closed_sold', 'closed_unsold'].includes(auctionState) ? formatUtcNow() : null,
       });
     }
 
@@ -3266,13 +3335,15 @@ app.post('/admin/artworks/control', (req, res) => {
   const stateLabel =
     auctionState === 'active'
       ? 'LIVE & STARTED'
+      : auctionState === 'processing'
+      ? 'PROCESSING'
       : auctionState === 'upcoming'
       ? 'SCHEDULED UPCOMING'
       : auctionState === 'closed_sold'
       ? 'ENDED — SOLD'
       : auctionState === 'closed_unsold'
       ? 'ENDED — UNSOLD'
-      : 'UNDER CURATORIAL REVIEW';
+      : 'PENDING CURATORIAL REVIEW';
 
   if (isBidPriceUpdated) {
     const activeEndsAt =
