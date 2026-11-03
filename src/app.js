@@ -5284,23 +5284,15 @@ app.post('/admin/invoices/generate', (req, res) => {
     created_by: Number(admin.id),
   });
 
-  // Automatically create/sync an aligned Artist Contract Agreement with the invoice's authentication descriptions
-  const alignedAgreement = createOrSyncContractAgreementFromInvoice(
-    db,
-    invoice,
-    admin.id,
-    req.body.total_artworks || null
-  );
-
   if (resolvedArtistId) {
     db.insert('notifications', {
       user_id: resolvedArtistId,
       type: 'authentication_invoice_issued',
-      title: `📄 Authentication Invoice & Aligned Contract Issued: ${invoiceNumber} (${helpers.format_money_exact(
+      title: `📄 Authentication Invoice Issued: ${invoiceNumber} (${helpers.format_money_exact(
         feeAmount,
         currency
       )})`,
-      message: `An official Curatorial & AI-Powered Authentication Payment Invoice (${invoiceNumber}) and Aligned Artist Contract Agreement (${alignedAgreement.agreement_number}) for "${artworkTitle}" have been generated (${lineItems.length} item(s), Subtotal ${helpers.format_money_exact(subtotalAmount, currency)} + 15% VAT ${helpers.format_money_exact(vatAmount, currency)} = Per-Artwork Fee ${helpers.format_money_exact(feeAmount, currency)}). Copies are now available on your Artist Page and Studio Dashboard.`,
+      message: `An official Curatorial & AI-Powered Authentication Payment Invoice (${invoiceNumber}) for "${artworkTitle}" has been generated (${lineItems.length} item(s), Subtotal ${helpers.format_money_exact(subtotalAmount, currency)} + 15% VAT ${helpers.format_money_exact(vatAmount, currency)} = Per-Artwork Fee ${helpers.format_money_exact(feeAmount, currency)}). Copies are now available on your Artist Page and Studio Dashboard.`,
       action_url: `/invoices/${invoice.id}`,
       read_at: null,
     });
@@ -5312,13 +5304,13 @@ app.post('/admin/invoices/generate', (req, res) => {
     'AUTHENTICATION_INVOICE_GENERATED',
     'authentication_invoice',
     invoice.id,
-    `Generated authentication invoice ${invoiceNumber} and aligned contract agreement ${alignedAgreement.agreement_number} for ${artistName} ("${artworkTitle}") — ${lineItems.length} item(s), Subtotal: ${currency} ${subtotalAmount}, 15% VAT: ${currency} ${vatAmount}, Total Fee: ${currency} ${feeAmount}`,
+    `Generated authentication invoice ${invoiceNumber} for ${artistName} ("${artworkTitle}") — ${lineItems.length} item(s), Subtotal: ${currency} ${subtotalAmount}, 15% VAT: ${currency} ${vatAmount}, Total Fee: ${currency} ${feeAmount}`,
     req.ip
   );
 
   req.setFlash(
     'success',
-    `Authentication Invoice ${invoiceNumber} (and aligned Contract Agreement ${alignedAgreement.agreement_number}) generated for ${artistName} ("${artworkTitle}") with ${lineItems.length} breakdown description(s) and 15% VAT. Opening print dialog and published to the Artist Page for download.`
+    `Authentication Invoice ${invoiceNumber} generated for ${artistName} ("${artworkTitle}") with ${lineItems.length} breakdown description(s) and 15% VAT. Opening print dialog and published to the Artist Page for download.`
   );
   res.redirect(`/invoices/${invoice.id}?print=1`);
 });
@@ -5357,9 +5349,12 @@ app.post('/admin/invoices/update-breakdown', (req, res) => {
     fee_amount: feeAmount,
   });
 
-  // Automatically sync any aligned Contract Agreement linked to this invoice
+  // Only sync aligned Contract Agreement if one was previously linked to this invoice
   if (updatedInv) {
-    createOrSyncContractAgreementFromInvoice(db, updatedInv, admin.id);
+    const existingAgr = db.findBy('contract_agreements', 'invoice_id', invoiceId);
+    if (existingAgr) {
+      createOrSyncContractAgreementFromInvoice(db, updatedInv, admin.id);
+    }
   }
 
   logAudit(
