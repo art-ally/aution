@@ -1913,11 +1913,14 @@ app.post('/artist/submissions/negotiate', (req, res) => {
         artistMessage ? ` Note: ${artistMessage}` : ''
       }`,
       created_at: formatUtcNow(),
+      read_at: null,
+      responded_at: null,
     });
 
     db.update('artwork_submissions', subId, {
       price_agreement_status: 'accepted_by_artist',
       negotiation_messages: messages,
+      has_new_artist_message: true,
     });
     db.update('artworks', Number(sub.artwork_id), {
       price_agreement_status: 'accepted_by_artist',
@@ -1947,6 +1950,8 @@ app.post('/artist/submissions/negotiate', (req, res) => {
         artistMessage || 'Please review my updated target price.'
       }`,
       created_at: formatUtcNow(),
+      read_at: null,
+      responded_at: null,
     });
 
     db.transaction((txDb) => {
@@ -1954,6 +1959,7 @@ app.post('/artist/submissions/negotiate', (req, res) => {
         artist_expected_price: newExpected,
         price_agreement_status: 'counter_proposed_by_artist',
         negotiation_messages: messages,
+        has_new_artist_message: true,
       });
       txDb.update('artworks', Number(sub.artwork_id), {
         artist_expected_price: newExpected,
@@ -3156,12 +3162,29 @@ app.post('/admin/artworks/control', (req, res) => {
   if (sub) {
     const messages = Array.isArray(sub.negotiation_messages) ? [...sub.negotiation_messages] : [];
     if (isDeskReply && deskReply) {
+      const now = formatUtcNow();
+      for (const m of messages) {
+        if (m && m.sender === 'artist') {
+          m.read_at = m.read_at || now;
+          m.responded_at = now;
+        }
+      }
       messages.push({
         sender: 'admin',
         sender_name: `Auction & Audit Desk (${admin.name})`,
         text: deskReply,
-        created_at: formatUtcNow(),
+        created_at: now,
       });
+
+      const relatedNotifs = db.where(
+        'notifications',
+        (n) => (n.type === 'price_counter' || n.type === 'price_accepted') &&
+          Number(n.artwork_id) === artworkId &&
+          !n.read_at
+      );
+      for (const rn of relatedNotifs) {
+        db.update('notifications', rn.id, { read_at: now });
+      }
     }
     if (isBidPriceUpdated) {
       messages.push({
@@ -3421,6 +3444,87 @@ app.post('/admin/artworks/control', (req, res) => {
   }
 
   res.redirect('/admin/dashboard#artists');
+});
+
+// Live Chat-Style Unread Message Counter for Registered Artists
+app.get('/admin/api/live-messages-count', (req, res) => {
+  const admin = req.getCurrentUser();
+  if (!admin || !helpers.userHasRole(admin, 'admin')) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  const db = DatabaseEngine.getInstance();
+  const submissions = db.all('artwork_submissions');
+  const artistCounts = {};
+  let totalCount = 0;
+
+  for (const sub of submissions) {
+    const artistId = Number(sub.artist_id);
+    if (!artistId) continue;
+    const msgs = Array.isArray(sub.negotiation_messages) ? sub.negotiation_messages : [];
+    let unreadCount = 0;
+    for (let i = 0; i < msgs.length; i++) {
+      const m = msgs[i];
+      if (m && m.sender === 'artist' && !m.read_at && !m.responded_at) {
+        unreadCount++;
+      }
+    }
+    artistCounts[artistId] = (artistCounts[artistId] || 0) + unreadCount;
+    totalCount += unreadCount;
+  }
+
+  res.json({
+    success: true,
+    artists: artistCounts,
+    total: totalCount,
+  });
+});
+
+// Mark all unread messages for an artist as read when the admin opens the drawer / view
+app.post('/admin/api/artists/:artistId/mark-messages-read', (req, res) => {
+  const admin = req.getCurrentUser();
+  if (!admin || !helpers.userHasRole(admin, 'admin')) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+  const db = DatabaseEngine.getInstance();
+  const artistId = Number(req.params.artistId);
+  const submissions = db.where('artwork_submissions', (s) => Number(s.artist_id) === artistId);
+  const now = formatUtcNow();
+
+  for (const sub of submissions) {
+    const msgs = Array.isArray(sub.negotiation_messages) ? [...sub.negotiation_messages] : [];
+    let updated = false;
+    for (const m of msgs) {
+      if (m && m.sender === 'artist' && !m.read_at) {
+        m.read_at = now;
+        updated = true;
+      }
+    }
+    if (updated) {
+      db.update('artwork_submissions', sub.id, {
+        negotiation_messages: msgs,
+        has_new_artist_message: false,
+      });
+    }
+  }
+
+  // Also mark price notifications for this artist as read
+  const artistWorks = db.where('artworks', (w) => Number(w.artist_id) === artistId);
+  const artworkIds = new Set(artistWorks.map((w) => Number(w.id)));
+  const notifs = db.where(
+    'notifications',
+    (n) => (n.type === 'price_counter' || n.type === 'price_accepted') &&
+      artworkIds.has(Number(n.artwork_id)) &&
+      !n.read_at
+  );
+  for (const n of notifs) {
+    db.update('notifications', n.id, { read_at: now });
+  }
+
+  res.json({
+    success: true,
+    artistId,
+    unreadCount: 0,
+  });
 });
 
 app.post('/admin/artworks/delete', (req, res) => {

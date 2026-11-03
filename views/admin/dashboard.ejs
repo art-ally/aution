@@ -4,12 +4,16 @@ var $admAwaitSign = Object.values($contractAgreements || []).filter(function (a)
 var $admInvCount = count($authInvoices || []);
 var $admAgrCount = count($contractAgreements || []);
 var $admInitial = String(($admin && $admin['name']) ? $admin['name'] : 'A').trim().charAt(0).toUpperCase();
-var $counterSubsList = Object.values($submissions || []).filter(function (s) {
-    var st = s?.['price_agreement_status'] || '';
-    var msgs = s?.['negotiation_messages'] || [];
-    return st === 'counter_proposed_by_artist' || (Array.isArray(msgs) && msgs.length > 0);
-});
-var $counterSubmissionsCount = $counterSubsList.length;
+var $totalUnreadMsgCount = 0;
+for (const $s of Object.values($submissions || [])) {
+    var $mList = Array.isArray($s?.['negotiation_messages']) ? $s['negotiation_messages'] : [];
+    for (const $m of $mList) {
+        if ($m && $m.sender === 'artist' && !$m.read_at && !$m.responded_at) {
+            $totalUnreadMsgCount++;
+        }
+    }
+}
+var $counterSubmissionsCount = $totalUnreadMsgCount;
 %>
 <style>
 /* ===== ArtAlly Admin Console — layout & premium UI (presentation only) ===== */
@@ -171,7 +175,7 @@ var $counterSubmissionsCount = $counterSubsList.length;
 
             <details class="adm-group" open>
                 <summary>Artists &amp; Artworks</summary>
-                <a href="#artists" class="adm-link" data-panel-key="artists"><span class="ic">🎨</span><span class="lbl">Registered Artists</span><span class="adm-badge"><%- $stats?.['total_artists'] %></span><span class="adm-badge warn" id="admNewMsgCountBadge" style="<%- $counterSubmissionsCount > 0 ? '' : 'display:none;' %>"><%- $counterSubmissionsCount %> new msg</span></a>
+                <a href="#artists" class="adm-link" data-panel-key="artists"><span class="ic">🎨</span><span class="lbl">Registered Artists</span><span class="adm-badge"><%- $stats?.['total_artists'] %></span><span class="adm-badge warn" id="admNewMsgCountBadge" style="<%- $counterSubmissionsCount > 0 ? '' : 'display:none;' %>"><span id="admNewMsgCountNumber"><%- $counterSubmissionsCount %></span> new msg</span></a>
                 <a href="#submissions" class="adm-link" data-panel-key="submissions"><span class="ic">🗂</span><span class="lbl">Review Queue</span><span class="adm-badge <%- Number($stats?.['pending_submissions'] || 0) > 0 ? 'warn' : '' %>"><%- $stats?.['pending_submissions'] %></span></a>
             </details>
 
@@ -1505,9 +1509,14 @@ var $counterSubmissionsCount = $counterSubsList.length;
                             $artistMsgList.push({ work: $w, submission: $s, messages: $mList });
                         }
                     }
-                    var $artistNewMsgCount = $artistMsgList.filter(function(m) {
-                        return m.submission.price_agreement_status === 'counter_proposed_by_artist' || (m.messages.length > 0 && m.messages[m.messages.length - 1]?.sender === 'artist');
-                    }).length;
+                    var $artistNewMsgCount = 0;
+                    for (const $mItem of $artistMsgList) {
+                        for (const $m of ($mItem.messages || [])) {
+                            if ($m && $m.sender === 'artist' && !$m.read_at && !$m.responded_at) {
+                                $artistNewMsgCount++;
+                            }
+                        }
+                    }
                     var $hasNewMsg = $artistNewMsgCount > 0; %>
                     <div class="adm-sub border border-hairline bg-ivory p-6 sm:p-8 space-y-6" data-fold-default="closed">
                         <!-- Artist Registration & Profile Approval Header -->
@@ -1658,11 +1667,9 @@ var $counterSubmissionsCount = $counterSubsList.length;
                                             Select an option to view uploaded works or messages regarding a work
                                         </p>
                                     </div>
-                                    <% if ($hasNewMsg) { %>
-                                        <span class="adm-artist-new-badge bg-bronze text-white text-[9px] uppercase tracking-widest px-2.5 py-0.5 font-bold animate-pulse" data-artist-badge-id="<%- Number($ap?.['user_id']) %>">
-                                            ● <%- $artistNewMsgCount %> New Message<%- $artistNewMsgCount === 1 ? '' : 's' %>
-                                        </span>
-                                    <% } %>
+                                    <span class="adm-artist-new-badge bg-bronze text-white text-[9px] uppercase tracking-widest px-2.5 py-0.5 font-bold animate-pulse" data-artist-badge-id="<%- Number($ap?.['user_id']) %>" style="<%- $hasNewMsg ? '' : 'display: none;' %>">
+                                        ● <span class="adm-badge-count"><%- $artistNewMsgCount %></span> New Message<span class="adm-badge-plural"><%- $artistNewMsgCount === 1 ? '' : 's' %></span>
+                                    </span>
                                 </div>
 
                                 <!-- The Two Options Requested by User + Arrow -->
@@ -1832,13 +1839,6 @@ var $counterSubmissionsCount = $counterSubsList.length;
                                                         <div class="bg-[#FDFBF7] border border-bronze p-1.5 -m-1.5">
                                                             <label class="block text-[10px] uppercase tracking-widest text-bronze font-bold mb-1">🔔 Bid Update Price ($)</label>
                                                             <input type="number" step="50" name="current_bid" value="<%- $currentBid %>" class="w-full bg-white border-2 border-obsidian px-2.5 py-1.5 font-serif text-base font-bold text-obsidian">
-                                                            <div class="flex items-center gap-1 mt-1.5">
-                                                                <span class="text-[9px] uppercase tracking-wider text-stone font-semibold">Step:</span>
-                                                                <button type="button" onclick="incrementBidField(this, 50)" class="px-1.5 py-0.5 text-[9px] bg-alabaster border border-hairline hover:bg-obsidian hover:text-white transition font-mono font-bold" title="Add $50">+50</button>
-                                                                <button type="button" onclick="incrementBidField(this, 100)" class="px-1.5 py-0.5 text-[9px] bg-alabaster border border-hairline hover:bg-obsidian hover:text-white transition font-mono font-bold" title="Add $100">+100</button>
-                                                                <button type="button" onclick="incrementBidField(this, 250)" class="px-1.5 py-0.5 text-[9px] bg-alabaster border border-hairline hover:bg-obsidian hover:text-white transition font-mono font-bold" title="Add $250">+250</button>
-                                                                <button type="button" onclick="incrementBidField(this, 500)" class="px-1.5 py-0.5 text-[9px] bg-alabaster border border-hairline hover:bg-obsidian hover:text-white transition font-mono font-bold" title="Add $500">+500</button>
-                                                            </div>
                                                         </div>
 
                                                         <div>
@@ -1859,22 +1859,13 @@ var $counterSubmissionsCount = $counterSubsList.length;
                                                         </div>
                                                     </div>
 
-                                                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2">
-                                                        <input type="text" name="admin_feedback" value="<%- e($sub?.['admin_feedback'] ?? '') %>" placeholder="Note to artist regarding bid alert, agreed price & schedule..." class="flex-1 bg-ivory border border-hairline px-3 py-2 text-xs">
-                                                        <div class="flex flex-wrap items-center gap-1.5">
-                                                            <button type="submit" name="bid_action" value="increment_step" class="bg-ivory border border-obsidian text-obsidian px-3 py-2 text-[10px] uppercase tracking-widest font-bold hover:bg-obsidian hover:text-ivory transition whitespace-nowrap" title="Add 1 standard increment step to current bid">
-                                                                + 1 Step Increment
-                                                            </button>
-                                                            <button type="submit" name="bid_action" value="update_bid_alert" class="bg-bronze text-white px-3 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronzeDark transition whitespace-nowrap" title="Save updated bid and alert artist">
-                                                                🔔 Update Bid &amp; Alert Artist
-                                                            </button>
-                                                            <button type="submit" name="bid_action" value="standard" class="bg-obsidian text-ivory px-3 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition whitespace-nowrap" title="Save all fields and apply Status Changer">
-                                                                Save Status &amp; Settings
-                                                            </button>
-                                                            <button type="submit" name="bid_action" value="delete_live_bid" onclick="return confirm('Delete all live bids on this artwork lot and reset bid back to starting bid?');" class="border border-red-800 text-red-700 bg-white hover:bg-red-800 hover:text-white px-2.5 py-2 text-[10px] uppercase tracking-widest font-bold transition whitespace-nowrap" title="Delete live bids on this lot and reset to starting bid">
-                                                                🗑 Delete Live Bid
-                                                            </button>
-                                                        </div>
+                                                    <div class="flex items-center justify-end gap-2 pt-2 border-t border-hairline/60">
+                                                        <button type="submit" name="bid_action" value="update_and_save" class="bg-obsidian text-ivory hover:bg-bronze transition px-4 py-2 text-[10px] uppercase tracking-widest font-bold whitespace-nowrap" title="Save valuation, prices and live bidding status">
+                                                            ✓ Save &amp; Update Live Bid / Status
+                                                        </button>
+                                                        <button type="submit" name="bid_action" value="delete_live_bid" onclick="return confirm('Delete all live bids on this artwork lot and reset bid back to starting bid?');" class="border border-red-800 text-red-700 bg-white hover:bg-red-800 hover:text-white px-3 py-2 text-[10px] uppercase tracking-widest font-bold transition whitespace-nowrap" title="Delete live bids on this lot and reset to starting bid">
+                                                            🗑 Delete Live Bid
+                                                        </button>
                                                     </div>
 
                                                     <!-- Auction & Audit Desk Two-Way Thread (Artist ↔ Backend Response) -->
@@ -2853,17 +2844,16 @@ var $counterSubmissionsCount = $counterSubsList.length;
             if (worksPane) worksPane.style.display = 'none';
             if (msgsPane) msgsPane.style.display = 'block';
 
-            // Mark message as viewed: hide badge on this card
+            // Mark message as viewed: hide badge on this card & notify backend live
             var badge = drawer.querySelector('.adm-artist-new-badge');
             if (badge) badge.style.display = 'none';
-            try { localStorage.setItem('adm_viewed_msg_' + artistId, '1'); } catch (e) {}
 
-            // If all artist badges are hidden, hide the top navbar badge as well
-            var anyVisible = document.querySelector('.adm-artist-new-badge:not([style*="display: none"])');
-            if (!anyVisible) {
-                var topBadge = document.getElementById('admNewMsgCountBadge');
-                if (topBadge) topBadge.style.display = 'none';
-            }
+            fetch('/admin/api/artists/' + artistId + '/mark-messages-read', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(function(r) { return r.json(); }).then(function() {
+                pollLiveMessageCounts();
+            }).catch(function(e) {});
         } else {
             if (worksPane) worksPane.style.display = 'block';
             if (msgsPane) msgsPane.style.display = 'none';
@@ -2885,21 +2875,57 @@ var $counterSubmissionsCount = $counterSubsList.length;
         }
     };
 
-    // Check localStorage for previously viewed messages to restore badge disappearance
-    try {
-        document.querySelectorAll('.adm-artist-drawer').forEach(function (drawer) {
-            var aId = drawer.getAttribute('data-artist-card-id');
-            if (aId && localStorage.getItem('adm_viewed_msg_' + aId) === '1') {
-                var b = drawer.querySelector('.adm-artist-new-badge');
-                if (b) b.style.display = 'none';
-            }
-        });
-        var anyStillNew = document.querySelector('.adm-artist-new-badge:not([style*="display: none"])');
-        if (!anyStillNew) {
+    // Live Chat-Style Real-time Message Notification Polling
+    function pollLiveMessageCounts() {
+        fetch('/admin/api/live-messages-count', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data || !data.success) return;
+            var artists = data.artists || {};
+            var total = Number(data.total || 0);
+
+            document.querySelectorAll('.adm-artist-new-badge').forEach(function(badge) {
+                var aId = badge.getAttribute('data-artist-badge-id');
+                var count = Number(artists[aId] || 0);
+                var drawer = badge.closest('.adm-artist-drawer');
+                var msgsPane = drawer ? drawer.querySelector('.adm-pane-messages') : null;
+                var body = drawer ? drawer.querySelector('.adm-artist-body') : null;
+
+                // If admin is currently looking at this artist's messages pane, keep badge off
+                if (msgsPane && msgsPane.style.display !== 'none' && body && body.style.display !== 'none') {
+                    badge.style.display = 'none';
+                    return;
+                }
+
+                if (count > 0) {
+                    badge.style.display = 'inline-flex';
+                    var cEl = badge.querySelector('.adm-badge-count');
+                    var pEl = badge.querySelector('.adm-badge-plural');
+                    if (cEl) cEl.textContent = count;
+                    if (pEl) pEl.textContent = count === 1 ? '' : 's';
+                } else {
+                    badge.style.display = 'none';
+                }
+            });
+
             var topBadge = document.getElementById('admNewMsgCountBadge');
-            if (topBadge) topBadge.style.display = 'none';
-        }
-    } catch (e) {}
+            var topNum = document.getElementById('admNewMsgCountNumber');
+            if (topBadge) {
+                if (total > 0) {
+                    topBadge.style.display = 'inline-flex';
+                    if (topNum) topNum.textContent = total;
+                } else {
+                    topBadge.style.display = 'none';
+                }
+            }
+        })
+        .catch(function(e) {});
+    }
+
+    // Start live polling every 3.5 seconds
+    setInterval(pollLiveMessageCounts, 3500);
 
     // Focus an artist's specific artwork and open its drawer from Live Bid & Sold Control
     window.focusArtistArtwork = function (artistId, artworkId) {
