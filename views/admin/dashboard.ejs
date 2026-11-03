@@ -171,8 +171,7 @@ var $counterSubmissionsCount = $counterSubsList.length;
 
             <details class="adm-group" open>
                 <summary>Artists &amp; Artworks</summary>
-                <a href="#artists" class="adm-link" data-panel-key="artists"><span class="ic">🎨</span><span class="lbl">Registered Artists</span><span class="adm-badge"><%- $stats?.['total_artists'] %></span></a>
-                <a href="#artist-price-desk" class="adm-link" data-panel-key="artists"><span class="ic">💬</span><span class="lbl">Price Messages &amp; Counters</span><span class="adm-badge warn"><%- $counterSubmissionsCount %></span></a>
+                <a href="#artists" class="adm-link" data-panel-key="artists"><span class="ic">🎨</span><span class="lbl">Registered Artists</span><span class="adm-badge"><%- $stats?.['total_artists'] %></span><span class="adm-badge warn" id="admNewMsgCountBadge" style="<%- $counterSubmissionsCount > 0 ? '' : 'display:none;' %>"><%- $counterSubmissionsCount %> new msg</span></a>
                 <a href="#submissions" class="adm-link" data-panel-key="submissions"><span class="ic">🗂</span><span class="lbl">Review Queue</span><span class="adm-badge <%- Number($stats?.['pending_submissions'] || 0) > 0 ? 'warn' : '' %>"><%- $stats?.['pending_submissions'] %></span></a>
             </details>
 
@@ -1484,124 +1483,6 @@ var $counterSubmissionsCount = $counterSubsList.length;
             </p>
         </div>
 
-        <!-- Dedicated Desk: Artist Price Discussions & Counter-Offers -->
-        <div id="artist-price-desk" class="bg-[#181615] text-ivory border-2 border-bronze p-6 sm:p-7 space-y-5">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-bronze/40 pb-4">
-                <div>
-                    <div class="flex items-center gap-2.5">
-                        <span class="bg-bronze text-white text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-bold">
-                            💬 Artist Price Inquiries &amp; Counter-Offer Desk
-                        </span>
-                        <span class="text-xs text-bronzeLight font-mono">
-                            <%- $counterSubmissionsCount %> Active Thread<%- $counterSubmissionsCount === 1 ? '' : 's' %>
-                        </span>
-                    </div>
-                    <h3 class="font-serif text-2xl text-ivory mt-1">
-                        Artist Valuation Notes, Counter-Offers &amp; Direct Price Responses
-                    </h3>
-                    <p class="text-xs text-stone">
-                        All messages and price counter-proposals sent by artists from their Studio Dashboard appear here for instant curatorial review and valuation updates.
-                    </p>
-                </div>
-                <span class="text-[10px] uppercase tracking-widest px-3 py-1.5 border border-bronze/50 bg-[#221F1D] text-bronzeLight font-semibold self-start sm:self-auto">
-                    Live Studio Sync
-                </span>
-            </div>
-
-            <% if (empty($counterSubsList)) { %>
-                <div class="bg-[#221F1D] border border-white/10 p-5 text-center text-xs text-stone">
-                    <p class="text-ivory font-semibold mb-1">No Active Counter-Offers from Artists</p>
-                    <p>All artist target valuations and House Agreed Prices are currently aligned. When an artist submits a counter-offer or note on their works, it will display here immediately.</p>
-                </div>
-            <% } else { %>
-                <div class="space-y-4">
-                    <% for (const $cSub of Object.values($counterSubsList || [])) {
-                        var $cArt = $cSub?.['artwork'] ?? {};
-                        var $cArtist = $cSub?.['artist'] ?? {};
-                        var $cMsgs = Array.isArray($cSub?.['negotiation_messages']) ? $cSub['negotiation_messages'] : [];
-                        var $cLatestMsg = $cMsgs.length > 0 ? $cMsgs[$cMsgs.length - 1] : null;
-                        var $cExpected = Number($cSub?.['artist_expected_price'] ?? $cArt?.['artist_expected_price'] ?? 0);
-                        var $cAgreed = Number($cSub?.['agreed_price'] ?? $cArt?.['agreed_price'] ?? 0);
-                    %>
-                    <div class="bg-[#24201D] border border-bronze/60 p-5 space-y-4">
-                        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/10 pb-4">
-                            <div class="flex items-center gap-4">
-                                <a href="<%- e($cArt?.['primary_image']) %>" target="_blank" class="w-16 h-16 bg-black border border-white/20 flex-shrink-0 overflow-hidden block">
-                                    <img src="<%- e($cArt?.['primary_image']) %>" alt="" class="w-full h-full object-cover">
-                                </a>
-                                <div>
-                                    <span class="font-mono text-[10px] text-bronze uppercase tracking-widest"><%- e($cSub?.['reference_code']) %></span>
-                                    <h4 class="font-serif text-lg text-white font-semibold leading-tight">
-                                        <%- e($cArt?.['title'] ?? 'Consigned Artwork') %>
-                                    </h4>
-                                    <p class="text-xs text-stone">
-                                        Artist: <strong class="text-ivory"><%- e($cArtist?.['name'] ?? $cSub?.['artist_name'] ?? 'Artist') %></strong> (<%- e($cArtist?.['email'] ?? '') %>)
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-4 text-xs font-mono">
-                                <div class="bg-[#181615] border border-white/10 px-3 py-2 text-center">
-                                    <span class="text-[9px] uppercase tracking-widest text-stone block">Artist Proposed Price</span>
-                                    <span class="text-base font-bold text-bronzeLight"><%- format_money($cExpected) %></span>
-                                </div>
-                                <div class="bg-[#181615] border border-white/10 px-3 py-2 text-center">
-                                    <span class="text-[9px] uppercase tracking-widest text-stone block">Current House Valuation</span>
-                                    <span class="text-base font-bold text-white"><%- format_money($cAgreed) %></span>
-                                </div>
-                                <span class="px-2.5 py-1 text-[10px] uppercase tracking-widest font-bold <%- $cSub?.['price_agreement_status'] === 'accepted_by_artist' ? 'bg-[#1A2E22] text-[#55E59C]' : 'bg-[#3A2A14] text-[#FCD34D] border border-[#B8860B]' %>">
-                                    <%- $cSub?.['price_agreement_status'] === 'accepted_by_artist' ? '✓ Accepted by Artist' : '⇄ Counter-Offer' %>
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Latest Message Note -->
-                        <% if ($cLatestMsg) { %>
-                        <div class="bg-[#181615] border border-bronze/30 p-3.5 flex items-start gap-3 text-xs">
-                            <span class="text-lg">💬</span>
-                            <div class="space-y-1">
-                                <p class="text-[11px] text-stone">
-                                    <strong><%- e($cLatestMsg?.['sender_name'] ?? ($cLatestMsg?.['sender'] === 'artist' ? 'Artist' : 'Admin')) %></strong>
-                                    <% if ($cLatestMsg?.['created_at']) { %> · <span class="font-mono text-[10px]"><%- e($cLatestMsg['created_at']) %> UTC</span><% } %>
-                                </p>
-                                <p class="text-ivory leading-relaxed">
-                                    <%- e($cLatestMsg?.['text'] ?? $cLatestMsg?.['message'] ?? '') %>
-                                </p>
-                            </div>
-                        </div>
-                        <% } %>
-
-                        <!-- Direct Response & Price Update Form -->
-                        <form action="/admin/artworks/control" method="POST" class="bg-[#1B1917] border border-white/10 p-4 space-y-3 text-xs">
-                            <%- csrf_field() %>
-                            <input type="hidden" name="artwork_id" value="<%- Number($cArt?.['id'] ?? $cSub?.['artwork_id']) %>">
-                            <input type="hidden" name="return_anchor" value="#artist-price-desk">
-
-                            <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                                <div class="md:col-span-3 space-y-1">
-                                    <label class="text-[10px] uppercase tracking-widest text-stone block font-semibold">House Agreed Price ($)</label>
-                                    <input type="number" step="100" name="agreed_price" value="<%- $cAgreed || $cExpected %>" required class="w-full bg-[#121110] border border-white/20 text-ivory px-3 py-2 font-mono font-bold text-sm">
-                                </div>
-                                <div class="md:col-span-3 space-y-1">
-                                    <label class="text-[10px] uppercase tracking-widest text-stone block font-semibold">Controlled Starting Bid ($)</label>
-                                    <input type="number" step="50" name="starting_bid" value="<%- Math.round(($cAgreed || $cExpected) * 0.4) %>" class="w-full bg-[#121110] border border-white/20 text-ivory px-3 py-2 font-mono text-sm">
-                                </div>
-                                <div class="md:col-span-4 space-y-1">
-                                    <label class="text-[10px] uppercase tracking-widest text-stone block font-semibold">Reply Note to Artist</label>
-                                    <input type="text" name="desk_reply" placeholder="e.g. Valuation updated to $<%- $cExpected %>. Ready for cataloguing." class="w-full bg-[#121110] border border-white/20 text-ivory px-3 py-2 text-xs">
-                                </div>
-                                <div class="md:col-span-2">
-                                    <button type="submit" class="w-full bg-bronze text-white font-bold py-2.5 px-3 text-[10px] uppercase tracking-widest hover:bg-bronzeDark transition text-center whitespace-nowrap">
-                                        Update &amp; Send
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                    <% } %>
-                </div>
-            <% } %>
-        </div>
-
         <% if (empty($artistProfiles)) { %>
             <div class="bg-ivory border border-hairline p-12 text-center space-y-3">
                 <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold">Zero Dummy Data Policy Active</p>
@@ -1615,7 +1496,19 @@ var $counterSubmissionsCount = $counterSubsList.length;
                 <% for (const $ap of Object.values($artistProfiles || [])) { %>
                     <% var $u = $ap?.['user'] ?? [];
                     var $artistWorks = $ap?.['artworks'] ?? [];
-                    var $isProfileApproved = ($ap?.['approval_status'] ?? 'pending') === 'approved'; %>
+                    var $isProfileApproved = ($ap?.['approval_status'] ?? 'pending') === 'approved';
+                    var $artistMsgList = [];
+                    for (const $w of Object.values($artistWorks || [])) {
+                        var $s = $w?.['submission'] ?? null;
+                        var $mList = Array.isArray($s?.['negotiation_messages']) ? $s['negotiation_messages'] : [];
+                        if ($s && ($s['price_agreement_status'] === 'counter_proposed_by_artist' || $mList.length > 0)) {
+                            $artistMsgList.push({ work: $w, submission: $s, messages: $mList });
+                        }
+                    }
+                    var $artistNewMsgCount = $artistMsgList.filter(function(m) {
+                        return m.submission.price_agreement_status === 'counter_proposed_by_artist' || (m.messages.length > 0 && m.messages[m.messages.length - 1]?.sender === 'artist');
+                    }).length;
+                    var $hasNewMsg = $artistNewMsgCount > 0; %>
                     <div class="adm-sub border border-hairline bg-ivory p-6 sm:p-8 space-y-6" data-fold-default="closed">
                         <!-- Artist Registration & Profile Approval Header -->
                         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b border-hairline pb-6">
@@ -1749,31 +1642,47 @@ var $counterSubmissionsCount = $counterSubsList.length;
                             </div>
                         </div>
 
-                        <!-- Artist's Uploaded Artworks & Catalog Dropdown Drawer -->
-                        <details class="adm-artist-works-accordion border border-hairline bg-white shadow-sm overflow-hidden" style="border-radius: 6px;">
-                            <summary class="cursor-pointer p-4 sm:p-5 flex items-center justify-between gap-4 bg-[#FAF7F2] hover:bg-[#F3EEE5] transition select-none list-none">
-                                <div class="flex items-center gap-3.5">
+                        <!-- Artist's Uploaded Artworks & Message Drawer -->
+                        <div class="adm-artist-drawer border border-hairline bg-white shadow-xs overflow-hidden" data-artist-card-id="<%- Number($ap?.['user_id']) %>" style="border-radius: 6px;">
+                            <!-- Header with the Two Options and Arrow Toggle -->
+                            <div class="p-3.5 sm:p-4 bg-[#FAF7F2] border-b border-hairline flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none">
+                                <div class="flex items-center gap-3">
                                     <span class="w-8 h-8 rounded-full bg-obsidian text-ivory flex items-center justify-center text-xs font-mono font-bold flex-shrink-0">
                                         <%- count($artistWorks) %>
                                     </span>
                                     <div>
                                         <h4 class="text-sm font-serif font-bold text-obsidian tracking-wide flex items-center gap-2">
-                                            <span>Catalogue &amp; Uploaded Works by <%- e($ap?.['display_name']) %></span>
-                                            <span class="text-[9px] font-sans font-semibold uppercase tracking-widest px-2 py-0.5 bg-[#E8E2D5] text-obsidian rounded">
-                                                <%- count($artistWorks) %> <%- count($artistWorks) === 1 ? 'Artwork' : 'Artworks' %>
-                                            </span>
+                                            <span><%- e($ap?.['display_name']) %> &mdash; Works &amp; Messages</span>
                                         </h4>
-                                        <p class="text-[11px] text-stone mt-0.5">
-                                            Click to open dropdown: view entire catalog, reserve prices, agreed valuations &amp; auction controls
+                                        <p class="text-[11px] text-stone">
+                                            Select an option to view uploaded works or messages regarding a work
                                         </p>
                                     </div>
+                                    <% if ($hasNewMsg) { %>
+                                        <span class="adm-artist-new-badge bg-bronze text-white text-[9px] uppercase tracking-widest px-2.5 py-0.5 font-bold animate-pulse" data-artist-badge-id="<%- Number($ap?.['user_id']) %>">
+                                            ● <%- $artistNewMsgCount %> New Message<%- $artistNewMsgCount === 1 ? '' : 's' %>
+                                        </span>
+                                    <% } %>
                                 </div>
-                                <span class="text-[10px] uppercase tracking-widest font-bold px-3 py-1.5 border border-hairline bg-white text-obsidian shadow-xs">
-                                    ▼ Click to View Works (<%- count($artistWorks) %>)
-                                </span>
-                            </summary>
 
-                            <div class="p-5 sm:p-6 space-y-6 bg-[#FAF7F2] border-t border-hairline">
+                                <!-- The Two Options Requested by User + Arrow -->
+                                <div class="flex items-center gap-2 self-start sm:self-center">
+                                    <button type="button" class="adm-opt-btn is-active px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition bg-obsidian text-ivory border border-obsidian" onclick="switchArtistView(this, 'works', <%- Number($ap?.['user_id']) %>)">
+                                        🎨 View Works (<%- count($artistWorks) %>)
+                                    </button>
+                                    <button type="button" class="adm-opt-btn px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition bg-white text-stone border border-hairline hover:border-obsidian hover:text-obsidian" onclick="switchArtistView(this, 'messages', <%- Number($ap?.['user_id']) %>)">
+                                        💬 View Messages Regarding a Work (<%- count($artistMsgList) %>)
+                                    </button>
+                                    <button type="button" class="px-2.5 py-1.5 text-xs font-bold border border-hairline bg-white text-stone hover:bg-ivory hover:text-obsidian transition" onclick="toggleArtistBody(this)" title="Toggle drawer">
+                                        <span class="adm-arrow-indicator">▲</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Drawer Body Content -->
+                            <div class="adm-artist-body p-5 sm:p-6 bg-[#FAF7F2] space-y-6">
+                                <!-- Option 1 Pane: View Works -->
+                                <div class="adm-pane-works space-y-6">
                                 <% if (empty($artistWorks)) { %>
                                     <p class="text-xs text-stone bg-white p-4 border border-hairline text-center">This artist has not uploaded any artworks yet.</p>
                                 <% } else { %>
@@ -2005,8 +1914,100 @@ var $counterSubmissionsCount = $counterSubsList.length;
                                     <% } %>
                                     </div>
                                 <% } %>
+                                </div>
+
+                                <!-- Option 2 Pane: View Messages Regarding a Work -->
+                                <div class="adm-pane-messages space-y-5" style="display: none;">
+                                    <% if (empty($artistMsgList)) { %>
+                                        <div class="bg-white border border-hairline p-8 text-center text-xs text-stone">
+                                            <p class="text-obsidian font-semibold mb-1">No Price Messages for This Artist</p>
+                                            <p>This artist has not sent any counter-offers or pricing notes regarding their uploaded works yet.</p>
+                                        </div>
+                                    <% } else { %>
+                                        <div class="space-y-4">
+                                            <% for (const $mItem of $artistMsgList) {
+                                                var $mWork = $mItem.work;
+                                                var $mSub = $mItem.submission;
+                                                var $mList = $mItem.messages;
+                                                var $mExpected = Number($mSub?.['artist_expected_price'] ?? $mWork?.['artist_expected_price'] ?? 0);
+                                                var $mAgreed = Number($mSub?.['agreed_price'] ?? $mWork?.['agreed_price'] ?? 0);
+                                            %>
+                                            <div class="bg-white border border-hairline p-5 space-y-4 shadow-2xs">
+                                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-hairline pb-3">
+                                                    <div class="flex items-center gap-3">
+                                                        <a href="<%- e($mWork?.['primary_image']) %>" target="_blank" class="w-14 h-14 bg-alabaster border border-hairline overflow-hidden flex-shrink-0 block">
+                                                            <img src="<%- e($mWork?.['primary_image']) %>" alt="" class="w-full h-full object-cover">
+                                                        </a>
+                                                        <div>
+                                                            <span class="font-mono text-[10px] text-bronze uppercase tracking-widest"><%- e($mSub?.['reference_code']) %></span>
+                                                            <h5 class="font-serif text-lg text-obsidian font-bold"><%- e($mWork?.['title']) %></h5>
+                                                            <p class="text-[11px] text-stone"><%- e($mWork?.['medium']) %> · <%- e($mWork?.['dimensions']) %></p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex flex-wrap items-center gap-3 font-mono text-xs">
+                                                        <div class="bg-ivory border border-hairline px-3 py-1.5 text-center">
+                                                            <span class="text-[9px] uppercase tracking-widest text-stone block">Artist Expected</span>
+                                                            <span class="text-sm font-bold text-obsidian"><%- format_money($mExpected) %></span>
+                                                        </div>
+                                                        <div class="bg-ivory border border-hairline px-3 py-1.5 text-center">
+                                                            <span class="text-[9px] uppercase tracking-widest text-stone block">House Agreed</span>
+                                                            <span class="text-sm font-bold text-bronze"><%- format_money($mAgreed) %></span>
+                                                        </div>
+                                                        <span class="px-2 py-0.5 text-[9px] uppercase tracking-widest font-bold <%- $mSub?.['price_agreement_status'] === 'accepted_by_artist' ? 'bg-[#1A2E22] text-[#55E59C]' : 'bg-bronze text-white' %>">
+                                                            <%- $mSub?.['price_agreement_status'] === 'accepted_by_artist' ? '✓ Accepted by Artist' : '⇄ Counter-Offer' %>
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Message Thread History -->
+                                                <div class="bg-[#FAF7F2] border border-hairline p-3.5 space-y-2 text-xs max-h-56 overflow-y-auto">
+                                                    <p class="text-[9px] uppercase tracking-widest text-bronze font-bold">Auction Desk &amp; Valuation Thread</p>
+                                                    <% for (const $nm of $mList) { %>
+                                                        <div class="p-2.5 rounded border border-hairline <%- ($nm?.['sender'] === 'artist') ? 'bg-white text-obsidian border-bronze/30' : 'bg-obsidian text-ivory' %>">
+                                                            <div class="flex items-center justify-between gap-2 mb-1">
+                                                                <strong class="text-[11px]"><%- e($nm?.['sender_name'] ?? ($nm?.['sender'] === 'artist' ? 'Artist' : 'House Specialist')) %></strong>
+                                                                <% if ($nm?.['created_at']) { %>
+                                                                    <span class="font-mono text-[9px] opacity-70"><%- e($nm['created_at']) %> UTC</span>
+                                                                <% } %>
+                                                            </div>
+                                                            <p class="leading-relaxed text-[11px]"><%- e($nm?.['text'] ?? $nm?.['message'] ?? '') %></p>
+                                                        </div>
+                                                    <% } %>
+                                                </div>
+
+                                                <!-- Inline Response Form -->
+                                                <form action="/admin/artworks/control" method="POST" class="bg-ivory border border-hairline p-3.5 space-y-3 text-xs">
+                                                    <%- csrf_field() %>
+                                                    <input type="hidden" name="artwork_id" value="<%- Number($mWork?.['id']) %>">
+                                                    <input type="hidden" name="return_anchor" value="#artists">
+
+                                                    <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                                        <div class="md:col-span-3 space-y-1">
+                                                            <label class="text-[10px] uppercase tracking-widest text-stone block font-semibold">Agreed Price ($)</label>
+                                                            <input type="number" step="100" name="agreed_price" value="<%- $mAgreed || $mExpected %>" required class="w-full bg-white border border-hairline px-3 py-1.5 font-mono font-bold text-xs">
+                                                        </div>
+                                                        <div class="md:col-span-3 space-y-1">
+                                                            <label class="text-[10px] uppercase tracking-widest text-stone block font-semibold">Starting Bid ($)</label>
+                                                            <input type="number" step="50" name="starting_bid" value="<%- Math.round(($mAgreed || $mExpected) * 0.4) %>" class="w-full bg-white border border-hairline px-3 py-1.5 font-mono text-xs">
+                                                        </div>
+                                                        <div class="md:col-span-4 space-y-1">
+                                                            <label class="text-[10px] uppercase tracking-widest text-stone block font-semibold">Reply Note to Artist</label>
+                                                            <input type="text" name="desk_reply" placeholder="Type response note to artist studio..." class="w-full bg-white border border-hairline px-3 py-1.5 text-xs">
+                                                        </div>
+                                                        <div class="md:col-span-2">
+                                                            <button type="submit" class="w-full bg-obsidian text-ivory font-bold py-2 px-3 text-[10px] uppercase tracking-widest hover:bg-bronze transition text-center whitespace-nowrap">
+                                                                Send Reply
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                            <% } %>
+                                        </div>
+                                    <% } %>
+                                </div>
                             </div>
-                        </details>
+                        </div>
                     </div>
                 <% } %>
             </div>
@@ -2118,6 +2119,11 @@ var $counterSubmissionsCount = $counterSubsList.length;
                                             <!-- Set Processing -->
                                             <button type="submit" name="action_type" value="mark_processing" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold transition <%- $st === 'processing' ? 'bg-[#1E2530] text-[#93C5FD] border border-[#3B82F6] opacity-60 pointer-events-none' : 'bg-white border border-[#3B82F6] text-[#1D4ED8] hover:bg-[#1E2530] hover:text-[#93C5FD]' %>" title="Change status to Processing">
                                                 ⚙ Processing
+                                            </button>
+
+                                            <!-- Delete Live Bid -->
+                                            <button type="submit" name="action_type" value="delete_live_bid" onclick="return confirm('Delete all live bids on Lot <%- e($auc?.['lot_number']) %> and reset the bid price back to starting bid?');" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold border border-red-800 text-red-700 bg-white hover:bg-red-800 hover:text-white transition" title="Delete live bids on this lot and reset to starting bid">
+                                                🗑 Delete Live Bid
                                             </button>
                                         </form>
                                     </div>
@@ -2850,6 +2856,76 @@ var $counterSubmissionsCount = $counterSubsList.length;
         updateToggleLabel();
     });
     document.addEventListener('toggle', updateToggleLabel, true);
+
+    // Artist Hub Drawer Views (View Works vs View Messages Regarding a Work)
+    window.switchArtistView = function (btn, viewType, artistId) {
+        var drawer = btn.closest('.adm-artist-drawer');
+        if (!drawer) return;
+        drawer.querySelectorAll('.adm-opt-btn').forEach(function (b) {
+            b.classList.remove('is-active', 'bg-obsidian', 'text-ivory', 'border-obsidian');
+            b.classList.add('bg-white', 'text-stone', 'border-hairline');
+        });
+        btn.classList.add('is-active', 'bg-obsidian', 'text-ivory', 'border-obsidian');
+        btn.classList.remove('bg-white', 'text-stone', 'border-hairline');
+
+        var worksPane = drawer.querySelector('.adm-pane-works');
+        var msgsPane = drawer.querySelector('.adm-pane-messages');
+        var body = drawer.querySelector('.adm-artist-body');
+        if (body) body.style.display = 'block';
+        var arrow = drawer.querySelector('.adm-arrow-indicator');
+        if (arrow) arrow.textContent = '▲';
+
+        if (viewType === 'messages') {
+            if (worksPane) worksPane.style.display = 'none';
+            if (msgsPane) msgsPane.style.display = 'block';
+
+            // Mark message as viewed: hide badge on this card
+            var badge = drawer.querySelector('.adm-artist-new-badge');
+            if (badge) badge.style.display = 'none';
+            try { localStorage.setItem('adm_viewed_msg_' + artistId, '1'); } catch (e) {}
+
+            // If all artist badges are hidden, hide the top navbar badge as well
+            var anyVisible = document.querySelector('.adm-artist-new-badge:not([style*="display: none"])');
+            if (!anyVisible) {
+                var topBadge = document.getElementById('admNewMsgCountBadge');
+                if (topBadge) topBadge.style.display = 'none';
+            }
+        } else {
+            if (worksPane) worksPane.style.display = 'block';
+            if (msgsPane) msgsPane.style.display = 'none';
+        }
+    };
+
+    window.toggleArtistBody = function (btn) {
+        var drawer = btn.closest('.adm-artist-drawer');
+        if (!drawer) return;
+        var body = drawer.querySelector('.adm-artist-body');
+        var arrow = drawer.querySelector('.adm-arrow-indicator');
+        if (!body) return;
+        if (body.style.display === 'none') {
+            body.style.display = 'block';
+            if (arrow) arrow.textContent = '▲';
+        } else {
+            body.style.display = 'none';
+            if (arrow) arrow.textContent = '▼';
+        }
+    };
+
+    // Check localStorage for previously viewed messages to restore badge disappearance
+    try {
+        document.querySelectorAll('.adm-artist-drawer').forEach(function (drawer) {
+            var aId = drawer.getAttribute('data-artist-card-id');
+            if (aId && localStorage.getItem('adm_viewed_msg_' + aId) === '1') {
+                var b = drawer.querySelector('.adm-artist-new-badge');
+                if (b) b.style.display = 'none';
+            }
+        });
+        var anyStillNew = document.querySelector('.adm-artist-new-badge:not([style*="display: none"])');
+        if (!anyStillNew) {
+            var topBadge = document.getElementById('admNewMsgCountBadge');
+            if (topBadge) topBadge.style.display = 'none';
+        }
+    } catch (e) {}
 
     route();
 })();

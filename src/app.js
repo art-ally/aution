@@ -3839,6 +3839,53 @@ app.post('/admin/auctions/live-control', (req, res) => {
       req.ip
     );
     req.setFlash('success', `Lot ${auction.lot_number} status changed to PROCESSING.`);
+  } else if (actionType === 'delete_live_bid') {
+    const startingBid = Number(auction.starting_bid || 0);
+    const deletedBids = db.where('bids', (b) => Number(b.auction_id) === auctionId);
+    for (const b of deletedBids) {
+      db.delete('bids', b.id);
+    }
+    db.update('auctions', auctionId, {
+      current_bid: startingBid,
+      bid_count: 0,
+      reserve_met: false,
+      highest_bidder_id: null,
+    });
+    if (auction.artwork_id) {
+      db.update('artworks', Number(auction.artwork_id), {
+        current_bid: startingBid,
+      });
+      const sub = db.findBy('artwork_submissions', 'artwork_id', Number(auction.artwork_id));
+      if (sub) {
+        db.update('artwork_submissions', sub.id, {
+          current_bid: startingBid,
+        });
+      }
+    }
+    logAudit(
+      db,
+      admin,
+      'LIVE_BID_DELETED',
+      'auction',
+      auctionId,
+      `Deleted all live bids on ${auction.lot_number} and reset bid back to starting bid ${helpers.format_money(startingBid)}.`,
+      req.ip
+    );
+    req.setFlash('success', `Live bids deleted on Lot ${auction.lot_number}. Current bid reset to starting bid (${helpers.format_money(startingBid)}).`);
+  } else if (actionType === 'delete_auction') {
+    const deletedBids = db.where('bids', (b) => Number(b.auction_id) === auctionId);
+    for (const b of deletedBids) {
+      db.delete('bids', b.id);
+    }
+    db.delete('auctions', auctionId);
+    if (auction.artwork_id) {
+      db.update('artworks', Number(auction.artwork_id), {
+        status: 'pending',
+        current_bid: null,
+      });
+    }
+    logAudit(db, admin, 'AUCTION_LOT_DELETED', 'auction', auctionId, `Deleted auction lot ${auction.lot_number}.`, req.ip);
+    req.setFlash('success', `Auction lot ${auction.lot_number} deleted.`);
   }
 
   res.redirect('/admin/dashboard#auctions');
