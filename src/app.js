@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -22,6 +23,51 @@ const PRIVATE_DOC_ROOT = IS_VERCEL
 
 const SESSION_SECRET = process.env.SESSION_SECRET || 'artally-institutional-secret-key-2026';
 const SESSION_COOKIE = 'artally_session';
+
+// --- Server-side Rate Limiter for Login / Sensitive Operations ---
+const loginAttemptStore = new Map();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 2 * 60 * 1000; // 2 minutes
+
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.socket?.remoteAddress || '127.0.0.1';
+}
+
+function isLoginRateLimited(ip, email) {
+  const key = `${ip}:${String(email || '').trim().toLowerCase()}`;
+  const record = loginAttemptStore.get(key);
+  if (!record) return false;
+  if (Date.now() - record.lastAttempt > LOGIN_LOCKOUT_MS) {
+    loginAttemptStore.delete(key);
+    return false;
+  }
+  return record.attempts >= MAX_LOGIN_ATTEMPTS;
+}
+
+function recordFailedLogin(ip, email) {
+  const key = `${ip}:${String(email || '').trim().toLowerCase()}`;
+  const record = loginAttemptStore.get(key) || { attempts: 0, lastAttempt: 0 };
+  record.attempts += 1;
+  record.lastAttempt = Date.now();
+  loginAttemptStore.set(key, record);
+}
+
+function clearFailedLogin(ip, email) {
+  const key = `${ip}:${String(email || '').trim().toLowerCase()}`;
+  loginAttemptStore.delete(key);
+}
+
+const rateLimitCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of loginAttemptStore.entries()) {
+    if (now - record.lastAttempt > LOGIN_LOCKOUT_MS) {
+      loginAttemptStore.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+if (rateLimitCleanupInterval.unref) rateLimitCleanupInterval.unref();
 
 // Configure multer in-memory storage so we can validate & save uploads identically on local or Vercel
 const upload = multer({
@@ -273,9 +319,9 @@ app.use(async (req, res, next) => {
     sendRendered();
   };
 
-  // Validate same-origin on state-changing POST requests
+  // Validate same-origin & CSRF token on state-changing requests
   if (
-    req.method === 'POST' &&
+    ['POST', 'PUT', 'DELETE'].includes(req.method) &&
     !req.path.startsWith('/api/auctions/sync') &&
     !req.path.startsWith('/api/verify-buyer-code')
   ) {
@@ -285,10 +331,30 @@ app.use(async (req, res, next) => {
       try {
         const originHost = new URL(originHeader).host;
         if (originHost && originHost.toLowerCase() !== hostHeader.toLowerCase()) {
-          req.setFlash('error', 'Cross-origin form submission blocked for security.');
-          return res.redirect('/');
+          return res.status(403).send('Forbidden: Cross-origin request blocked for security.');
         }
       } catch (_) {}
+    }
+
+    const secFetchSite = req.get('sec-fetch-site');
+    if (secFetchSite === 'cross-site') {
+      return res.status(403).send('Forbidden: Cross-site request blocked for security.');
+    }
+
+    const sessionCsrf = req.sessionData && req.sessionData.csrf_token;
+    const submittedToken =
+      (req.body && (req.body._token || req.body.csrf_token)) ||
+      req.get('x-csrf-token');
+
+    if (sessionCsrf && submittedToken) {
+      const bufSubmitted = Buffer.from(String(submittedToken));
+      const bufSession = Buffer.from(String(sessionCsrf));
+      if (
+        bufSubmitted.length !== bufSession.length ||
+        !crypto.timingSafeEqual(bufSubmitted, bufSession)
+      ) {
+        return res.status(403).send('Forbidden: Invalid security token (CSRF mismatch).');
+      }
     }
   }
 
@@ -911,19 +977,16 @@ app.post('/login', async (req, res) => {
   const db = DatabaseEngine.getInstance();
   const email = String(req.body.email || '').trim();
   const password = String(req.body.password || '');
+  const clientIp = getClientIp(req);
 
-  const attempts = Number(req.sessionData.login_attempts || 0);
-  const lastAttempt = Number(req.sessionData.login_last_attempt || 0);
-  const nowSec = Math.floor(Date.now() / 1000);
-  if (attempts >= 8 && nowSec - lastAttempt < 120) {
+  if (isLoginRateLimited(clientIp, email)) {
     req.setFlash('error', 'Too many sign-in attempts. Please wait two minutes before trying again.');
     return res.redirect('/login');
   }
 
   const user = await db.findUserByEmailFromDb(email);
   if (!user || !verifyPassword(password, user.password)) {
-    req.sessionData.login_attempts = attempts + 1;
-    req.sessionData.login_last_attempt = nowSec;
+    recordFailedLogin(clientIp, email);
     req.setFlash('error', 'Invalid email address or password.');
     return res.redirect('/login');
   }
@@ -933,6 +996,7 @@ app.post('/login', async (req, res) => {
     return res.redirect('/login');
   }
 
+  clearFailedLogin(clientIp, email);
   delete req.sessionData.login_attempts;
   req.loginUser(user);
   req.setFlash('success', `Welcome back to ArtAlly, ${user.name}.`);
@@ -2545,18 +2609,27 @@ app.post('/admin/login', async (req, res) => {
   const db = DatabaseEngine.getInstance();
   const email = String(req.body.email || '').trim();
   const password = String(req.body.password || '');
+  const clientIp = getClientIp(req);
+
+  if (isLoginRateLimited(clientIp, email)) {
+    req.setFlash('error', 'Too many sign-in attempts. Please wait two minutes before trying again.');
+    return res.redirect('/admin/login');
+  }
 
   const user = await db.findUserByEmailFromDb(email);
   if (!user || !verifyPassword(password, user.password)) {
+    recordFailedLogin(clientIp, email);
     req.setFlash('error', 'Invalid administrator credentials.');
     return res.redirect('/admin/login');
   }
 
   if (!helpers.userHasRole(user, 'admin')) {
+    recordFailedLogin(clientIp, email);
     req.setFlash('error', 'Access denied. This portal is restricted to authorized administrators.');
     return res.redirect('/admin/login');
   }
 
+  clearFailedLogin(clientIp, email);
   req.loginUser(user);
   req.setFlash('success', 'Authenticated into ArtAlly Executive Governance Suite.');
   res.redirect('/admin/dashboard');

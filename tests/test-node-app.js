@@ -16,7 +16,18 @@ function request(server, method, path, body = null, cookie = '') {
   return new Promise((resolve, reject) => {
     const addr = server.address();
     const headers = {};
-    if (cookie) headers.Cookie = cookie;
+    if (cookie) {
+      headers.Cookie = cookie;
+      try {
+        const m = cookie.match(/artally_session=([^.]+)/);
+        if (m) {
+          const parsed = JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8'));
+          if (parsed && parsed.csrf_token) {
+            headers['x-csrf-token'] = parsed.csrf_token;
+          }
+        }
+      } catch (_) {}
+    }
     let payload = null;
     if (body) {
       payload = new URLSearchParams(body).toString();

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
@@ -11,8 +12,7 @@ const RUNTIME_STORE_PATH = IS_VERCEL
   ? path.join('/tmp', 'artally_store.json')
   : SEED_STORE_PATH;
 
-const DEFAULT_SUPABASE_PG_URL =
-  'postgresql://postgres.xrncirrbxzzouwbluyso:Ohreally.12345@aws-1-eu-central-1.pooler.supabase.com:5432/postgres';
+const DEFAULT_SUPABASE_PG_URL = '';
 
 const TABLES = [
   'users',
@@ -81,7 +81,7 @@ const ORDERED_RELATIONAL_TABLES = [
 
 function normalizeSupabasePgUrl(rawUrl) {
   const s = String(rawUrl || '').trim();
-  if (!s) return DEFAULT_SUPABASE_PG_URL;
+  if (!s) return '';
   // Convert IPv6-only db.xrncirrbxzzouwbluyso.supabase.co to IPv4+IPv6 Supavisor Pooler
   if (s.includes('@db.xrncirrbxzzouwbluyso.supabase.co')) {
     return s
