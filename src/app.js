@@ -3076,41 +3076,47 @@ app.post('/admin/artworks/control', (req, res) => {
 
   const existingAuction = db.findBy('auctions', 'artwork_id', artworkId);
 
-  // Action: Delete / Reset Live Bids on this artwork
+  // Action: Delete Live Bid / Auction Lot from Auctions & Sales Live Control (Preserve Artwork in Catalog)
   if (bidAction === 'delete_live_bid') {
-    if (existingAuction) {
-      const deletedBids = db.where('bids', (b) => Number(b.auction_id) === Number(existingAuction.id));
+    const matchingAuctions = db.where(
+      'auctions',
+      (a) => Number(a.artwork_id) === Number(artworkId)
+    );
+    for (const auc of matchingAuctions) {
+      const deletedBids = db.where('bids', (b) => Number(b.auction_id) === Number(auc.id));
       for (const b of deletedBids) {
         db.delete('bids', b.id);
       }
-      db.update('auctions', existingAuction.id, {
-        current_bid: startingBid,
-        bid_count: 0,
-        reserve_met: false,
-        highest_bidder_id: null,
-      });
+      db.delete('auctions', auc.id);
     }
+    const bidsOnArtwork = db.where('bids', (b) => Number(b.artwork_id) === Number(artworkId));
+    for (const b of bidsOnArtwork) {
+      db.delete('bids', b.id);
+    }
+
     db.update('artworks', artworkId, {
       current_bid: startingBid,
+      status: 'under_review',
     });
     const sub = db.findBy('artwork_submissions', 'artwork_id', artworkId);
     if (sub) {
       db.update('artwork_submissions', sub.id, {
         current_bid: startingBid,
+        status: 'under_review',
       });
     }
     logAudit(
       db,
       admin,
-      'LIVE_BID_DELETED',
+      'AUCTION_BID_REMOVED_FROM_SALES',
       'artwork',
       artworkId,
-      `Deleted all live bids on "${artwork.title}" and reset bid to starting bid ${helpers.format_money(startingBid)}.`,
+      `Deleted live auction lot & bids for "${artwork.title}" from Auctions & Sales control. Artwork remains safely in catalog.`,
       req.ip
     );
     req.setFlash(
       'success',
-      `Live bids deleted on "${artwork.title}". Current bid reset to starting bid (${helpers.format_money(startingBid)}).`
+      `Live bid & auction lot for "${artwork.title}" successfully deleted from Auctions & Sales Live Bid & Sold Control. The artwork remains safely preserved in the catalog.`
     );
     return res.redirect('/admin/dashboard#artists');
   }
@@ -3186,7 +3192,14 @@ app.post('/admin/artworks/control', (req, res) => {
         db.update('notifications', rn.id, { read_at: now });
       }
     }
-    if (isBidPriceUpdated) {
+    if (auctionState === 'upcoming') {
+      messages.push({
+        sender: 'admin',
+        sender_name: 'Auction Desk Alert',
+        text: `🗓 UPCOMING BID ALERT: Live bidding for your artwork "${artwork.title}" is now officially scheduled and upcoming! (Starting Bid: ${helpers.format_money(startingBid)}, Agreed Valuation: ${helpers.format_money(agreedPrice)}). Bidding will open soon.`,
+        created_at: formatUtcNow(),
+      });
+    } else if (isBidPriceUpdated) {
       messages.push({
         sender: 'admin',
         sender_name: 'Auction Desk Alert',
@@ -3368,7 +3381,19 @@ app.post('/admin/artworks/control', (req, res) => {
       ? 'ENDED — UNSOLD'
       : 'PENDING CURATORIAL REVIEW';
 
-  if (isBidPriceUpdated) {
+  if (auctionState === 'upcoming') {
+    db.insert('notifications', {
+      user_id: Number(artwork.artist_id),
+      type: 'upcoming_auction_alert',
+      bid_amount: startingBid,
+      artwork_id: artworkId,
+      artwork_title: artwork.title,
+      title: `🗓 UPCOMING AUCTION ALERT: "${artwork.title}" is Scheduled & Upcoming!`,
+      message: `ALERT: The timed sale for your artwork "${artwork.title}" is now officially scheduled and upcoming! Starting bid is set at ${helpers.format_money(startingBid)} with an agreed valuation of ${helpers.format_money(agreedPrice)}. Bidding will open soon.`,
+      action_url: '/artist/dashboard',
+      read_at: null,
+    });
+  } else if (isBidPriceUpdated) {
     const activeEndsAt =
       existingAuction?.ends_at || helpers.gmdate('Y-m-d H:i:s', helpers.strtotime(`+${durationDays} days`));
     db.insert('notifications', {
@@ -3425,7 +3450,12 @@ app.post('/admin/artworks/control', (req, res) => {
     req.ip
   );
 
-  if (isBidPriceUpdated) {
+  if (auctionState === 'upcoming') {
+    req.setFlash(
+      'success',
+      `🗓 UPCOMING ALERT SENT: The auction for "${artwork.title}" is marked UPCOMING and an alert has been delivered to the artist studio!`
+    );
+  } else if (isBidPriceUpdated) {
     req.setFlash(
       'success',
       `🔔 BID ALERT SENT: There is now a bid for ${helpers.format_money(currentBid)} on "${
@@ -4016,23 +4046,27 @@ app.post('/admin/auctions/live-control', (req, res) => {
     req.setFlash('success', `Lot ${auction.lot_number} status changed to PROCESSING.`);
   } else if (actionType === 'delete_live_bid') {
     const startingBid = Number(auction.starting_bid || 0);
-    const deletedBids = db.where('bids', (b) => Number(b.auction_id) === auctionId);
+    const artworkId = Number(auction.artwork_id);
+    const deletedBids = db.where(
+      'bids',
+      (b) => Number(b.auction_id) === auctionId || (artworkId && Number(b.artwork_id) === artworkId)
+    );
     for (const b of deletedBids) {
       db.delete('bids', b.id);
     }
-    db.update('auctions', auctionId, {
-      current_bid: startingBid,
-      bid_count: 0,
-      reserve_met: false,
-      highest_bidder_id: null,
-    });
-    if (auction.artwork_id) {
-      db.update('artworks', Number(auction.artwork_id), {
+    // Delete the auction lot so it is removed from Auctions & Sales Live Bid & Sold Control
+    db.delete('auctions', auctionId);
+
+    // Safely preserve the artwork in the catalog, resetting status to under_review and current_bid to starting_bid
+    if (artworkId) {
+      db.update('artworks', artworkId, {
+        status: 'under_review',
         current_bid: startingBid,
       });
-      const sub = db.findBy('artwork_submissions', 'artwork_id', Number(auction.artwork_id));
+      const sub = db.findBy('artwork_submissions', 'artwork_id', artworkId);
       if (sub) {
         db.update('artwork_submissions', sub.id, {
+          status: 'under_review',
           current_bid: startingBid,
         });
       }
@@ -4040,13 +4074,16 @@ app.post('/admin/auctions/live-control', (req, res) => {
     logAudit(
       db,
       admin,
-      'LIVE_BID_DELETED',
+      'LIVE_BID_DELETED_FROM_SALES_CONTROL',
       'auction',
       auctionId,
-      `Deleted all live bids on ${auction.lot_number} and reset bid back to starting bid ${helpers.format_money(startingBid)}.`,
+      `Deleted live bid and removed Lot ${auction.lot_number} from Auctions & Sales control. Artwork remains safely preserved in catalog.`,
       req.ip
     );
-    req.setFlash('success', `Live bids deleted on Lot ${auction.lot_number}. Current bid reset to starting bid (${helpers.format_money(startingBid)}).`);
+    req.setFlash(
+      'success',
+      `Live bid for Lot ${auction.lot_number} successfully deleted from Auctions & Sales Live Bid & Sold Control. The artwork remains safely preserved in the catalog.`
+    );
   } else if (actionType === 'delete_auction') {
     const deletedBids = db.where('bids', (b) => Number(b.auction_id) === auctionId);
     for (const b of deletedBids) {

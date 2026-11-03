@@ -346,26 +346,39 @@
         <% } %>
     </div>
 
-    <!-- Live Bid Alert Banner (Displayed when Admin updates Bid Price on any Artist Artwork) -->
-    <% var $bidAlerts = array_values(array_filter($notifications, ($n) => ($n?.['type'] ?? '') === 'new_bid_alert')); %>
+    <!-- Live Bid & Upcoming Auction Alert Banner (Displayed when Admin updates Bid Price or schedules an Upcoming Auction) -->
+    <% var $bidAlerts = array_values(array_filter($notifications, ($n) => ($n?.['type'] ?? '') === 'new_bid_alert' || ($n?.['type'] ?? '') === 'upcoming_auction_alert')); %>
     <% if (!empty($bidAlerts)) { %>
         <div class="bg-[#1A2E22] text-ivory border-2 border-bronze p-6 mb-10 space-y-3 shadow-sm">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-ivory/20 pb-3">
                 <div class="flex items-center space-x-2.5">
-                    <span class="bg-bronze text-white text-[10px] uppercase tracking-widest px-3 py-1 font-bold">🔔 Live Bid Alert</span>
-                    <h2 class="font-serif text-2xl text-ivory">New Bid Activity on Your Artwork</h2>
+                    <span class="bg-bronze text-white text-[10px] uppercase tracking-widest px-3 py-1 font-bold">🔔 Auction &amp; Bid Alerts</span>
+                    <h2 class="font-serif text-2xl text-ivory">Live Bids &amp; Upcoming Auction Activity</h2>
                 </div>
             </div>
             <div class="space-y-2 text-xs">
                 <% for (const $ba of Object.values(array_slice($bidAlerts, 0, 3) || [])) { %>
                     <% var $baAuction = array_values(array_filter($auctions, ($a) => Number($a?.['artwork_id'] ?? 0) === Number($ba?.['artwork_id'] ?? -1)))[0] ?? null;
                        var $baEndsAt = $baAuction?.['ends_at'] ?? $ba?.['ends_at'] ?? '';
-                       var $baStatus = $baAuction?.['status'] ?? 'active'; %>
+                       var $baStatus = $baAuction?.['status'] ?? 'active';
+                       var $isUpcoming = ($ba?.['type'] ?? '') === 'upcoming_auction_alert' || $baStatus === 'upcoming'; %>
                     <div class="bg-obsidian/80 border border-bronze/50 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div>
-                            <p class="font-semibold text-bronzeLight text-sm"><%- e($ba?.['title']) %></p>
+                            <div class="flex items-center gap-2 mb-1">
+                                <% if ($isUpcoming) { %>
+                                    <span class="bg-[#23352A] border border-emerald-600/70 text-[#A7F3D0] text-[9px] uppercase tracking-widest px-2 py-0.5 font-bold">🗓 UPCOMING AUCTION ALERT</span>
+                                <% } else { %>
+                                    <span class="bg-bronze text-white text-[9px] uppercase tracking-widest px-2 py-0.5 font-bold">🔔 LIVE BID ALERT</span>
+                                <% } %>
+                                <p class="font-semibold text-bronzeLight text-sm"><%- e($ba?.['title']) %></p>
+                            </div>
                             <p class="text-ivory/90 mt-0.5"><%- e($ba?.['message']) %></p>
-                            <% if ($baStatus === 'active' && !empty($baEndsAt)) { %>
+                            <% if ($isUpcoming) { %>
+                                <p class="mt-1.5 inline-flex items-center space-x-2 bg-[#23352A] border border-emerald-600/60 px-2.5 py-1 text-[11px] uppercase tracking-widest text-[#A7F3D0]">
+                                    <span>🗓 Timed Sale Scheduled &amp; Upcoming</span>
+                                    <span class="text-ivory font-semibold">· Bidding Opens Soon</span>
+                                </p>
+                            <% } else if ($baStatus === 'active' && !empty($baEndsAt)) { %>
                                 <p class="mt-1.5 inline-flex items-center space-x-2 bg-[#1A2E22] border border-bronze/60 px-2.5 py-1 text-[11px] uppercase tracking-widest text-ivory">
                                     <span>⏱ Live Bid Countdown:</span>
                                     <strong class="text-bronzeLight font-mono" data-countdown="<%- e($baEndsAt) %>"><%- e(time_remaining_label($baEndsAt)) %></strong>
@@ -378,7 +391,7 @@
                         </div>
                         <% if (!empty($ba?.['bid_amount'])) { %>
                             <div class="text-right whitespace-nowrap">
-                                <span class="block text-[9px] uppercase tracking-widest text-stone">Current Bid Price</span>
+                                <span class="block text-[9px] uppercase tracking-widest text-stone"><%- $isUpcoming ? 'Scheduled Starting Bid' : 'Current Bid Price' %></span>
                                 <span class="font-serif text-2xl font-bold text-bronzeLight"><%- format_money(Number($ba?.['bid_amount'])) %></span>
                             </div>
                         <% } %>
@@ -905,12 +918,15 @@
                 <% } else { %>
                     <div class="divide-y divide-hairline">
                         <% for (const $n of Object.values($notifications || [])) { %>
-                            <% var $isBidAlert = ($n?.['type'] ?? '') === 'new_bid_alert'; %>
-                            <div class="py-3.5 space-y-1.5 <%- $isBidAlert ? 'bg-[#FDFBF7] border-l-4 border-bronze pl-3 pr-2 my-1' : (empty($n?.['read_at']) ? 'bg-ivory/70 -mx-2 px-2' : '') %>">
+                            <% var $isBidAlert = ($n?.['type'] ?? '') === 'new_bid_alert';
+                               var $isUpcomingAlert = ($n?.['type'] ?? '') === 'upcoming_auction_alert'; %>
+                            <div class="py-3.5 space-y-1.5 <%- ($isBidAlert || $isUpcomingAlert) ? 'bg-[#FDFBF7] border-l-4 border-bronze pl-3 pr-2 my-1' : (empty($n?.['read_at']) ? 'bg-ivory/70 -mx-2 px-2' : '') %>">
                                 <div class="flex items-center justify-between gap-2">
                                     <div class="flex items-center gap-1.5">
                                         <% if ($isBidAlert) { %>
                                             <span class="bg-bronze text-white text-[9px] uppercase tracking-widest px-2 py-0.5 font-bold">🔔 BID ALERT</span>
+                                        <% } else if ($isUpcomingAlert) { %>
+                                            <span class="bg-[#23352A] border border-emerald-600/70 text-[#A7F3D0] text-[9px] uppercase tracking-widest px-2 py-0.5 font-bold">🗓 UPCOMING ALERT</span>
                                         <% } %>
                                         <p class="text-xs font-semibold text-obsidian"><%- e($n?.['title']) %></p>
                                     </div>
@@ -920,7 +936,7 @@
                                 </div>
                                 <p class="text-xs text-charcoal/90 leading-relaxed"><%- e($n?.['message']) %></p>
                                 <% if (!empty($n?.['bid_amount'])) { %>
-                                    <p class="text-[11px] font-serif font-bold text-bronze">Updated Live Bid Price: <%- format_money(Number($n?.['bid_amount'])) %></p>
+                                    <p class="text-[11px] font-serif font-bold text-bronze"><%- $isUpcomingAlert ? 'Scheduled Starting Bid' : 'Updated Live Bid Price' %>: <%- format_money(Number($n?.['bid_amount'])) %></p>
                                 <% } %>
                                 <% if (!empty($n?.['action_url'])) { %>
                                     <a href="<%- e($n?.['action_url']) %>" class="inline-block text-[10px] uppercase tracking-widest text-bronze font-semibold pt-1">View Record →</a>

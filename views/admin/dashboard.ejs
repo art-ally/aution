@@ -1854,7 +1854,7 @@ var $counterSubmissionsCount = $totalUnreadMsgCount;
                                                                 <option value="active" <%- $aucState === 'active' ? 'selected' : '' %>>● Live Bidding (Active / Reactivate)</option>
                                                                 <option value="closed_sold" <%- ($aucState === 'closed_sold' || $aucState === 'sold') ? 'selected' : '' %>>✓ SOLD (Auction Ended)</option>
                                                                 <option value="closed_unsold" <%- $aucState === 'closed_unsold' ? 'selected' : '' %>>✕ Ended — Unsold</option>
-                                                                <option value="upcoming" <%- $aucState === 'upcoming' ? 'selected' : '' %>>Upcoming (Scheduled)</option>
+                                                                <option value="upcoming" <%- $aucState === 'upcoming' ? 'selected' : '' %>>🗓 Upcoming (Alert Artist)</option>
                                                             </select>
                                                         </div>
                                                     </div>
@@ -1863,7 +1863,7 @@ var $counterSubmissionsCount = $totalUnreadMsgCount;
                                                         <button type="submit" name="bid_action" value="update_and_save" class="bg-obsidian text-ivory hover:bg-bronze transition px-4 py-2 text-[10px] uppercase tracking-widest font-bold whitespace-nowrap" title="Save valuation, prices and live bidding status">
                                                             ✓ Save &amp; Update Live Bid / Status
                                                         </button>
-                                                        <button type="submit" name="bid_action" value="delete_live_bid" onclick="return confirm('Delete all live bids on this artwork lot and reset bid back to starting bid?');" class="border border-red-800 text-red-700 bg-white hover:bg-red-800 hover:text-white px-3 py-2 text-[10px] uppercase tracking-widest font-bold transition whitespace-nowrap" title="Delete live bids on this lot and reset to starting bid">
+                                                        <button type="submit" name="bid_action" value="delete_live_bid" onclick="return confirm('Delete live bid from Auctions &amp; Sales control? (The artwork will remain safely preserved in the catalog)');" class="border border-red-800 text-red-700 bg-white hover:bg-red-800 hover:text-white px-3 py-2 text-[10px] uppercase tracking-widest font-bold transition whitespace-nowrap" title="Delete live bids on this lot and reset to starting bid">
                                                             🗑 Delete Live Bid
                                                         </button>
                                                     </div>
@@ -2085,12 +2085,19 @@ var $counterSubmissionsCount = $totalUnreadMsgCount;
                                     <% } %>
                                 </td>
                                 <td class="py-4 text-right">
-                                    <div class="inline-flex flex-col items-end gap-1.5">
+                                    <div class="inline-flex items-center gap-2 justify-end">
+                                        <form method="POST" action="/admin/auctions/live-control" class="inline" onsubmit="return confirm('Delete this live bid from Auctions &amp; Sales control? (The artwork will remain safely preserved in the catalog)');">
+                                            <%- csrf_field() %>
+                                            <input type="hidden" name="auction_id" value="<%- $auc.id %>">
+                                            <input type="hidden" name="action_type" value="delete_live_bid">
+                                            <button type="submit" class="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold border border-red-800 text-red-700 bg-white hover:bg-red-800 hover:text-white transition" title="Delete bid from Auctions &amp; Sales control (preserves artwork)">
+                                                🗑 Delete Bid
+                                            </button>
+                                        </form>
                                         <button type="button" onclick="focusArtistArtwork('<%- Number($auc?.['artist_id'] ?? $auc?.['artwork']?.['artist_id']) %>', '<%- Number($auc?.['artwork_id']) %>')" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold bg-obsidian text-ivory hover:bg-bronze transition border border-obsidian" title="Go to Status Changer &amp; Bid Increaser under this artist's work">
-                                            <span>⚙ Status Changer &amp; Bids</span>
+                                            <span>⚙ Status Changer</span>
                                             <span>&rarr;</span>
                                         </button>
-                                        <span class="text-[9px] uppercase tracking-wider text-stone">Controlled in Registered Artist</span>
                                     </div>
                                 </td>
                             </tr>
