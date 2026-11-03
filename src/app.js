@@ -3759,24 +3759,86 @@ app.post('/admin/auctions/live-control', (req, res) => {
       'success',
       `Lot ${auction.lot_number} status changed to SOLD at ${helpers.format_money(finalPrice)}.`
     );
-  } else if (actionType === 'mark_active') {
+  } else if (actionType === 'mark_active' || actionType === 'reactivate_bidding') {
+    const liveEndsAt = helpers.gmdate('Y-m-d H:i:s', helpers.strtotime('+7 days'));
     db.update('auctions', auctionId, {
       status: 'active',
-      ends_at: helpers.gmdate('Y-m-d H:i:s', helpers.strtotime('+7 days')),
+      ends_at: liveEndsAt,
+      closed_at: null,
     });
-    db.update('artworks', Number(auction.artwork_id), {
-      status: 'published',
-    });
+    if (auction.artwork_id) {
+      db.update('artworks', Number(auction.artwork_id), {
+        status: 'published',
+      });
+      const sub = db.findBy('artwork_submissions', 'artwork_id', Number(auction.artwork_id));
+      if (sub) {
+        db.update('artwork_submissions', sub.id, {
+          status: 'approved',
+        });
+      }
+    }
     logAudit(
       db,
       admin,
-      'AUCTION_REOPENED_LIVE',
+      'AUCTION_REACTIVATED',
       'auction',
       auctionId,
-      `Reopened ${auction.lot_number} as Active Live Auction.`,
+      `Reactivated live bidding on ${auction.lot_number}.`,
       req.ip
     );
-    req.setFlash('success', `Lot ${auction.lot_number} is now Active (Live Bidding).`);
+    req.setFlash('success', `Live bidding reactivated on Lot ${auction.lot_number}. Status is now LIVE.`);
+  } else if (actionType === 'mark_pending') {
+    db.update('auctions', auctionId, {
+      status: 'pending',
+      closed_at: null,
+    });
+    if (auction.artwork_id) {
+      db.update('artworks', Number(auction.artwork_id), {
+        status: 'pending',
+      });
+      const sub = db.findBy('artwork_submissions', 'artwork_id', Number(auction.artwork_id));
+      if (sub) {
+        db.update('artwork_submissions', sub.id, {
+          status: 'pending',
+        });
+      }
+    }
+    logAudit(
+      db,
+      admin,
+      'AUCTION_MARKED_PENDING',
+      'auction',
+      auctionId,
+      `Changed status of ${auction.lot_number} to PENDING.`,
+      req.ip
+    );
+    req.setFlash('success', `Lot ${auction.lot_number} status changed back to PENDING.`);
+  } else if (actionType === 'mark_processing') {
+    db.update('auctions', auctionId, {
+      status: 'processing',
+      closed_at: null,
+    });
+    if (auction.artwork_id) {
+      db.update('artworks', Number(auction.artwork_id), {
+        status: 'processing',
+      });
+      const sub = db.findBy('artwork_submissions', 'artwork_id', Number(auction.artwork_id));
+      if (sub) {
+        db.update('artwork_submissions', sub.id, {
+          status: 'processing',
+        });
+      }
+    }
+    logAudit(
+      db,
+      admin,
+      'AUCTION_MARKED_PROCESSING',
+      'auction',
+      auctionId,
+      `Changed status of ${auction.lot_number} to PROCESSING.`,
+      req.ip
+    );
+    req.setFlash('success', `Lot ${auction.lot_number} status changed to PROCESSING.`);
   }
 
   res.redirect('/admin/dashboard#auctions');

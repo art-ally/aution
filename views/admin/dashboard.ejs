@@ -1845,7 +1845,7 @@ var $admInitial = String(($admin && $admin['name']) ? $admin['name'] : 'A').trim
                             <th class="py-3 pr-4">Agreed Price</th>
                             <th class="py-3 pr-4">Current Live Bid</th>
                             <th class="py-3 pr-4">Current Status</th>
-                            <th class="py-3 text-right">Increase Live Bid / Change Status to SOLD</th>
+                            <th class="py-3 text-right">Live Bid Adjuster &amp; Status Controls</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-hairline">
@@ -1866,35 +1866,69 @@ var $admInitial = String(($admin && $admin['name']) ? $admin['name'] : 'A').trim
                                     <span class="block text-[10px] text-stone"><%- Number($auc?.['bid_count']) %> bids</span>
                                 </td>
                                 <td class="py-4 pr-4">
-                                    <span class="px-2.5 py-1 text-[10px] uppercase tracking-widest font-semibold <%- $auc?.['status'] === 'closed_sold' ? 'bg-obsidian text-bronzeLight' : ($auc?.['status'] === 'active' ? 'bg-[#1A2E22] text-ivory' : 'bg-alabaster text-charcoal border border-hairline') %>">
-                                        <%- $auc?.['status'] === 'closed_sold' ? '✓ SOLD' : e(strtoupper($auc?.['status'])) %>
-                                    </span>
+                                    <% var $st = String($auc?.['status'] || 'pending').toLowerCase(); %>
+                                    <% if ($st === 'active') { %>
+                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-widest font-semibold bg-[#1A2E22] text-[#55E59C] border border-[#2D6A4F]">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-[#55E59C] animate-pulse"></span> LIVE BIDDING
+                                        </span>
+                                    <% } else if ($st === 'closed_sold' || $st === 'sold') { %>
+                                        <span class="inline-flex items-center px-2.5 py-1 text-[10px] uppercase tracking-widest font-semibold bg-obsidian text-bronzeLight border border-bronze">
+                                            ✓ SOLD
+                                        </span>
+                                    <% } else if ($st === 'processing') { %>
+                                        <span class="inline-flex items-center px-2.5 py-1 text-[10px] uppercase tracking-widest font-semibold bg-[#1E2530] text-[#93C5FD] border border-[#3B82F6]">
+                                            ⚙ PROCESSING
+                                        </span>
+                                    <% } else { %>
+                                        <span class="inline-flex items-center px-2.5 py-1 text-[10px] uppercase tracking-widest font-semibold bg-[#2E2416] text-[#FCD34D] border border-[#D97706]">
+                                            ⏳ PENDING
+                                        </span>
+                                    <% } %>
                                 </td>
                                 <td class="py-4 text-right">
-                                    <form action="/admin/auctions/live-control" method="POST" class="flex flex-wrap items-center justify-end gap-2">
-                                        <%- csrf_field() %>
-                                        <input type="hidden" name="auction_id" value="<%- Number($auc?.['id']) %>">
+                                    <div class="flex flex-col items-end gap-2.5">
+                                        <!-- Live Bid Increaser & Custom Bid -->
+                                        <form action="/admin/auctions/live-control" method="POST" class="flex flex-wrap items-center justify-end gap-1.5">
+                                            <%- csrf_field() %>
+                                            <input type="hidden" name="auction_id" value="<%- Number($auc?.['id']) %>">
 
-                                        <button type="submit" name="action_type" value="increase_bid" class="bg-ivory border border-obsidian text-obsidian px-3 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-obsidian hover:text-ivory transition" title="Increase by next increment">
-                                            + Increase Bid to <%- format_money($nextStep) %>
-                                        </button>
-
-                                        <input type="number" step="50" name="custom_bid_amount" value="<%- $curBid %>" class="w-28 bg-ivory border border-hairline px-2.5 py-2 text-xs font-semibold">
-
-                                        <button type="submit" name="action_type" value="set_custom_bid" class="bg-obsidian text-ivory px-3 py-2 text-[10px] uppercase tracking-widest hover:bg-bronze transition">
-                                            Set Bid
-                                        </button>
-
-                                        <% if ($auc?.['status'] !== 'closed_sold') { %>
-                                            <button type="submit" name="action_type" value="mark_sold" class="bg-[#1A2E22] text-ivory px-4 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition">
-                                                ✓ Change Status to SOLD
+                                            <button type="submit" name="action_type" value="increase_bid" class="bg-ivory border border-obsidian text-obsidian px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-semibold hover:bg-obsidian hover:text-ivory transition" title="Increase by next increment">
+                                                + Step (<%- format_money($nextStep) %>)
                                             </button>
-                                        <% } else { %>
-                                            <button type="submit" name="action_type" value="mark_active" class="border border-hairline bg-alabaster text-charcoal px-3 py-2 text-[10px] uppercase tracking-widest hover:border-obsidian transition">
-                                                Reopen Live
+
+                                            <input type="number" step="50" name="custom_bid_amount" value="<%- $curBid %>" class="w-24 bg-ivory border border-hairline px-2 py-1.5 text-xs font-semibold text-right">
+
+                                            <button type="submit" name="action_type" value="set_custom_bid" class="bg-obsidian text-ivory px-2.5 py-1.5 text-[10px] uppercase tracking-widest hover:bg-bronze transition">
+                                                Set Bid
                                             </button>
-                                        <% } %>
-                                    </form>
+                                        </form>
+
+                                        <!-- Status Controller: Pending, Processing, Sold, Reactivate Bidding -->
+                                        <form action="/admin/auctions/live-control" method="POST" class="flex flex-wrap items-center justify-end gap-1.5">
+                                            <%- csrf_field() %>
+                                            <input type="hidden" name="auction_id" value="<%- Number($auc?.['id']) %>">
+
+                                            <!-- Reactivate Bidding -->
+                                            <button type="submit" name="action_type" value="reactivate_bidding" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold transition <%- $st === 'active' ? 'bg-[#1A2E22] text-[#55E59C] border border-[#2D6A4F] opacity-60 pointer-events-none' : 'bg-[#14261C] border border-[#2D6A4F] text-[#55E59C] hover:bg-[#2D6A4F] hover:text-white' %>" title="Activate/Reopen live bidding timer">
+                                                ⚡ Reactivate Bidding
+                                            </button>
+
+                                            <!-- Mark Sold -->
+                                            <button type="submit" name="action_type" value="mark_sold" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold transition <%- ($st === 'closed_sold' || $st === 'sold') ? 'bg-obsidian text-bronzeLight border border-bronze opacity-60 pointer-events-none' : 'bg-obsidian text-bronzeLight border border-bronze hover:bg-bronze hover:text-white' %>" title="Close lot as SOLD">
+                                                ✓ Mark Sold
+                                            </button>
+
+                                            <!-- Set Pending -->
+                                            <button type="submit" name="action_type" value="mark_pending" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold transition <%- $st === 'pending' ? 'bg-[#2E2416] text-[#FCD34D] border border-[#D97706] opacity-60 pointer-events-none' : 'bg-white border border-[#D97706] text-[#B45309] hover:bg-[#2E2416] hover:text-[#FCD34D]' %>" title="Change status back to Pending">
+                                                ⏳ Pending
+                                            </button>
+
+                                            <!-- Set Processing -->
+                                            <button type="submit" name="action_type" value="mark_processing" class="px-2.5 py-1.5 text-[10px] uppercase tracking-widest font-bold transition <%- $st === 'processing' ? 'bg-[#1E2530] text-[#93C5FD] border border-[#3B82F6] opacity-60 pointer-events-none' : 'bg-white border border-[#3B82F6] text-[#1D4ED8] hover:bg-[#1E2530] hover:text-[#93C5FD]' %>" title="Change status to Processing">
+                                                ⚙ Processing
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                         <% } %>

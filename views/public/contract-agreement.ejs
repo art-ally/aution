@@ -179,11 +179,6 @@ var $safePdfFilename = 'ArtAlly-Contract-' + String($agr['agreement_number'] || 
                 <% } else { %>
                     <a href="/artist/dashboard#contract-agreements" class="btn btn-outline btn-sm">&larr; Back to Artist Dashboard</a>
                 <% } %>
-                <% if (!empty($agr['invoice_id'])) { %>
-                    <a href="/invoices/<%- Number($agr['invoice_id']) %>" class="btn btn-outline btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);">
-                        📄 View Aligned Invoice (<%- e($agr['invoice_number']) %>)
-                    </a>
-                <% } %>
             </div>
             <div style="display: flex; gap: 0.65rem; flex-wrap: wrap;">
                 <% if (hasRole('admin')) { %>
@@ -191,15 +186,9 @@ var $safePdfFilename = 'ArtAlly-Contract-' + String($agr['agreement_number'] || 
                         ✎ Edit Auth Descriptions &amp; Total Artworks
                     </button>
                 <% } %>
-                <button type="button" id="btn-download-contract-pdf" onclick="downloadOfficialContractPdf()" class="btn btn-gold btn-sm">
-                    ⬇ Download Official PDF
-                </button>
-                <button type="button" onclick="window.print()" class="btn btn-outline btn-sm" style="border-color: #161514; color: #161514; font-weight: 700;">
+                <button type="button" onclick="window.print()" class="btn btn-gold btn-sm" style="font-weight: 700;">
                     🖨 Print / Save as PDF
                 </button>
-                <a href="/agreements/<%- Number($agr['id'] || 0) %>/download" class="btn btn-outline btn-sm">
-                    ⬇ Download HTML Copy
-                </a>
             </div>
         </div>
 
@@ -335,10 +324,7 @@ var $safePdfFilename = 'ArtAlly-Contract-' + String($agr['agreement_number'] || 
                             <p style="font-family: var(--font-mono); font-size: 0.84rem; font-weight: 700; color: #FFFFFF; margin: 0;">
                                 Agreement Ref: <%- e($agr['agreement_number'] ?? 'AGR-AA-2026-0001') %>
                             </p>
-                            <p style="font-family: var(--font-mono); font-size: 0.74rem; color: #C6A664; margin: 0.12rem 0 0;">
-                                Aligned Invoice: <%- e($agr['invoice_number'] ?? 'INV-AUTH-ALIGNED') %>
-                            </p>
-                            <p style="font-size: 0.72rem; color: #A69F93; margin: 0.12rem 0 0;">
+                            <p style="font-size: 0.72rem; color: #A69F93; margin: 0.18rem 0 0;">
                                 Date of Agreement: <%- e(substr($agr['platform_signed_at'] ?? $agr['created_at'] ?? gmdate('Y-m-d'), 0, 10)) %>
                             </p>
                         </div>
@@ -443,26 +429,26 @@ var $safePdfFilename = 'ArtAlly-Contract-' + String($agr['agreement_number'] || 
                     </p>
                 </div>
 
-                <!-- 5. AUTHENTICATION PROCESS & PER-ARTWORK PAYMENT AGREEMENT (ALIGNED WITH INVOICE) -->
+                <!-- 5. MANDATORY AUTHENTICATION PROCESS & PER-ARTWORK FEE AGREEMENT -->
                 <div style="margin-bottom: 1.65rem;">
                     <div class="pdf-no-break">
                         <h3 style="font-family: var(--font-sans); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #161514; border-bottom: 1px solid #DCD5C9; padding-bottom: 0.35rem; margin: 0 0 0.65rem;">
-                            5. MANDATORY AUTHENTICATION PROCESS &amp; PER-ARTWORK FEE AGREEMENT (ALIGNED WITH INVOICE <%- e($agr['invoice_number']) %>)
+                            5. MANDATORY AUTHENTICATION PROCESS &amp; PER-ARTWORK FEE AGREEMENT
                         </h3>
                         <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.62; margin: 0 0 0.5rem;">
-                            <strong>5.1 Independent Curatorial &amp; AI Verification Protocol:</strong> Every artwork consigned to ArtAlly must undergo and pass ArtAlly&rsquo;s Curatorial Connoisseurship &amp; AI-Powered Forensic Authentication process prior to public auction listing. The exact authentication descriptions performed by ArtAlly are derived directly from the Artist&rsquo;s aligned Authentication Invoice (<strong><%- e($agr['invoice_number']) %></strong>) as itemized below.
+                            <strong>5.1 Independent Curatorial &amp; AI Verification Protocol:</strong> Every artwork consigned to ArtAlly must undergo and pass ArtAlly&rsquo;s Curatorial Connoisseurship &amp; AI-Powered Forensic Authentication process prior to public auction listing. The exact authentication protocols and curatorial specifications performed by ArtAlly are itemized below.
                         </p>
                         <p style="font-size: 0.83rem; color: #2B2927; line-height: 1.62; margin: 0 0 0.85rem;">
                             <strong>5.2 Per-Artwork Authentication Payment &amp; Total Artwork Calculation:</strong> The Parties expressly agree that the authentication payment is charged <strong>per each individual artwork</strong> (<strong style="color: #8C6D32;"><%- format_money_exact($perFee, $currency) %> <%- e($currency) %> per artwork</strong>, inclusive of fixed <%- $vatRate %>% VAT), and the <strong>Grand Total Authentication Payment Due</strong> depends on the <strong>total number of artworks</strong> covered by this Agreement (<strong style="color: #161514;"><%- $totalArtworks %> artwork<%- $totalArtworks === 1 ? '' : 's' %> &times; <%- format_money_exact($perFee, $currency) %> = <%- format_money_exact($totFee, $currency) %> <%- e($currency) %></strong>).
                         </p>
                     </div>
 
-                    <!-- Aligned Authentication Descriptions & Per-Artwork / Total Artworks Table -->
+                    <!-- Curatorial Authentication Descriptions & Per-Artwork / Total Artworks Table -->
                     <div class="pdf-no-break" style="background: #141215; color: #FBF9F5; border: 1px solid #B8965A; padding: 1.25rem 1.45rem;">
                         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; border-bottom: 1px solid rgba(198,166,100,0.45); padding-bottom: 0.65rem; margin-bottom: 0.65rem;">
                             <div>
                                 <span style="font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700;">
-                                    OFFICIAL AUTHENTICATION SCHEDULE · ALIGNED WITH INVOICE <%- e($agr['invoice_number']) %>
+                                    OFFICIAL CURATORIAL AUTHENTICATION SCHEDULE
                                 </span>
                                 <p style="font-size: 0.78rem; color: #D6D0C4; margin: 0.12rem 0 0;">
                                     Service Tier: <strong style="color: #FFFFFF;"><%- e($agr['service_type']) %></strong>
@@ -477,7 +463,7 @@ var $safePdfFilename = 'ArtAlly-Contract-' + String($agr['agreement_number'] || 
                             <thead>
                                 <tr style="border-bottom: 1px solid rgba(198, 166, 100, 0.4);">
                                     <th style="text-align: left; padding: 0.45rem 0.35rem 0.65rem; font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.13em; color: #C6A664;">
-                                        AUTHENTICATION DESCRIPTION (SYNCED WITH INVOICE)
+                                        AUTHENTICATION DESCRIPTION &amp; CURATORIAL SPECIFICATIONS
                                     </th>
                                     <th style="text-align: right; padding: 0.45rem 0.35rem 0.65rem; font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.13em; color: #C6A664;">
                                         FEE PER 1 ARTWORK (<%- e($currency) %>)
@@ -543,37 +529,6 @@ var $safePdfFilename = 'ArtAlly-Contract-' + String($agr['agreement_number'] || 
                             </tfoot>
                         </table>
                     </div>
-
-                    <% var $hasBank = !empty($agr['payment_account_number']) || !empty($agr['payment_bank_name']);
-                       var $hasCrypto = !empty($agr['crypto_wallet_address']) || !empty($agr['crypto_currency']); %>
-                    <% if ($hasBank || $hasCrypto) { %>
-                    <div class="remittance-box pdf-no-break" style="background: #1C1A18; color: #F4EFE6; border: 1px solid #B8965A; border-top: none; padding: 0.9rem 1.35rem; font-size: 0.78rem;">
-                        <p style="font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700; margin: 0 0 0.4rem;">
-                            Designated Authentication Fee Remittance Channels (Aligned with Invoice <%- e($agr['invoice_number']) %>):
-                        </p>
-                        <div class="agr-grid-2" style="gap: 0.8rem;">
-                            <% if ($hasBank) { %>
-                            <div>
-                                <strong style="color: #C6A664;">🏛 Bank Wire Transfer:</strong>
-                                <div style="font-family: var(--font-mono); font-size: 0.75rem; color: #FFFFFF; margin-top: 0.12rem;">
-                                    <%- e($agr['payment_bank_name']) %> · Beneficiary: <%- e($agr['payment_account_name']) %><br>
-                                    Account / IBAN: <span style="color: #C6A664; font-weight: 700;"><%- e($agr['payment_account_number']) %></span>
-                                    <%- !empty($agr['payment_routing_details']) ? ' · SWIFT/Routing: ' + e($agr['payment_routing_details']) : '' %>
-                                </div>
-                            </div>
-                            <% } %>
-                            <% if ($hasCrypto) { %>
-                            <div>
-                                <strong style="color: #C6A664;">₿ Cryptocurrency Remittance:</strong>
-                                <div style="font-family: var(--font-mono); font-size: 0.75rem; color: #FFFFFF; margin-top: 0.12rem; word-break: break-all;">
-                                    <%- e($agr['crypto_currency']) %> (<%- e($agr['crypto_network']) %>)<br>
-                                    Wallet: <span style="color: #C6A664; font-weight: 700;"><%- e($agr['crypto_wallet_address']) %></span>
-                                </div>
-                            </div>
-                            <% } %>
-                        </div>
-                    </div>
-                    <% } %>
                 </div>
 
                 <!-- 6. AUTHORISATION TO LIST, MARKET, EXHIBIT & AUCTION (RESERVE PRICE & 72-HOUR PREVIEW) -->
@@ -712,7 +667,7 @@ var $safePdfFilename = 'ArtAlly-Contract-' + String($agr['agreement_number'] || 
                         10. ARTIST&rsquo;S DECLARATION, CONSENT &amp; EXECUTION SIGNATURES
                     </h3>
                     <p style="font-size: 0.81rem; color: #2B2927; line-height: 1.58; margin: 0 0 1.1rem;">
-                        By executing this Agreement below, the Artist confirms that they have read and understood this Agreement; have the legal right and authority to consign the identified artwork(s); authorize ArtAlly to authenticate, catalogue, market, and auction the artwork(s) on the agreed terms; agree to the mandatory per-artwork authentication fee of <strong><%- format_money_exact($perFee, $currency) %> per artwork</strong> (Grand Total of <strong><%- format_money_exact($totFee, $currency) %> <%- e($currency) %></strong> for <strong><%- $totalArtworks %> artwork<%- $totalArtworks === 1 ? '' : 's' %></strong>, aligned with Invoice <strong><%- e($agr['invoice_number']) %></strong>); and accept the <strong><%- $commRate %>% ArtAlly Commission / <%- $artistShare %>% Artist Net Share</strong> percentage agreement.
+                        By executing this Agreement below, the Artist confirms that they have read and understood this Agreement; have the legal right and authority to consign the identified artwork(s); authorize ArtAlly to authenticate, catalogue, market, and auction the artwork(s) on the agreed terms; agree to the mandatory per-artwork authentication fee of <strong><%- format_money_exact($perFee, $currency) %> per artwork</strong> (Grand Total of <strong><%- format_money_exact($totFee, $currency) %> <%- e($currency) %></strong> for <strong><%- $totalArtworks %> artwork<%- $totalArtworks === 1 ? '' : 's' %></strong>); and accept the <strong><%- $commRate %>% ArtAlly Commission / <%- $artistShare %>% Artist Net Share</strong> percentage agreement.
                     </p>
 
                     <div class="agr-sig-grid">
@@ -733,24 +688,82 @@ var $safePdfFilename = 'ArtAlly-Contract-' + String($agr['agreement_number'] || 
                                 <p style="margin: 0.12rem 0;"><strong>Position / Title:</strong> <%- e($agr['platform_signatory_title'] ?? 'Chief Curatorial Director & Head of Authentication') %></p>
                             </div>
 
-                            <!-- Pre-Signed Handwritten Signature SVG + Embossed Corporate Stamp -->
+                            <!-- Pre-Signed Handwritten Curatorial Signature + Official Swiss Notarial Seal -->
                             <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; border-top: 1px dashed #DCD5C9; border-bottom: 1px solid #161514; padding: 0.65rem 0; margin-bottom: 0.55rem;">
                                 <div>
                                     <span style="font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: #6E6A63; display: block; margin-bottom: 0.12rem;">Authorised Executive Signature:</span>
-                                    <svg width="195" height="50" viewBox="0 0 240 60" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;">
-                                        <path d="M14 44C22 25 32 14 38 14C44 14 35 42 42 42C49 42 58 24 65 24C70 24 66 39 74 39C83 39 95 16 104 16C109 16 101 44 108 44C116 44 126 26 134 28C141 30 137 41 145 40C154 39 168 18 176 15C182 13 174 43 184 42C193 41 206 25 218 23C224 22 229 27 234 24" stroke="#14284B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-                                        <path d="M26 49C74 46 148 42 226 36" stroke="#14284B" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="220 10"/>
+                                    <!-- Authentic Cursive Human Ink Signature -->
+                                    <svg width="205" height="56" viewBox="0 0 260 70" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block; margin: 2px 0;">
+                                        <!-- D with loop and stem -->
+                                        <path d="M16 48 C16 48 18 22 20 16 C21 13 24 12 28 15 C33 19 36 29 36 36 C36 43 31 49 22 49 C18 49 14 45 15 41 C16 34 25 32 30 32" stroke="#15284F" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M37 38 C39 34 42 32 45 32 C47 32 48 34 49 37 C51 33 53 31 55 31" stroke="#15284F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <circle cx="58" cy="40" r="1.5" fill="#15284F"/>
+                                        
+                                        <!-- H capital loop and cross flourish -->
+                                        <path d="M68 47 C70 41 73 22 75 14 C76 10 78 11 79 15 C81 22 83 36 84 46" stroke="#15284F" stroke-width="2.4" stroke-linecap="round"/>
+                                        <path d="M72 32 C78 30 84 28 92 26 C97 25 101 27 101 32 C101 38 97 45 95 47" stroke="#15284F" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"/>
+                                        
+                                        <!-- enri -->
+                                        <path d="M96 44 C99 40 102 36 106 36 C109 36 108 42 110 44 C112 41 115 35 119 35 C122 35 122 41 123 44 C126 39 129 36 132 36 C134 36 135 41 137 43" stroke="#15284F" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <circle cx="138" cy="31" r="1.3" fill="#15284F"/>
+                                        
+                                        <!-- V capital and sweeping curatorial flourish -->
+                                        <path d="M148 24 C149 20 152 16 156 16 C160 16 163 26 166 38 C168 46 170 48 174 42 C178 36 182 24 186 20 C189 17 193 18 194 22 C196 28 195 38 196 42" stroke="#15284F" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <!-- ance -->
+                                        <path d="M197 38 C200 34 204 34 206 37 C207 39 207 43 210 41 C212 37 215 35 218 35 C221 35 222 40 224 41 C227 37 231 35 235 36 C238 37 237 41 240 40 C244 38 248 35 252 35" stroke="#15284F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                        
+                                        <!-- Expressive bottom underline flourish with realistic curve -->
+                                        <path d="M32 58 C68 53 118 51 172 49 C204 48 238 46 256 42" stroke="#15284F" stroke-width="1.7" stroke-linecap="round"/>
+                                        <path d="M178 51 C196 55 218 58 242 62" stroke="#15284F" stroke-width="1.2" stroke-linecap="round"/>
                                     </svg>
                                     <span style="font-family: var(--font-serif); font-size: 0.88rem; font-style: italic; color: #14284B; font-weight: 600;">
                                         <%- e($agr['platform_signatory_name'] ?? 'Dr. Henri Vance') %>, Chief Curatorial Director
                                     </span>
                                 </div>
 
-                                <!-- Official Circular Embossed ArtAlly Corporate Seal -->
-                                <div style="width: 82px; height: 82px; border-radius: 50%; border: 2px double #8C6D32; background: rgba(184, 150, 90, 0.1); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 5px; flex-shrink: 0; transform: rotate(-6deg);">
-                                    <span style="font-size: 0.44rem; letter-spacing: 0.14em; text-transform: uppercase; color: #8C6D32; font-weight: 700;">ARTALLY · GENEVA</span>
-                                    <span style="font-family: var(--font-serif); font-size: 0.68rem; font-weight: 700; color: #161514; margin: 2px 0; border-top: 1px solid #8C6D32; border-bottom: 1px solid #8C6D32; padding: 1px 4px;">OFFICIAL SEAL</span>
-                                    <span style="font-size: 0.42rem; letter-spacing: 0.1em; text-transform: uppercase; color: #705522; font-weight: 700;">CURATORIAL &amp; LEGAL</span>
+                                <!-- Official Circular Swiss Corporate Notarial Seal -->
+                                <div style="width: 88px; height: 88px; flex-shrink: 0; transform: rotate(-5deg);">
+                                    <svg width="88" height="88" viewBox="0 0 140 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <defs>
+                                            <path id="sealUpperArc" d="M 22 70 A 48 48 0 1 1 118 70" />
+                                            <path id="sealLowerArc" d="M 118 70 A 48 48 0 1 1 22 70" />
+                                        </defs>
+                                        <!-- Outer beaded rim -->
+                                        <circle cx="70" cy="70" r="67" stroke="#8C6D32" stroke-width="1" stroke-dasharray="2 2.5" />
+                                        <circle cx="70" cy="70" r="64" stroke="#8C6D32" stroke-width="1.8" />
+                                        <circle cx="70" cy="70" r="49" stroke="#8C6D32" stroke-width="1" />
+                                        <circle cx="70" cy="70" r="46.5" stroke="#8C6D32" stroke-width="0.8" stroke-dasharray="1.5 2" />
+
+                                        <!-- Circular Arc Text -->
+                                        <text font-family="'Plus Jakarta Sans', sans-serif" font-size="6.2" font-weight="700" fill="#7A5E28" letter-spacing="0.16em">
+                                            <textPath href="#sealUpperArc" startOffset="50%" text-anchor="middle">
+                                                ARTALLY · GENÈVE · SUISSE
+                                            </textPath>
+                                        </text>
+                                        <text font-family="'Plus Jakarta Sans', sans-serif" font-size="5.4" font-weight="700" fill="#7A5E28" letter-spacing="0.14em">
+                                            <textPath href="#sealLowerArc" startOffset="50%" text-anchor="middle">
+                                                ★ OFFICIAL CURATORIAL SEAL ★
+                                            </textPath>
+                                        </text>
+
+                                        <!-- Inner Center Badge -->
+                                        <circle cx="70" cy="70" r="34" fill="rgba(198,166,100,0.08)" stroke="#8C6D32" stroke-width="1.2" />
+                                        <circle cx="70" cy="70" r="32" stroke="#8C6D32" stroke-width="0.6" stroke-dasharray="1 1.8" />
+
+                                        <!-- Swiss Heraldic Cross -->
+                                        <rect x="67.5" y="44" width="5" height="13" fill="#8C6D32" />
+                                        <rect x="63.5" y="48" width="13" height="5" fill="#8C6D32" />
+
+                                        <!-- Interlocking Monogram AA -->
+                                        <text x="70" y="74" text-anchor="middle" font-family="'Cormorant Garamond', Georgia, serif" font-size="18" font-weight="700" fill="#161514" letter-spacing="0.08em">AA</text>
+
+                                        <!-- Banner Ribbon -->
+                                        <rect x="38" y="79" width="64" height="11" fill="#161514" rx="2" />
+                                        <text x="70" y="87" text-anchor="middle" font-family="'Plus Jakarta Sans', sans-serif" font-size="5.2" font-weight="800" fill="#C6A664" letter-spacing="0.18em">CURATORIAL &amp; LEGAL</text>
+
+                                        <!-- Sub text -->
+                                        <text x="70" y="97" text-anchor="middle" font-family="monospace" font-size="4.2" font-weight="700" fill="#8C6D32" letter-spacing="0.1em">NOTARIZED • MCMXXVI</text>
+                                    </svg>
                                 </div>
                             </div>
 
@@ -818,7 +831,7 @@ var $safePdfFilename = 'ArtAlly-Contract-' + String($agr['agreement_number'] || 
                     <!-- Official Letterhead Archival Footer -->
                     <div style="margin-top: 1.5rem; padding-top: 0.85rem; border-top: 1px solid #DCD5C9; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.65rem; font-size: 0.7rem; color: #6E6A63;">
                         <span>ArtAlly International Fine Art Auctioneers &amp; Curatorial House · Official Letterhead Contract (<%- e($agr['agreement_number']) %>)</span>
-                        <span>Aligned with Authentication Invoice <%- e($agr['invoice_number']) %> · <%- $commRate %>% Commission / <%- $artistShare %>% Artist Share</span>
+                        <span>Official Consignment Agreement · <%- $commRate %>% Commission / <%- $artistShare %>% Artist Share</span>
                     </div>
                 </div>
 
