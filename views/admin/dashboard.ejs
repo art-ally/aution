@@ -1,86 +1,291 @@
-<div class="max-w-[1440px] mx-auto px-4 sm:px-8 py-12 space-y-14">
-    <!-- Top Executive Header -->
-    <div class="border-b border-hairline pb-8 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
-        <div>
-            <span class="bg-obsidian text-bronzeLight text-[10px] uppercase tracking-widest px-3 py-1 font-semibold">Private Executive Backend (Direct Link Access Only)</span>
-            <h1 class="font-serif text-4xl sm:text-5xl text-obsidian font-normal mt-2">ArtAlly Administration Backend</h1>
-            <p class="text-xs text-stone mt-1">Signed in as <%- e($admin?.['name']) %> (<%- e($admin?.['email']) %>) · Real Registrations, Artist Profile Approval &amp; Live Bid / Sold Controls</p>
-        </div>
-        <div class="flex flex-wrap gap-2.5 text-xs uppercase tracking-widest">
-            <a href="#invoice-generator" class="px-4 py-2.5 bg-bronze text-white hover:bg-obsidian transition font-semibold">📄 Auth Invoice Generator (<%- count($authInvoices || []) %>)</a>
-            <a href="#agreement-generator" class="px-4 py-2.5 bg-[#181615] text-bronzeLight border border-bronze hover:bg-bronze hover:text-white transition font-semibold">📜 Contract Agreement Generator (<%- count($contractAgreements || []) %>)</a>
-            <a href="#artists" class="px-4 py-2.5 bg-obsidian text-ivory hover:bg-bronze transition">Real Artists &amp; Uploads (<%- $stats?.['total_artists'] %>)</a>
-            <a href="#submissions" class="px-4 py-2.5 border border-obsidian hover:bg-obsidian hover:text-ivory transition">Submissions (<%- $stats?.['pending_submissions'] %>)</a>
-            <a href="#auctions" class="px-4 py-2.5 border border-obsidian hover:bg-obsidian hover:text-ivory transition">Live Bid &amp; Sold Control (<%- $stats?.['active_auctions'] %>)</a>
-            <a href="#payouts" class="px-4 py-2.5 border border-obsidian hover:bg-obsidian hover:text-ivory transition">Payouts</a>
-            <a href="#settings" class="px-4 py-2.5 border border-obsidian hover:bg-obsidian hover:text-ivory transition">Settings &amp; Users</a>
-            <a href="#admin-profile" class="px-4 py-2.5 border border-red-800 text-red-800 hover:bg-red-800 hover:text-white transition">Admin Profile &amp; Delete</a>
-            <form action="/admin/database/clear-all" method="POST" class="inline" onsubmit="return confirm('DELETE ALL BACKEND & DEMO DATA?\n\nThis will permanently wipe all demo details, artworks, submissions, artists, auctions, bids, orders, payouts, and invoices from both the backend and Supabase PostgreSQL so you can start completely fresh. Only your Administrator login will be kept. Proceed?');">
-                <%- csrf_field() %>
-                <button type="submit" class="px-4 py-2.5 bg-red-800 text-white hover:bg-obsidian transition font-semibold">
-                    🗑 Delete All Backend Data
-                </button>
-            </form>
-        </div>
-    </div>
+<%
+var $admUnpaid = Object.values($authInvoices || []).filter(function (i) { return i && (i.status || 'unpaid') !== 'paid'; }).length;
+var $admAwaitSign = Object.values($contractAgreements || []).filter(function (a) { return a && !a.artist_signed; }).length;
+var $admInvCount = count($authInvoices || []);
+var $admAgrCount = count($contractAgreements || []);
+var $admInitial = String(($admin && $admin['name']) ? $admin['name'] : 'A').trim().charAt(0).toUpperCase();
+%>
+<style>
+/* ===== ArtAlly Admin Console — layout & premium UI (presentation only) ===== */
+.adm-shell { display: flex; min-height: 100vh; background: #F4F1EB; color: #161514; font-family: 'Plus Jakarta Sans', sans-serif; }
+.adm-side { width: 272px; flex-shrink: 0; background: linear-gradient(180deg, #14110F 0%, #1B1714 100%); color: #CFC8BC; position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; border-right: 1px solid rgba(198,166,100,.18); z-index: 60; }
+.adm-side::-webkit-scrollbar { width: 5px; }
+.adm-side::-webkit-scrollbar-thumb { background: rgba(198,166,100,.3); }
+.adm-brand { padding: 1.6rem 1.4rem 1.1rem; border-bottom: 1px solid rgba(255,255,255,.07); }
+.adm-brand-mark { display: flex; align-items: center; gap: .8rem; }
+.adm-brand-logo { width: 40px; height: 40px; border: 1.5px solid #C6A664; display: flex; align-items: center; justify-content: center; font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 700; font-size: 1.25rem; color: #C6A664; letter-spacing: .05em; background: rgba(198,166,100,.08); border-radius: 10px; }
+.adm-brand-name { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.45rem; letter-spacing: .2em; color: #FBF9F5; font-weight: 600; line-height: 1; }
+.adm-brand-sub { font-size: .58rem; letter-spacing: .26em; text-transform: uppercase; color: #C6A664; margin-top: .3rem; }
+.adm-search { margin: 1rem 1.1rem .4rem; position: relative; }
+.adm-search input { width: 100%; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); color: #FBF9F5; padding: .6rem .8rem .6rem 2rem; font-size: .75rem; border-radius: 10px; outline: none; transition: border-color .2s, background .2s; }
+.adm-search input::placeholder { color: #8F887C; }
+.adm-search input:focus { border-color: #C6A664; background: rgba(255,255,255,.09); }
+.adm-search span { position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); font-size: .75rem; color: #8F887C; }
+.adm-nav { padding: .6rem .8rem 1rem; flex: 1; }
+.adm-group { margin-bottom: .25rem; }
+.adm-group > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: .7rem .6rem; font-size: .62rem; text-transform: uppercase; letter-spacing: .22em; color: #9A9285; font-weight: 700; user-select: none; border-radius: 8px; transition: color .2s; }
+.adm-group > summary::-webkit-details-marker { display: none; }
+.adm-group > summary:hover { color: #C6A664; }
+.adm-group > summary::after { content: ''; width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .2s; }
+.adm-group[open] > summary::after { transform: rotate(45deg); }
+.adm-link { display: flex; align-items: center; gap: .7rem; padding: .62rem .75rem; margin: 1px 0; font-size: .8rem; color: #D8D2C6; border-radius: 10px; text-decoration: none; transition: background .18s, color .18s, transform .18s; border: 1px solid transparent; }
+.adm-link:hover { background: rgba(255,255,255,.07); color: #FFFFFF; }
+.adm-link.is-active { background: linear-gradient(90deg, rgba(198,166,100,.22), rgba(198,166,100,.06)); color: #FFFFFF; border-color: rgba(198,166,100,.35); font-weight: 600; }
+.adm-link .ic { width: 22px; text-align: center; font-size: .95rem; flex-shrink: 0; }
+.adm-link .lbl { flex: 1; }
+.adm-badge { font-size: .62rem; font-weight: 700; padding: .12rem .5rem; border-radius: 99px; background: rgba(255,255,255,.1); color: #E9E3D6; min-width: 1.4rem; text-align: center; }
+.adm-badge.warn { background: #C6A664; color: #14110F; }
+.adm-side-foot { padding: 1rem 1.1rem 1.4rem; border-top: 1px solid rgba(255,255,255,.07); }
+.adm-user { display: flex; align-items: center; gap: .7rem; margin-bottom: .8rem; }
+.adm-avatar { width: 38px; height: 38px; border-radius: 50%; background: #C6A664; color: #14110F; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: .95rem; flex-shrink: 0; }
+.adm-user-n { font-size: .8rem; color: #FBF9F5; font-weight: 600; line-height: 1.2; }
+.adm-user-e { font-size: .65rem; color: #9A9285; word-break: break-all; }
+.adm-foot-btns { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.adm-foot-btns a, .adm-foot-btns button { text-align: center; font-size: .66rem; letter-spacing: .1em; text-transform: uppercase; padding: .6rem .4rem; border-radius: 9px; border: 1px solid rgba(255,255,255,.18); color: #E9E3D6; background: transparent; cursor: pointer; transition: all .2s; text-decoration: none; width: 100%; }
+.adm-foot-btns a:hover, .adm-foot-btns button:hover { background: #C6A664; color: #14110F; border-color: #C6A664; }
 
-    <!-- Supabase PostgreSQL Connection & One-Click Fresh Reset Banner -->
-    <div class="bg-[#181615] text-ivory border border-bronze p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div class="space-y-1">
-            <div class="flex flex-wrap items-center gap-2.5">
-                <span class="bg-[#1A2E22] border border-bronze text-bronzeLight text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
-                    ● Connected: Supabase PostgreSQL (db.xrncirrbxzzouwbluyso.supabase.co:5432)
-                </span>
-                <span class="text-[11px] text-stone font-mono">Zero Demo Data Mode Active</span>
+.adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.adm-top { position: sticky; top: 0; z-index: 40; background: rgba(244,241,235,.92); backdrop-filter: blur(10px); border-bottom: 1px solid #E4DDD0; padding: .9rem 2rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.adm-top-l { display: flex; align-items: center; gap: .9rem; min-width: 0; }
+.adm-burger { display: none; width: 40px; height: 40px; border: 1px solid #D9D1C2; background: #fff; border-radius: 10px; cursor: pointer; font-size: 1.1rem; }
+.adm-crumb { font-size: .62rem; letter-spacing: .2em; text-transform: uppercase; color: #8C6D46; font-weight: 700; }
+.adm-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.7rem; line-height: 1.1; color: #161514; font-weight: 600; }
+.adm-top-r { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.adm-btn { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; font-weight: 600; padding: .6rem 1rem; border-radius: 10px; border: 1px solid #D9D1C2; background: #fff; color: #161514; cursor: pointer; transition: all .2s; text-decoration: none; display: inline-flex; align-items: center; gap: .4rem; }
+.adm-btn:hover { background: #161514; color: #FBF9F5; border-color: #161514; }
+.adm-btn.gold { background: #8C6D46; color: #fff; border-color: #8C6D46; }
+.adm-btn.gold:hover { background: #161514; border-color: #161514; }
+.adm-content { padding: 1.8rem 2rem 3rem; max-width: 1500px; width: 100%; margin: 0 auto; }
+
+.adm-panel { display: none; }
+.adm-panel.is-active { display: block; animation: admFade .28s ease; }
+@keyframes admFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Overview */
+.adm-hero { background: linear-gradient(120deg, #14110F, #2A221B 70%); color: #FBF9F5; border-radius: 18px; padding: 1.8rem 2rem; display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; flex-wrap: wrap; border: 1px solid rgba(198,166,100,.35); box-shadow: 0 18px 40px -24px rgba(20,17,15,.6); }
+.adm-hero small { font-size: .62rem; letter-spacing: .24em; text-transform: uppercase; color: #C6A664; font-weight: 700; }
+.adm-hero h2 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 2rem; margin: .3rem 0 .2rem; font-weight: 600; }
+.adm-hero p { font-size: .78rem; color: #CFC8BC; max-width: 38rem; }
+.adm-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin: 1.4rem 0; }
+.adm-kpi { background: #fff; border: 1px solid #E7E1D6; border-radius: 16px; padding: 1.15rem 1.25rem; box-shadow: 0 1px 2px rgba(20,17,15,.04), 0 10px 26px -18px rgba(20,17,15,.2); position: relative; overflow: hidden; transition: transform .2s, box-shadow .2s; }
+.adm-kpi:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -16px rgba(20,17,15,.3); }
+.adm-kpi::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #C6A664; }
+.adm-kpi .k { font-size: .62rem; text-transform: uppercase; letter-spacing: .18em; color: #7A746A; font-weight: 600; }
+.adm-kpi .v { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 2.15rem; font-weight: 600; margin-top: .3rem; color: #161514; line-height: 1.05; }
+.adm-kpi .v.gold { color: #8C6D46; }
+.adm-kpi .v.sm { font-size: 1.65rem; }
+.adm-h3 { font-size: .68rem; text-transform: uppercase; letter-spacing: .22em; color: #8C6D46; font-weight: 700; margin: 1.8rem 0 .8rem; }
+.adm-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; }
+.adm-tile { background: #fff; border: 1px solid #E7E1D6; border-radius: 16px; padding: 1.2rem 1.3rem; display: flex; gap: 1rem; align-items: flex-start; text-decoration: none; color: inherit; transition: all .2s; position: relative; }
+.adm-tile:hover { border-color: #C6A664; transform: translateY(-2px); box-shadow: 0 16px 32px -20px rgba(20,17,15,.35); }
+.adm-tile .ti { width: 44px; height: 44px; border-radius: 12px; background: #F4EEE2; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+.adm-tile .tt { font-weight: 700; font-size: .88rem; color: #161514; }
+.adm-tile .td { font-size: .72rem; color: #7A746A; margin-top: .2rem; line-height: 1.45; }
+.adm-tile .tb { position: absolute; top: .9rem; right: 1rem; font-size: .65rem; font-weight: 700; background: #161514; color: #C6A664; border-radius: 99px; padding: .15rem .55rem; }
+.adm-tile .tb.warn { background: #C6A664; color: #14110F; }
+.adm-data { background: #fff; border: 1px solid #E7E1D6; border-radius: 16px; padding: 1.2rem 1.4rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; align-items: center; border-left: 4px solid #991B1B; }
+.adm-data .dbadge { background: #1A2E22; color: #E9E3D6; font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; padding: .25rem .65rem; border-radius: 99px; font-weight: 700; }
+
+/* Re-skin existing section cards (presentation only) */
+.adm-content section.bg-white, .adm-content #settings > div, .adm-content #users { border-radius: 18px; border: 1px solid #E7E1D6; box-shadow: 0 1px 2px rgba(20,17,15,.04), 0 14px 34px -22px rgba(20,17,15,.22); }
+.adm-content section.border-2 { border-width: 1px; }
+.adm-content section + section, .adm-content .adm-panel > * + * { margin-top: 1.4rem; }
+.adm-content section h2.text-3xl { font-size: 1.7rem; line-height: 1.15; }
+.adm-content table thead tr { background: #F6F2EA; }
+.adm-content .overflow-x-auto { border-radius: 12px; }
+.adm-content input:not([type=checkbox]):not([type=radio]):not([type=hidden]), .adm-content select, .adm-content textarea { border-radius: 8px; }
+.adm-content button, .adm-content a.inline-block { border-radius: 8px; }
+
+/* Collapsible accordions (generators & ledgers) */
+.adm-acc { border: 1px solid #E7E1D6; border-radius: 16px; background: #FCFBF8; overflow: hidden; }
+.adm-acc + .adm-acc { margin-top: 1.2rem; }
+.adm-acc-sum { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 1rem; padding: 1rem 1.3rem; background: linear-gradient(90deg, #F6F1E6, #FBF9F5); user-select: none; transition: background .2s; }
+.adm-acc-sum::-webkit-details-marker { display: none; }
+.adm-acc-sum:hover { background: #F2EBDC; }
+.adm-acc-ic { width: 34px; height: 34px; border-radius: 10px; background: #161514; color: #C6A664; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+.adm-acc-t { flex: 1; font-weight: 700; font-size: .92rem; color: #161514; }
+.adm-acc-t small { display: block; font-weight: 400; font-size: .72rem; color: #7A746A; margin-top: .1rem; }
+.adm-acc-chev { width: 9px; height: 9px; border-right: 2px solid #8C6D46; border-bottom: 2px solid #8C6D46; transform: rotate(-45deg); transition: transform .2s; margin-right: .3rem; }
+.adm-acc[open] > .adm-acc-sum .adm-acc-chev { transform: rotate(45deg); }
+.adm-acc-body { padding: 1.5rem; border-top: 1px solid #E7E1D6; background: #fff; }
+
+/* Fold-able cards (artist cards, wallet panels, platform cards) */
+.adm-sub > :first-child { cursor: pointer; position: relative; padding-right: 2.6rem; }
+.adm-sub > :first-child::after { content: ''; position: absolute; right: .9rem; top: 50%; width: 9px; height: 9px; border-right: 2px solid #8C6D46; border-bottom: 2px solid #8C6D46; transform: translateY(-70%) rotate(45deg); transition: transform .2s; pointer-events: none; }
+.adm-sub.is-folded > :first-child::after { transform: translateY(-50%) rotate(-45deg); }
+.adm-sub.is-folded > :not(:first-child) { display: none !important; }
+.adm-sub.is-folded { padding-bottom: 1.5rem; }
+
+.adm-overlay { display: none; }
+@media (max-width: 1023px) {
+  .adm-burger { display: inline-flex; align-items: center; justify-content: center; }
+  .adm-side { position: fixed; left: 0; top: 0; transform: translateX(-102%); transition: transform .28s ease; width: 290px; box-shadow: 20px 0 50px -20px rgba(0,0,0,.6); }
+  .adm-side.is-open { transform: none; }
+  .adm-overlay.is-open { display: block; position: fixed; inset: 0; background: rgba(20,17,15,.55); z-index: 55; }
+  .adm-top { padding: .8rem 1rem; }
+  .adm-content { padding: 1.2rem 1rem 2.5rem; }
+  .adm-title { font-size: 1.35rem; }
+}
+@media (max-width: 640px) {
+  .adm-content section.p-8 { padding: 1.1rem; }
+  .adm-hero { padding: 1.3rem; }
+}
+</style>
+<noscript><style>.adm-panel { display: block !important; }</style></noscript>
+
+<div class="adm-shell">
+    <!-- ================= SIDEBAR NAVIGATION ================= -->
+    <aside class="adm-side" id="admSide" aria-label="Admin navigation">
+        <div class="adm-brand">
+            <div class="adm-brand-mark">
+                <div class="adm-brand-logo">AA</div>
+                <div>
+                    <div class="adm-brand-name">ARTALLY</div>
+                    <div class="adm-brand-sub">Executive Console</div>
+                </div>
             </div>
-            <p class="text-xs text-ivory/80">
-                Use the <strong>Delete All Backend Data (Fresh Start)</strong> button at any time to clear all backend records, test uploads, and any demo details across the platform and Supabase database.
-            </p>
         </div>
-        <form action="/admin/database/clear-all" method="POST" class="self-start lg:self-center whitespace-nowrap" onsubmit="return confirm('DELETE ALL BACKEND & DEMO DATA?\n\nThis will permanently wipe all demo details, artworks, submissions, artists, auctions, bids, orders, payouts, and invoices from both the backend and Supabase PostgreSQL so you can start completely fresh. Only your Administrator login will be kept. Proceed?');">
-            <%- csrf_field() %>
-            <button type="submit" class="px-5 py-3 bg-red-800 text-white text-xs uppercase tracking-widest font-semibold hover:bg-red-700 transition border border-red-500">
-                🗑 Delete All Backend &amp; Demo Data (Fresh Start)
-            </button>
-        </form>
-    </div>
 
-    <!-- Executive KPI Grid (Real Registrations Only) -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
-        <div class="bg-white border border-hairline p-5">
-            <p class="text-[10px] uppercase tracking-widest text-stone">Real Accounts</p>
-            <p class="font-serif text-3xl font-semibold text-obsidian mt-1"><%- $stats?.['total_users'] %></p>
+        <div class="adm-search">
+            <span>🔍</span>
+            <input type="text" id="admNavFilter" placeholder="Jump to section…" autocomplete="off">
         </div>
-        <div class="bg-white border border-hairline p-5">
-            <p class="text-[10px] uppercase tracking-widest text-stone">Registered Artists</p>
-            <p class="font-serif text-3xl font-semibold text-obsidian mt-1"><%- $stats?.['total_artists'] %></p>
-        </div>
-        <div class="bg-white border border-hairline p-5">
-            <p class="text-[10px] uppercase tracking-widest text-stone">Pending Uploads</p>
-            <p class="font-serif text-3xl font-semibold text-bronze mt-1"><%- $stats?.['pending_submissions'] %></p>
-        </div>
-        <div class="bg-white border border-hairline p-5">
-            <p class="text-[10px] uppercase tracking-widest text-stone">Live Auctions</p>
-            <p class="font-serif text-3xl font-semibold text-obsidian mt-1"><%- $stats?.['active_auctions'] %></p>
-        </div>
-        <div class="bg-white border border-hairline p-5">
-            <p class="text-[10px] uppercase tracking-widest text-stone">Real Bids</p>
-            <p class="font-serif text-3xl font-semibold text-obsidian mt-1"><%- $stats?.['total_bids'] %></p>
-        </div>
-        <div class="bg-white border border-hairline p-5">
-            <p class="text-[10px] uppercase tracking-widest text-stone">Hammer GMV</p>
-            <p class="font-serif text-2xl font-semibold text-obsidian mt-1"><%- format_money($stats?.['gross_merchandise_value']) %></p>
-        </div>
-        <div class="bg-white border border-hairline p-5">
-            <p class="text-[10px] uppercase tracking-widest text-stone">House Revenue</p>
-            <p class="font-serif text-2xl font-semibold text-bronze mt-1"><%- format_money($stats?.['platform_revenue']) %></p>
-        </div>
-        <div class="bg-white border border-hairline p-5">
-            <p class="text-[10px] uppercase tracking-widest text-stone">Pending Payouts</p>
-            <p class="font-serif text-2xl font-semibold text-obsidian mt-1"><%- format_money($stats?.['pending_payout_total']) %></p>
-        </div>
-    </div>
 
+        <nav class="adm-nav" id="admNav">
+            <details class="adm-group" open>
+                <summary>Dashboard</summary>
+                <a href="#adm-overview" class="adm-link" data-panel-key="overview"><span class="ic">🏠</span><span class="lbl">Overview</span></a>
+            </details>
+
+            <details class="adm-group" open>
+                <summary>Documents</summary>
+                <a href="#invoice-generator" class="adm-link" data-panel-key="invoices"><span class="ic">📄</span><span class="lbl">Authentication Invoices</span><span class="adm-badge"><%- $admInvCount %></span></a>
+                <a href="#agreement-generator" class="adm-link" data-panel-key="agreements"><span class="ic">📜</span><span class="lbl">Contract Agreements</span><span class="adm-badge"><%- $admAgrCount %></span></a>
+            </details>
+
+            <details class="adm-group" open>
+                <summary>Artists &amp; Artworks</summary>
+                <a href="#artists" class="adm-link" data-panel-key="artists"><span class="ic">🎨</span><span class="lbl">Registered Artists</span><span class="adm-badge"><%- $stats?.['total_artists'] %></span></a>
+                <a href="#submissions" class="adm-link" data-panel-key="submissions"><span class="ic">🗂</span><span class="lbl">Review Queue</span><span class="adm-badge <%- Number($stats?.['pending_submissions'] || 0) > 0 ? 'warn' : '' %>"><%- $stats?.['pending_submissions'] %></span></a>
+            </details>
+
+            <details class="adm-group" open>
+                <summary>Auctions &amp; Sales</summary>
+                <a href="#auctions" class="adm-link" data-panel-key="auctions"><span class="ic">🔨</span><span class="lbl">Live Bid &amp; Sold Control</span><span class="adm-badge"><%- $stats?.['active_auctions'] %></span></a>
+            </details>
+
+            <details class="adm-group" open>
+                <summary>Finance</summary>
+                <a href="#payouts" class="adm-link" data-panel-key="payouts"><span class="ic">💰</span><span class="lbl">Orders &amp; Payouts</span></a>
+                <a href="#withdrawals" class="adm-link" data-panel-key="payouts"><span class="ic">🏦</span><span class="lbl">Withdrawal Requests</span></a>
+            </details>
+
+            <details class="adm-group" open>
+                <summary>Platform</summary>
+                <a href="#settings" class="adm-link" data-panel-key="platform"><span class="ic">⚙️</span><span class="lbl">Settings &amp; Commission</span></a>
+                <a href="#categories" class="adm-link" data-panel-key="platform"><span class="ic">🏷</span><span class="lbl">Categories</span></a>
+                <a href="#users" class="adm-link" data-panel-key="platform"><span class="ic">👥</span><span class="lbl">User Directory</span><span class="adm-badge"><%- $stats?.['total_users'] %></span></a>
+            </details>
+
+            <details class="adm-group" open>
+                <summary>Security</summary>
+                <a href="#admin-profile" class="adm-link" data-panel-key="admin-profile"><span class="ic">🛡</span><span class="lbl">Admin Profile</span></a>
+                <a href="#audit" class="adm-link" data-panel-key="audit"><span class="ic">📋</span><span class="lbl">Audit Log</span></a>
+            </details>
+        </nav>
+
+        <div class="adm-side-foot">
+            <div class="adm-user">
+                <div class="adm-avatar"><%- e($admInitial) %></div>
+                <div>
+                    <div class="adm-user-n"><%- e($admin?.['name']) %></div>
+                    <div class="adm-user-e"><%- e($admin?.['email']) %></div>
+                </div>
+            </div>
+            <div class="adm-foot-btns">
+                <a href="/" target="_blank">View Site</a>
+                <form action="/logout" method="POST" style="margin:0;">
+                    <%- csrf_field() %>
+                    <button type="submit">Sign Out</button>
+                </form>
+            </div>
+        </div>
+    </aside>
+    <div class="adm-overlay" id="admOverlay"></div>
+
+    <!-- ================= MAIN AREA ================= -->
+    <div class="adm-main">
+        <header class="adm-top">
+            <div class="adm-top-l">
+                <button type="button" class="adm-burger" id="admBurger" aria-label="Open menu">☰</button>
+                <div>
+                    <div class="adm-crumb" id="admCrumb">Dashboard</div>
+                    <div class="adm-title" id="admTitle">Overview</div>
+                </div>
+            </div>
+            <div class="adm-top-r">
+                <button type="button" class="adm-btn" id="admToggleAll">Collapse all</button>
+                <a href="#invoice-generator" class="adm-btn gold">＋ New Invoice</a>
+                <a href="#agreement-generator" class="adm-btn">＋ New Contract</a>
+            </div>
+        </header>
+
+        <div class="adm-content">
+
+            <!-- ================= OVERVIEW PANEL ================= -->
+            <div class="adm-panel" id="adm-overview" data-panel="overview" data-title="Overview" data-crumb="Dashboard">
+                <div class="adm-hero">
+                    <div>
+                        <small>Private Executive Backend</small>
+                        <h2>Welcome back, <%- e(explode(' ', String($admin?.['name'] || 'Administrator'))[0]) %></h2>
+                        <p>Signed in as <%- e($admin?.['email']) %>. Manage artists, authentication invoices, contracts, live auctions and payouts from one organised console.</p>
+                    </div>
+                    <span class="adm-data" style="border:0;background:transparent;padding:0;"><span class="dbadge" style="background:rgba(198,166,100,.18);color:#C6A664;border:1px solid rgba(198,166,100,.4);">● Supabase PostgreSQL Connected</span></span>
+                </div>
+
+                <div class="adm-kpis">
+                    <div class="adm-kpi"><div class="k">Real Accounts</div><div class="v"><%- $stats?.['total_users'] %></div></div>
+                    <div class="adm-kpi"><div class="k">Registered Artists</div><div class="v"><%- $stats?.['total_artists'] %></div></div>
+                    <div class="adm-kpi"><div class="k">Pending Uploads</div><div class="v gold"><%- $stats?.['pending_submissions'] %></div></div>
+                    <div class="adm-kpi"><div class="k">Live Auctions</div><div class="v"><%- $stats?.['active_auctions'] %></div></div>
+                    <div class="adm-kpi"><div class="k">Real Bids</div><div class="v"><%- $stats?.['total_bids'] %></div></div>
+                    <div class="adm-kpi"><div class="k">Hammer GMV</div><div class="v sm"><%- format_money($stats?.['gross_merchandise_value']) %></div></div>
+                    <div class="adm-kpi"><div class="k">House Revenue</div><div class="v sm gold"><%- format_money($stats?.['platform_revenue']) %></div></div>
+                    <div class="adm-kpi"><div class="k">Pending Payouts</div><div class="v sm"><%- format_money($stats?.['pending_payout_total']) %></div></div>
+                </div>
+
+                <div class="adm-h3">Quick Access</div>
+                <div class="adm-tiles">
+                    <a href="#invoice-generator" class="adm-tile"><div class="ti">📄</div><div><div class="tt">Authentication Invoices</div><div class="td">Generate, edit and track per-artwork authentication invoices.</div></div><span class="tb <%- $admUnpaid > 0 ? 'warn' : '' %>"><%- $admUnpaid %> unpaid</span></a>
+                    <a href="#agreement-generator" class="adm-tile"><div class="ti">📜</div><div><div class="tt">Contract Agreements</div><div class="td">Pre-signed ArtAlly contracts aligned with invoices.</div></div><span class="tb <%- $admAwaitSign > 0 ? 'warn' : '' %>"><%- $admAwaitSign %> awaiting artist</span></a>
+                    <a href="#artists" class="adm-tile"><div class="ti">🎨</div><div><div class="tt">Registered Artists</div><div class="td">Profile approval, wallets, uploads and price controls.</div></div><span class="tb"><%- $stats?.['total_artists'] %></span></a>
+                    <a href="#submissions" class="adm-tile"><div class="ti">🗂</div><div><div class="tt">Review Queue</div><div class="td">Approve artwork submissions and set agreed prices.</div></div><span class="tb <%- Number($stats?.['pending_submissions'] || 0) > 0 ? 'warn' : '' %>"><%- $stats?.['pending_submissions'] %> pending</span></a>
+                    <a href="#auctions" class="adm-tile"><div class="ti">🔨</div><div><div class="tt">Live Bid &amp; Sold Control</div><div class="td">Raise live bids and mark lots as sold.</div></div><span class="tb"><%- $stats?.['active_auctions'] %> live</span></a>
+                    <a href="#payouts" class="adm-tile"><div class="ti">💰</div><div><div class="tt">Orders &amp; Payouts</div><div class="td">Commissions, wallet access and withdrawal governance.</div></div></a>
+                    <a href="#settings" class="adm-tile"><div class="ti">⚙️</div><div><div class="tt">Platform Settings</div><div class="td">Commission policy, categories and user directory.</div></div></a>
+                    <a href="#audit" class="adm-tile"><div class="ti">📋</div><div><div class="tt">Audit Log</div><div class="td">Immutable security and curatorial governance trail.</div></div></a>
+                </div>
+
+                <div class="adm-h3">Data Control</div>
+                <div class="adm-data">
+                    <div>
+                        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-bottom:.35rem;">
+                            <span class="dbadge">● Connected: Supabase PostgreSQL (db.xrncirrbxzzouwbluyso.supabase.co:5432)</span>
+                            <span style="font-size:.68rem;color:#7A746A;font-family:monospace;">Zero Demo Data Mode Active</span>
+                        </div>
+                        <p style="font-size:.76rem;color:#57524C;max-width:46rem;">Use <strong>Delete All Backend Data (Fresh Start)</strong> at any time to clear all backend records, test uploads and demo details across the platform and Supabase database. Only your Administrator login is kept.</p>
+                    </div>
+                    <form action="/admin/database/clear-all" method="POST" onsubmit="return confirm('DELETE ALL BACKEND &amp; DEMO DATA?\n\nThis will permanently wipe all demo details, artworks, submissions, artists, auctions, bids, orders, payouts, and invoices from both the backend and Supabase PostgreSQL so you can start completely fresh. Only your Administrator login will be kept. Proceed?');">
+                        <%- csrf_field() %>
+                        <button type="submit" style="background:#991B1B;color:#fff;border:1px solid #7F1D1D;padding:.8rem 1.3rem;font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;font-weight:700;border-radius:10px;cursor:pointer;">
+                            🗑 Delete All Backend &amp; Demo Data (Fresh Start)
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+
+<div class="adm-panel" data-panel="invoices" data-title="Authentication Invoices" data-crumb="Documents">
     <!-- SECTION 0: Curatorial & AI-Powered Authentication Payment Invoice Generator -->
     <section id="invoice-generator" class="bg-white border-2 border-bronze p-8 space-y-8 shadow-sm">
         <div class="border-b border-hairline pb-5 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
@@ -93,6 +298,7 @@
             </p>
         </div>
 
+<details class="adm-acc" open><summary class="adm-acc-sum"><span class="adm-acc-ic">+</span><span class="adm-acc-t">Create New Authentication Invoice<small>Issue a per-artwork authentication invoice to a registered artist</small></span><span class="adm-acc-chev"></span></summary><div class="adm-acc-body">
         <form action="/admin/invoices/generate" method="POST" class="space-y-8">
             <%- csrf_field() %>
 
@@ -453,7 +659,9 @@
                 </button>
             </div>
         </form>
+</div></details>
 
+<details class="adm-acc" open><summary class="adm-acc-sum"><span class="adm-acc-ic">☰</span><span class="adm-acc-t">Issued Authentication Invoices<small>Review, edit, mark paid, download PDF or open the aligned contract</small></span><span class="adm-acc-chev"></span></summary><div class="adm-acc-body">
         <!-- Generated Authentication Invoices Ledger -->
         <div class="border-t border-hairline pt-6 space-y-4">
             <div class="flex items-center justify-between">
@@ -573,8 +781,11 @@
                 </div>
             <% } %>
         </div>
+</div></details>
     </section>
+</div>
 
+<div class="adm-panel" data-panel="agreements" data-title="Contract Agreements" data-crumb="Documents">
     <!-- SECTION 0B: Artist Consignment, Authentication & Digital Auction Contract Agreement Generator -->
     <% var $defaultArtistObj = (Array.isArray($allArtistsList) && $allArtistsList.length > 0) ? $allArtistsList[0] : null;
        var $defaultArtistUser = $defaultArtistObj?.['user'] ?? {};
@@ -602,6 +813,7 @@
             </p>
         </div>
 
+<details class="adm-acc" open><summary class="adm-acc-sum"><span class="adm-acc-ic">+</span><span class="adm-acc-t">Create New Contract Agreement<small>Auto-fills the registered artist and syncs with the authentication invoice</small></span><span class="adm-acc-chev"></span></summary><div class="adm-acc-body">
         <form action="/admin/agreements/generate" method="POST" class="space-y-8">
             <%- csrf_field() %>
 
@@ -848,7 +1060,9 @@
                 </button>
             </div>
         </form>
+</div></details>
 
+<details class="adm-acc" open><summary class="adm-acc-sum"><span class="adm-acc-ic">☰</span><span class="adm-acc-t">Issued Contract Agreements<small>Open, edit, countersign status, download PDF or delete</small></span><span class="adm-acc-chev"></span></summary><div class="adm-acc-body">
         <!-- Issued Contract Agreements Ledger -->
         <div class="border-t border-hairline pt-6 space-y-4">
             <h3 class="font-serif text-2xl text-obsidian">Issued Artist Consignment &amp; Authentication Contract Agreements (<%- count($contractAgreements || []) %>)</h3>
@@ -944,7 +1158,9 @@
                 </div>
             <% } %>
         </div>
+</div></details>
     </section>
+</div>
 
     <script>
     function toggleInvoicePaymentMethod(mode) {
@@ -1248,6 +1464,7 @@
     });
     </script>
 
+<div class="adm-panel" data-panel="artists" data-title="Registered Artists" data-crumb="Artists &amp; Artworks">
     <!-- SECTION 1: Real Registered Artists, Public Profile Approval Gate & All Uploaded Artworks -->
     <section id="artists" class="bg-white border border-hairline p-8 space-y-8">
         <div class="border-b border-hairline pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -1274,7 +1491,7 @@
                     <% var $u = $ap?.['user'] ?? [];
                     var $artistWorks = $ap?.['artworks'] ?? [];
                     var $isProfileApproved = ($ap?.['approval_status'] ?? 'pending') === 'approved'; %>
-                    <div class="border border-hairline bg-ivory p-6 sm:p-8 space-y-6">
+                    <div class="adm-sub border border-hairline bg-ivory p-6 sm:p-8 space-y-6" data-fold-default="closed">
                         <!-- Artist Registration & Profile Approval Header -->
                         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b border-hairline pb-6">
                             <div class="flex flex-col sm:flex-row sm:items-center gap-5">
@@ -1603,7 +1820,9 @@
             </div>
         <% } %>
     </section>
+</div>
 
+<div class="adm-panel" data-panel="auctions" data-title="Live Bid &amp; Sold Control" data-crumb="Auctions &amp; Sales">
     <!-- SECTION 2: Live Bid Price Increaser & Instant Status Changer to SOLD -->
     <section id="auctions" class="bg-white border border-hairline p-8 space-y-6">
         <div class="border-b border-hairline pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -1684,7 +1903,9 @@
             </div>
         <% } %>
     </section>
+</div>
 
+<div class="adm-panel" data-panel="submissions" data-title="Review Queue" data-crumb="Artists &amp; Artworks">
     <!-- SECTION 3: Curatorial Artwork Review & Approval Queue (Real Submissions Only) -->
     <section id="submissions" class="bg-white border border-hairline p-8 space-y-6">
         <div class="border-b border-hairline pb-4 flex items-center justify-between">
@@ -1795,7 +2016,9 @@
             </div>
         <% } %>
     </section>
+</div>
 
+<div class="adm-panel" data-panel="payouts" data-title="Orders &amp; Payouts" data-crumb="Finance">
     <!-- SECTION 4: Orders, Commissions, Artist Wallet Disbursement & Withdrawal Governance -->
     <section id="payouts" class="bg-white border border-hairline p-8 space-y-8">
         <div class="border-b border-hairline pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -1810,7 +2033,7 @@
 
         <!-- Direct Artist Wallet & Withdraw Button Lock / Unlock Control Panel -->
         <% if (!empty($artistProfiles)) { %>
-            <div class="bg-[#181615] text-ivory border border-bronze p-5 space-y-4">
+            <div class="adm-sub bg-[#181615] text-ivory border border-bronze p-5 space-y-4">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/15 pb-3">
                     <div>
                         <span class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">Backend Artist Wallet Access Control</span>
@@ -1942,7 +2165,7 @@
         <% } %>
 
         <!-- Submitted Artist Withdrawal Requests (Crypto & Bank Wire Details from Artist) -->
-        <div id="withdrawals" class="border-t border-hairline pt-6 space-y-4">
+        <div id="withdrawals" class="adm-sub border-t border-hairline pt-6 space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                     <p class="text-[10px] uppercase tracking-widest text-bronze font-semibold">Incoming Artist Remittance Instructions</p>
@@ -2066,11 +2289,13 @@
             <% } %>
         </div>
     </section>
+</div>
 
+<div class="adm-panel" data-panel="platform" data-title="Platform Settings" data-crumb="Platform">
     <!-- SECTION 5: Platform Settings, Categories & Real User Management -->
     <div id="settings" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <!-- Platform Settings -->
-        <div class="lg:col-span-6 bg-white border border-hairline p-8 space-y-5">
+        <div class="adm-sub lg:col-span-6 bg-white border border-hairline p-8 space-y-5">
             <h2 class="font-serif text-2xl text-obsidian border-b border-hairline pb-3">Institutional Settings &amp; Commission Policy</h2>
             <form action="/admin/settings" method="POST" class="space-y-4 text-xs">
                 <%- csrf_field() %>
@@ -2115,7 +2340,7 @@
         </div>
 
         <!-- Real Registered User Directory -->
-        <div id="users" class="lg:col-span-6 bg-white border border-hairline p-8 space-y-5">
+        <div id="users" class="adm-sub lg:col-span-6 bg-white border border-hairline p-8 space-y-5">
             <h2 class="font-serif text-2xl text-obsidian border-b border-hairline pb-3">Real Registered Accounts &amp; Access Control</h2>
             <div class="divide-y divide-hairline max-h-96 overflow-y-auto text-xs">
                 <% for (const $u of Object.values($users || [])) { %>
@@ -2150,7 +2375,9 @@
             </div>
         </div>
     </div>
+</div>
 
+<div class="adm-panel" data-panel="admin-profile" data-title="Admin Profile" data-crumb="Security">
     <!-- SECTION 6: Administrator Profile Management & Option to Delete Admin Profile -->
     <section id="admin-profile" class="bg-white border border-hairline p-8 space-y-6">
         <div class="border-b border-hairline pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -2230,7 +2457,9 @@
             </div>
         </div>
     </section>
+</div>
 
+<div class="adm-panel" data-panel="audit" data-title="Audit Log" data-crumb="Security">
     <!-- SECTION 7: Immutable Security & Curatorial Audit Log -->
     <section id="audit" class="bg-white border border-hairline p-8 space-y-4">
         <div class="border-b border-hairline pb-3 flex items-center justify-between">
@@ -2252,3 +2481,150 @@
         </div>
     </section>
 </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var panels = Array.prototype.slice.call(document.querySelectorAll('.adm-panel'));
+    var links = Array.prototype.slice.call(document.querySelectorAll('.adm-link'));
+    var side = document.getElementById('admSide');
+    var overlay = document.getElementById('admOverlay');
+    var titleEl = document.getElementById('admTitle');
+    var crumbEl = document.getElementById('admCrumb');
+    var currentKey = 'overview';
+
+    function closeMobile() {
+        if (side) side.classList.remove('is-open');
+        if (overlay) overlay.classList.remove('is-open');
+    }
+
+    function openAncestors(el) {
+        var n = el;
+        while (n && n !== document.body) {
+            if (n.tagName === 'DETAILS') n.open = true;
+            if (n.classList && n.classList.contains('adm-sub')) n.classList.remove('is-folded');
+            n = n.parentElement;
+        }
+    }
+
+    function show(key, hash) {
+        currentKey = key;
+        var activePanel = null;
+        panels.forEach(function (p) {
+            var on = p.getAttribute('data-panel') === key;
+            p.classList.toggle('is-active', on);
+            if (on) activePanel = p;
+        });
+        var activeLink = null;
+        links.forEach(function (l) {
+            l.classList.remove('is-active');
+            if (hash && l.getAttribute('href') === '#' + hash && !activeLink) activeLink = l;
+        });
+        if (!activeLink) {
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].getAttribute('data-panel-key') === key) { activeLink = links[i]; break; }
+            }
+        }
+        if (activeLink) {
+            activeLink.classList.add('is-active');
+            var grp = activeLink.closest('details');
+            if (grp) grp.open = true;
+        }
+        if (activePanel) {
+            if (titleEl) titleEl.textContent = activePanel.getAttribute('data-title') || 'Dashboard';
+            if (crumbEl) crumbEl.textContent = activePanel.getAttribute('data-crumb') || 'Dashboard';
+        }
+        updateToggleLabel();
+        closeMobile();
+    }
+
+    function route() {
+        var h = (window.location.hash || '').replace(/^#/, '');
+        var target = h ? document.getElementById(h) : null;
+        var panel = target ? target.closest('.adm-panel') : null;
+        if (panel) {
+            show(panel.getAttribute('data-panel'), h);
+            openAncestors(target);
+            if (target !== panel) {
+                setTimeout(function () { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+            } else {
+                window.scrollTo(0, 0);
+            }
+        } else {
+            show('overview', 'adm-overview');
+            window.scrollTo(0, 0);
+        }
+    }
+
+    window.addEventListener('hashchange', route);
+    links.forEach(function (l) {
+        l.addEventListener('click', function () {
+            // Re-clicking the already active link should still scroll/open correctly
+            if (l.getAttribute('href') === window.location.hash) route();
+        });
+    });
+
+    // Mobile menu
+    var burger = document.getElementById('admBurger');
+    if (burger) burger.addEventListener('click', function () {
+        side.classList.add('is-open');
+        overlay.classList.add('is-open');
+    });
+    if (overlay) overlay.addEventListener('click', closeMobile);
+
+    // Sidebar quick filter
+    var filter = document.getElementById('admNavFilter');
+    if (filter) filter.addEventListener('input', function () {
+        var q = filter.value.trim().toLowerCase();
+        document.querySelectorAll('.adm-group').forEach(function (g) {
+            var any = false;
+            g.querySelectorAll('.adm-link').forEach(function (l) {
+                var m = !q || l.textContent.toLowerCase().indexOf(q) !== -1;
+                l.style.display = m ? '' : 'none';
+                if (m) any = true;
+            });
+            g.style.display = any ? '' : 'none';
+            if (q && any) g.open = true;
+        });
+    });
+
+    // Foldable cards: header click toggles (ignores clicks on controls)
+    document.querySelectorAll('.adm-sub').forEach(function (card) {
+        var head = card.firstElementChild;
+        if (!head) return;
+        if (card.getAttribute('data-fold-default') === 'closed') card.classList.add('is-folded');
+        head.addEventListener('click', function (ev) {
+            if (ev.target.closest('a, button, input, select, textarea, label, form')) return;
+            card.classList.toggle('is-folded');
+            updateToggleLabel();
+        });
+    });
+
+    // Collapse / expand all inside the active panel
+    var toggleBtn = document.getElementById('admToggleAll');
+    function activePanelEl() { return document.querySelector('.adm-panel.is-active'); }
+    function anyOpen(p) {
+        if (!p) return false;
+        return !!(p.querySelector('details.adm-acc[open]') || p.querySelector('.adm-sub:not(.is-folded)'));
+    }
+    function updateToggleLabel() {
+        if (!toggleBtn) return;
+        var p = activePanelEl();
+        var has = p && (p.querySelector('details.adm-acc') || p.querySelector('.adm-sub'));
+        toggleBtn.style.display = has ? '' : 'none';
+        toggleBtn.textContent = anyOpen(p) ? 'Collapse all' : 'Expand all';
+    }
+    if (toggleBtn) toggleBtn.addEventListener('click', function () {
+        var p = activePanelEl();
+        if (!p) return;
+        var open = !anyOpen(p);
+        p.querySelectorAll('details.adm-acc').forEach(function (d) { d.open = open; });
+        p.querySelectorAll('.adm-sub').forEach(function (c) { c.classList.toggle('is-folded', !open); });
+        updateToggleLabel();
+    });
+    document.addEventListener('toggle', updateToggleLabel, true);
+
+    route();
+})();
+</script>
