@@ -4,6 +4,12 @@ var $admAwaitSign = Object.values($contractAgreements || []).filter(function (a)
 var $admInvCount = count($authInvoices || []);
 var $admAgrCount = count($contractAgreements || []);
 var $admInitial = String(($admin && $admin['name']) ? $admin['name'] : 'A').trim().charAt(0).toUpperCase();
+var $counterSubsList = Object.values($submissions || []).filter(function (s) {
+    var st = s?.['price_agreement_status'] || '';
+    var msgs = s?.['negotiation_messages'] || [];
+    return st === 'counter_proposed_by_artist' || (Array.isArray(msgs) && msgs.length > 0);
+});
+var $counterSubmissionsCount = $counterSubsList.length;
 %>
 <style>
 /* ===== ArtAlly Admin Console — layout & premium UI (presentation only) ===== */
@@ -166,6 +172,7 @@ var $admInitial = String(($admin && $admin['name']) ? $admin['name'] : 'A').trim
             <details class="adm-group" open>
                 <summary>Artists &amp; Artworks</summary>
                 <a href="#artists" class="adm-link" data-panel-key="artists"><span class="ic">🎨</span><span class="lbl">Registered Artists</span><span class="adm-badge"><%- $stats?.['total_artists'] %></span></a>
+                <a href="#artist-price-desk" class="adm-link" data-panel-key="artists"><span class="ic">💬</span><span class="lbl">Price Messages &amp; Counters</span><span class="adm-badge warn"><%- $counterSubmissionsCount %></span></a>
                 <a href="#submissions" class="adm-link" data-panel-key="submissions"><span class="ic">🗂</span><span class="lbl">Review Queue</span><span class="adm-badge <%- Number($stats?.['pending_submissions'] || 0) > 0 ? 'warn' : '' %>"><%- $stats?.['pending_submissions'] %></span></a>
             </details>
 
@@ -1477,6 +1484,124 @@ var $admInitial = String(($admin && $admin['name']) ? $admin['name'] : 'A').trim
             </p>
         </div>
 
+        <!-- Dedicated Desk: Artist Price Discussions & Counter-Offers -->
+        <div id="artist-price-desk" class="bg-[#181615] text-ivory border-2 border-bronze p-6 sm:p-7 space-y-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-bronze/40 pb-4">
+                <div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="bg-bronze text-white text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-bold">
+                            💬 Artist Price Inquiries &amp; Counter-Offer Desk
+                        </span>
+                        <span class="text-xs text-bronzeLight font-mono">
+                            <%- $counterSubmissionsCount %> Active Thread<%- $counterSubmissionsCount === 1 ? '' : 's' %>
+                        </span>
+                    </div>
+                    <h3 class="font-serif text-2xl text-ivory mt-1">
+                        Artist Valuation Notes, Counter-Offers &amp; Direct Price Responses
+                    </h3>
+                    <p class="text-xs text-stone">
+                        All messages and price counter-proposals sent by artists from their Studio Dashboard appear here for instant curatorial review and valuation updates.
+                    </p>
+                </div>
+                <span class="text-[10px] uppercase tracking-widest px-3 py-1.5 border border-bronze/50 bg-[#221F1D] text-bronzeLight font-semibold self-start sm:self-auto">
+                    Live Studio Sync
+                </span>
+            </div>
+
+            <% if (empty($counterSubsList)) { %>
+                <div class="bg-[#221F1D] border border-white/10 p-5 text-center text-xs text-stone">
+                    <p class="text-ivory font-semibold mb-1">No Active Counter-Offers from Artists</p>
+                    <p>All artist target valuations and House Agreed Prices are currently aligned. When an artist submits a counter-offer or note on their works, it will display here immediately.</p>
+                </div>
+            <% } else { %>
+                <div class="space-y-4">
+                    <% for (const $cSub of Object.values($counterSubsList || [])) {
+                        var $cArt = $cSub?.['artwork'] ?? {};
+                        var $cArtist = $cSub?.['artist'] ?? {};
+                        var $cMsgs = Array.isArray($cSub?.['negotiation_messages']) ? $cSub['negotiation_messages'] : [];
+                        var $cLatestMsg = $cMsgs.length > 0 ? $cMsgs[$cMsgs.length - 1] : null;
+                        var $cExpected = Number($cSub?.['artist_expected_price'] ?? $cArt?.['artist_expected_price'] ?? 0);
+                        var $cAgreed = Number($cSub?.['agreed_price'] ?? $cArt?.['agreed_price'] ?? 0);
+                    %>
+                    <div class="bg-[#24201D] border border-bronze/60 p-5 space-y-4">
+                        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                            <div class="flex items-center gap-4">
+                                <a href="<%- e($cArt?.['primary_image']) %>" target="_blank" class="w-16 h-16 bg-black border border-white/20 flex-shrink-0 overflow-hidden block">
+                                    <img src="<%- e($cArt?.['primary_image']) %>" alt="" class="w-full h-full object-cover">
+                                </a>
+                                <div>
+                                    <span class="font-mono text-[10px] text-bronze uppercase tracking-widest"><%- e($cSub?.['reference_code']) %></span>
+                                    <h4 class="font-serif text-lg text-white font-semibold leading-tight">
+                                        <%- e($cArt?.['title'] ?? 'Consigned Artwork') %>
+                                    </h4>
+                                    <p class="text-xs text-stone">
+                                        Artist: <strong class="text-ivory"><%- e($cArtist?.['name'] ?? $cSub?.['artist_name'] ?? 'Artist') %></strong> (<%- e($cArtist?.['email'] ?? '') %>)
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-4 text-xs font-mono">
+                                <div class="bg-[#181615] border border-white/10 px-3 py-2 text-center">
+                                    <span class="text-[9px] uppercase tracking-widest text-stone block">Artist Proposed Price</span>
+                                    <span class="text-base font-bold text-bronzeLight"><%- format_money($cExpected) %></span>
+                                </div>
+                                <div class="bg-[#181615] border border-white/10 px-3 py-2 text-center">
+                                    <span class="text-[9px] uppercase tracking-widest text-stone block">Current House Valuation</span>
+                                    <span class="text-base font-bold text-white"><%- format_money($cAgreed) %></span>
+                                </div>
+                                <span class="px-2.5 py-1 text-[10px] uppercase tracking-widest font-bold <%- $cSub?.['price_agreement_status'] === 'accepted_by_artist' ? 'bg-[#1A2E22] text-[#55E59C]' : 'bg-[#3A2A14] text-[#FCD34D] border border-[#B8860B]' %>">
+                                    <%- $cSub?.['price_agreement_status'] === 'accepted_by_artist' ? '✓ Accepted by Artist' : '⇄ Counter-Offer' %>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Latest Message Note -->
+                        <% if ($cLatestMsg) { %>
+                        <div class="bg-[#181615] border border-bronze/30 p-3.5 flex items-start gap-3 text-xs">
+                            <span class="text-lg">💬</span>
+                            <div class="space-y-1">
+                                <p class="text-[11px] text-stone">
+                                    <strong><%- e($cLatestMsg?.['sender_name'] ?? ($cLatestMsg?.['sender'] === 'artist' ? 'Artist' : 'Admin')) %></strong>
+                                    <% if ($cLatestMsg?.['created_at']) { %> · <span class="font-mono text-[10px]"><%- e($cLatestMsg['created_at']) %> UTC</span><% } %>
+                                </p>
+                                <p class="text-ivory leading-relaxed">
+                                    <%- e($cLatestMsg?.['text'] ?? $cLatestMsg?.['message'] ?? '') %>
+                                </p>
+                            </div>
+                        </div>
+                        <% } %>
+
+                        <!-- Direct Response & Price Update Form -->
+                        <form action="/admin/artworks/control" method="POST" class="bg-[#1B1917] border border-white/10 p-4 space-y-3 text-xs">
+                            <%- csrf_field() %>
+                            <input type="hidden" name="artwork_id" value="<%- Number($cArt?.['id'] ?? $cSub?.['artwork_id']) %>">
+                            <input type="hidden" name="return_anchor" value="#artist-price-desk">
+
+                            <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                <div class="md:col-span-3 space-y-1">
+                                    <label class="text-[10px] uppercase tracking-widest text-stone block font-semibold">House Agreed Price ($)</label>
+                                    <input type="number" step="100" name="agreed_price" value="<%- $cAgreed || $cExpected %>" required class="w-full bg-[#121110] border border-white/20 text-ivory px-3 py-2 font-mono font-bold text-sm">
+                                </div>
+                                <div class="md:col-span-3 space-y-1">
+                                    <label class="text-[10px] uppercase tracking-widest text-stone block font-semibold">Controlled Starting Bid ($)</label>
+                                    <input type="number" step="50" name="starting_bid" value="<%- Math.round(($cAgreed || $cExpected) * 0.4) %>" class="w-full bg-[#121110] border border-white/20 text-ivory px-3 py-2 font-mono text-sm">
+                                </div>
+                                <div class="md:col-span-4 space-y-1">
+                                    <label class="text-[10px] uppercase tracking-widest text-stone block font-semibold">Reply Note to Artist</label>
+                                    <input type="text" name="desk_reply" placeholder="e.g. Valuation updated to $<%- $cExpected %>. Ready for cataloguing." class="w-full bg-[#121110] border border-white/20 text-ivory px-3 py-2 text-xs">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <button type="submit" class="w-full bg-bronze text-white font-bold py-2.5 px-3 text-[10px] uppercase tracking-widest hover:bg-bronzeDark transition text-center whitespace-nowrap">
+                                        Update &amp; Send
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <% } %>
+                </div>
+            <% } %>
+        </div>
+
         <% if (empty($artistProfiles)) { %>
             <div class="bg-ivory border border-hairline p-12 text-center space-y-3">
                 <p class="text-[11px] uppercase tracking-widest text-bronze font-semibold">Zero Dummy Data Policy Active</p>
@@ -1624,16 +1749,82 @@ var $admInitial = String(($admin && $admin['name']) ? $admin['name'] : 'A').trim
                             </div>
                         </div>
 
-                        <!-- Artist's Uploaded Artworks, Uploaded Images & Master Admin Control Panel -->
-                        <div class="space-y-4">
-                            <h4 class="text-xs uppercase tracking-widest font-semibold text-obsidian">
-                                Uploaded Artworks by <%- e($ap?.['display_name']) %> (<%- count($artistWorks) %> Works)
-                            </h4>
+                        <!-- Artist's Uploaded Artworks & Catalog Dropdown Drawer -->
+                        <details class="adm-artist-works-accordion border border-hairline bg-white shadow-sm overflow-hidden" style="border-radius: 6px;">
+                            <summary class="cursor-pointer p-4 sm:p-5 flex items-center justify-between gap-4 bg-[#FAF7F2] hover:bg-[#F3EEE5] transition select-none list-none">
+                                <div class="flex items-center gap-3.5">
+                                    <span class="w-8 h-8 rounded-full bg-obsidian text-ivory flex items-center justify-center text-xs font-mono font-bold flex-shrink-0">
+                                        <%- count($artistWorks) %>
+                                    </span>
+                                    <div>
+                                        <h4 class="text-sm font-serif font-bold text-obsidian tracking-wide flex items-center gap-2">
+                                            <span>Catalogue &amp; Uploaded Works by <%- e($ap?.['display_name']) %></span>
+                                            <span class="text-[9px] font-sans font-semibold uppercase tracking-widest px-2 py-0.5 bg-[#E8E2D5] text-obsidian rounded">
+                                                <%- count($artistWorks) %> <%- count($artistWorks) === 1 ? 'Artwork' : 'Artworks' %>
+                                            </span>
+                                        </h4>
+                                        <p class="text-[11px] text-stone mt-0.5">
+                                            Click to open dropdown: view entire catalog, reserve prices, agreed valuations &amp; auction controls
+                                        </p>
+                                    </div>
+                                </div>
+                                <span class="text-[10px] uppercase tracking-widest font-bold px-3 py-1.5 border border-hairline bg-white text-obsidian shadow-xs">
+                                    ▼ Click to View Works (<%- count($artistWorks) %>)
+                                </span>
+                            </summary>
 
-                            <% if (empty($artistWorks)) { %>
-                                <p class="text-xs text-stone bg-white p-4 border border-hairline">This artist has not uploaded any artworks yet.</p>
-                            <% } else { %>
-                                <div class="space-y-4">
+                            <div class="p-5 sm:p-6 space-y-6 bg-[#FAF7F2] border-t border-hairline">
+                                <% if (empty($artistWorks)) { %>
+                                    <p class="text-xs text-stone bg-white p-4 border border-hairline text-center">This artist has not uploaded any artworks yet.</p>
+                                <% } else { %>
+                                    <!-- Neat Catalog Summary Table -->
+                                    <div class="overflow-x-auto bg-white border border-hairline shadow-xs">
+                                        <table class="w-full text-left text-xs border-collapse">
+                                            <thead>
+                                                <tr class="border-b border-hairline bg-alabaster text-[10px] uppercase tracking-widest text-stone">
+                                                    <th class="py-2.5 px-3">Work</th>
+                                                    <th class="py-2.5 px-3">Title &amp; Specifications</th>
+                                                    <th class="py-2.5 px-3">Artist Expected</th>
+                                                    <th class="py-2.5 px-3">House Agreed</th>
+                                                    <th class="py-2.5 px-3">Current Bid</th>
+                                                    <th class="py-2.5 px-3">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-hairline font-mono text-[11px]">
+                                                <% for (const $wk of Object.values($artistWorks || [])) {
+                                                    var $wkSub = $wk?.['submission'] ?? [];
+                                                    var $wkAuc = $wk?.['auction'] ?? null;
+                                                    var $wkExp = Number(($wkSub?.['artist_expected_price'] ?? $wk?.['artist_expected_price'] ?? 0));
+                                                    var $wkAgr = Number(($wk?.['agreed_price'] ?? $wkSub?.['agreed_price'] ?? 0));
+                                                    var $wkCur = Number(($wkAuc?.['current_bid'] ?? $wk?.['starting_bid'] ?? 0));
+                                                    var $wkSt = String($wkAuc?.['status'] ?? $wk?.['status'] ?? 'pending').toLowerCase();
+                                                %>
+                                                <tr class="hover:bg-ivory/60 transition">
+                                                    <td class="py-2 px-3">
+                                                        <a href="<%- e($wk?.['primary_image']) %>" target="_blank" class="block w-10 h-10 bg-alabaster border border-hairline overflow-hidden">
+                                                            <img src="<%- e($wk?.['primary_image']) %>" alt="" class="w-full h-full object-cover">
+                                                        </a>
+                                                    </td>
+                                                    <td class="py-2 px-3 font-sans">
+                                                        <strong class="text-obsidian block"><%- e($wk?.['title'] ?? 'Untitled') %></strong>
+                                                        <span class="text-[10px] text-stone"><%- e($wk?.['medium'] ?? '') %> · <%- e($wk?.['dimensions'] ?? '') %></span>
+                                                    </td>
+                                                    <td class="py-2 px-3 text-stone font-semibold"><%- format_money($wkExp) %></td>
+                                                    <td class="py-2 px-3 text-bronze font-bold"><%- format_money($wkAgr) %></td>
+                                                    <td class="py-2 px-3 text-obsidian font-bold"><%- format_money($wkCur) %></td>
+                                                    <td class="py-2 px-3">
+                                                        <span class="px-2 py-0.5 text-[9px] uppercase tracking-widest font-semibold <%- $wkSt === 'active' ? 'bg-[#1A2E22] text-[#55E59C]' : ($wkSt === 'closed_sold' || $wkSt === 'sold' ? 'bg-obsidian text-bronzeLight' : 'bg-alabaster text-charcoal border border-hairline') %>">
+                                                            <%- $wkSt === 'closed_sold' || $wkSt === 'sold' ? '✓ SOLD' : e(strtoupper($wkSt)) %>
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                                <% } %>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <!-- Master Admin Forms for Each Artwork -->
+                                    <div class="space-y-4">
                                     <% for (const $work of Object.values($artistWorks || [])) { %>
                                         <% var $sub = $work?.['submission'] ?? [];
                                         var $auc = $work?.['auction'] ?? null;
@@ -1812,9 +2003,10 @@ var $admInitial = String(($admin && $admin['name']) ? $admin['name'] : 'A').trim
                                             </div>
                                         </div>
                                     <% } %>
-                                </div>
-                            <% } %>
-                        </div>
+                                    </div>
+                                <% } %>
+                            </div>
+                        </details>
                     </div>
                 <% } %>
             </div>

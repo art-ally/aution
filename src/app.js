@@ -5607,7 +5607,7 @@ app.post('/admin/agreements/generate', (req, res) => {
     String(req.body.platform_signatory_title || '').trim() ||
     'Chief Curatorial Director & Head of Authentication';
 
-  // Ensure the linked invoice's line_items are also synced or create an aligned invoice if none exists yet
+  // If an existing target invoice was selected, sync its line items; otherwise do NOT automatically generate an invoice until the backend issues it
   if (targetInvoice) {
     targetInvoice = db.update('authentication_invoices', targetInvoice.id, {
       line_items: lineItems,
@@ -5617,42 +5617,6 @@ app.post('/admin/agreements/generate', (req, res) => {
       fee_amount: perArtworkFee,
       currency,
       service_type: serviceType,
-    });
-  } else {
-    const randomInvNum = Math.floor(1000 + Math.random() * 9000);
-    const newInvoiceNumber = `INV-AUTH-${helpers.gmdate('Y')}-${randomInvNum}`;
-    const primaryWork = schedule[0] || {};
-    targetInvoice = db.insert('authentication_invoices', {
-      invoice_number: newInvoiceNumber,
-      artist_id: resolvedArtistId,
-      artwork_id: primaryWork.artwork_id || (artworkIdInput > 0 ? artworkIdInput : null),
-      artist_name: artistFullName,
-      artist_email: artistEmail,
-      artist_details: `${artistDiscipline} · ${artistAddress}`,
-      artwork_title: primaryWork.title || 'Consigned Studio Artwork',
-      artwork_details: `${primaryWork.medium || ''} · ${primaryWork.dimensions || ''}`,
-      reference_code: primaryWork.reference_code || '',
-      service_type: serviceType,
-      line_items: lineItems,
-      subtotal_amount: perArtworkSubtotal,
-      vat_rate: vatRate,
-      vat_amount: perArtworkVat,
-      fee_amount: perArtworkFee,
-      currency,
-      due_date: helpers.gmdate('Y-m-d', helpers.strtotime('+3 days')),
-      status: 'unpaid',
-      payment_method: 'bank_and_crypto',
-      payment_account_name: String(req.body.payment_account_name || 'ArtAlly Escrow Treasury').trim(),
-      payment_bank_name: String(req.body.payment_bank_name || 'Lombard Odier & Cie').trim(),
-      payment_account_number: String(req.body.payment_account_number || '').trim(),
-      payment_routing_details: String(req.body.payment_routing_details || '').trim(),
-      payment_bank_address: String(req.body.payment_bank_address || 'Rue de la Corraterie 11, 1204 Geneva, Switzerland').trim(),
-      crypto_currency: String(req.body.crypto_currency || '').trim(),
-      crypto_network: String(req.body.crypto_network || '').trim(),
-      crypto_wallet_address: String(req.body.crypto_wallet_address || '').trim(),
-      crypto_memo: String(req.body.crypto_memo || '').trim(),
-      payment_instructions: String(req.body.payment_instructions || '').trim(),
-      created_by: Number(admin.id),
     });
   }
 
@@ -5730,13 +5694,13 @@ app.post('/admin/agreements/generate', (req, res) => {
     'CONTRACT_AGREEMENT_GENERATED',
     'contract_agreement',
     agreement.id,
-    `Generated Contract Agreement ${agreementNumber} for ${artistFullName} (${totalArtworks} artwork(s), Per-Artwork Auth Fee: ${currency} ${perArtworkFee}, Total Auth Fee: ${currency} ${totalAuthFee}, Aligned Invoice: ${targetInvoice?.invoice_number || 'N/A'})`,
+    `Generated Contract Agreement ${agreementNumber} for ${artistFullName} (${totalArtworks} artwork(s), Per-Artwork Auth Fee: ${currency} ${perArtworkFee}, Total Auth Fee: ${currency} ${totalAuthFee}${targetInvoice ? `, Aligned Invoice: ${targetInvoice.invoice_number}` : ''})`,
     req.ip
   );
 
   req.setFlash(
     'success',
-    `Contract Agreement ${agreementNumber} generated on ArtAlly Letterheaded Paper (pre-signed by ArtAlly and aligned with Invoice ${targetInvoice?.invoice_number || ''}) for ${artistFullName}.`
+    `Contract Agreement ${agreementNumber} generated on ArtAlly Letterheaded Paper (pre-signed by ArtAlly) for ${artistFullName}.`
   );
   return res.redirect(`/agreements/${agreement.id}?print=1`);
 });
