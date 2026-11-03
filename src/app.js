@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const compression = require('compression');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 
@@ -36,15 +37,14 @@ app.use((req, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   next();
 });
+app.use(compression());
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.json({ limit: '50mb' }));
 app.use(cookieParser());
 
-// Serve static assets from public/ and /tmp/uploads (when on Vercel)
-if (IS_VERCEL) {
-  app.use('/uploads', express.static(UPLOAD_ROOT));
-}
-app.use(express.static(PUBLIC_PATH, { index: false }));
+// Serve static assets with caching from public/ and /uploads
+app.use('/uploads', express.static(UPLOAD_ROOT, { maxAge: '7d', etag: true }));
+app.use(express.static(PUBLIC_PATH, { index: false, maxAge: '7d', etag: true }));
 app.get('/favicon.ico', (req, res) => {
   res.sendFile(path.join(PUBLIC_PATH, 'favicon.svg'), {
     headers: { 'Content-Type': 'image/svg+xml' },
@@ -4608,7 +4608,17 @@ function parseInvoiceBreakdownFromBody(body) {
   const vatAmount = Math.round(fallbackSubtotal * (vatRate / 100) * 100) / 100;
   const feeAmount = Math.round((fallbackSubtotal + vatAmount) * 100) / 100;
   return {
-    lineItems: [],
+    lineItems:
+      fallbackSubtotal > 0
+        ? [
+            {
+              key: 'auth_eval',
+              title: 'Curatorial & Technical Authentication Examination',
+              description: 'Physical & Digital Provenance Connoisseurship',
+              amount: fallbackSubtotal,
+            },
+          ]
+        : [],
     subtotalAmount: fallbackSubtotal,
     vatRate,
     vatAmount,

@@ -114,6 +114,7 @@ class DatabaseEngine {
     this.pendingRelationalOps = [];
     this._flushTimer = null;
     this._flushInFlight = null;
+    this._idMap = {};
 
     const pgConnectionString = normalizeSupabasePgUrl(
       process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || DEFAULT_SUPABASE_PG_URL
@@ -172,6 +173,7 @@ class DatabaseEngine {
   }
 
   normalizeDataStructure(parsed) {
+    this._clearIdMap();
     if (!parsed || typeof parsed !== 'object') {
       parsed = { _meta: { sequences: {}, version: 1, updated_at_ms: 0 } };
     }
@@ -945,16 +947,40 @@ class DatabaseEngine {
     }
   }
 
+  _ensureIdMap(table) {
+    if (!this._idMap) this._idMap = {};
+    if (!this._idMap[table]) {
+      const map = new Map();
+      const rows = this.data[table] || [];
+      for (const row of rows) {
+        if (row && row.id !== undefined && row.id !== null) {
+          map.set(String(row.id), row);
+        }
+      }
+      this._idMap[table] = map;
+    }
+    return this._idMap[table];
+  }
+
+  _clearIdMap(table) {
+    if (!this._idMap) this._idMap = {};
+    if (table) {
+      delete this._idMap[table];
+    } else {
+      this._idMap = {};
+    }
+  }
+
   all(table) {
     return Object.values(this.data[table] || []);
   }
 
   find(table, id) {
-    const rows = this.data[table] || [];
-    for (const row of rows) {
-      if (String(row.id ?? '') === String(id)) {
-        return row;
-      }
+    if (id === undefined || id === null) return null;
+    const map = this._ensureIdMap(table);
+    const item = map.get(String(id));
+    if (item !== undefined) {
+      return item;
     }
     return null;
   }
@@ -1048,6 +1074,9 @@ class DatabaseEngine {
     copy.updated_at = copy.updated_at || now;
 
     this.data[table].push(copy);
+    if (this._idMap && this._idMap[table]) {
+      this._idMap[table].set(String(copy.id), copy);
+    }
     if (this.pgPool) {
       this.pendingRelationalOps.push({ op: 'upsert', table, id: copy.id, row: copy });
     }
@@ -1069,6 +1098,9 @@ class DatabaseEngine {
           updated_at: formatUtcNow(),
         };
         this.data[table][idx] = updated;
+        if (this._idMap && this._idMap[table]) {
+          this._idMap[table].set(String(updated.id), updated);
+        }
         if (this.pgPool) {
           this.pendingRelationalOps.push({ op: 'upsert', table, id: updated.id, row: updated });
         }
@@ -1087,6 +1119,9 @@ class DatabaseEngine {
       const row = this.data[table][idx];
       if (String(row.id ?? '') === String(id)) {
         this.data[table].splice(idx, 1);
+        if (this._idMap && this._idMap[table]) {
+          this._idMap[table].delete(String(id));
+        }
         if (this.pgPool) {
           this.pendingRelationalOps.push({ op: 'delete', table, id: row.id });
         }
