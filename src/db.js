@@ -79,14 +79,78 @@ const ORDERED_RELATIONAL_TABLES = [
   'wallet_withdrawals',
 ];
 
+const NUMERIC_ID_FIELDS = new Set([
+  'id',
+  'user_id',
+  'artist_id',
+  'artwork_id',
+  'category_id',
+  'auction_id',
+  'submission_id',
+  'order_id',
+  'buyer_id',
+  'invoice_id',
+  'artist_profile_id',
+  'reporter_user_id',
+  'reviewed_by',
+  'approved_by',
+  'processed_by',
+  'created_by',
+  'highest_bidder_id',
+  'bid_count',
+  'sort_order',
+  'year_created',
+  'preferred_duration_days',
+  'total_artworks',
+]);
+
+function normalizeRowFields(table, rawRow) {
+  if (!rawRow || typeof rawRow !== 'object') return rawRow;
+  const normalized = { ...rawRow };
+  for (const [k, v] of Object.entries(normalized)) {
+    if (v instanceof Date) {
+      normalized[k] = v.toISOString().replace('T', ' ').slice(0, 19);
+    } else if (NUMERIC_ID_FIELDS.has(k) && v !== null && v !== undefined && v !== '') {
+      const n = Number(v);
+      if (!Number.isNaN(n)) {
+        normalized[k] = n;
+      }
+    }
+  }
+  if (table === 'users' && typeof normalized.roles === 'string') {
+    try {
+      normalized.roles = JSON.parse(normalized.roles);
+    } catch (_) {
+      normalized.roles = [normalized.role || 'buyer'];
+    }
+  }
+  return normalized;
+}
+
+function parseTimestampMs(val) {
+  if (!val) return 0;
+  if (val instanceof Date) return val.getTime();
+  const s = String(val).trim();
+  if (!s) return 0;
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s) ? `${s.replace(' ', 'T')}Z` : s;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
 function normalizeSupabasePgUrl(rawUrl) {
-  const s = String(rawUrl || '').trim();
-  if (!s) return '';
+  let s = String(rawUrl || '').trim();
+  if (!s || s.includes('<project-ref>') || s.includes('<password>') || s.includes('your-project-id')) {
+    return '';
+  }
   // Convert IPv6-only db.xrncirrbxzzouwbluyso.supabase.co to IPv4+IPv6 Supavisor Pooler
   if (s.includes('@db.xrncirrbxzzouwbluyso.supabase.co')) {
-    return s
+    s = s
       .replace('postgresql://postgres:', 'postgresql://postgres.xrncirrbxzzouwbluyso:')
       .replace('@db.xrncirrbxzzouwbluyso.supabase.co', '@aws-1-eu-central-1.pooler.supabase.com');
+  }
+  // Use Supavisor Transaction Mode (port 6543, 200+ concurrent connections) instead of Session Mode (port 5432, 15 connection cap)
+  if (s.includes('.pooler.supabase.com:5432')) {
+    s = s.replace('.pooler.supabase.com:5432', '.pooler.supabase.com:6543');
   }
   return s;
 }
@@ -125,9 +189,9 @@ class DatabaseEngine {
         this.pgPool = new Pool({
           connectionString: pgConnectionString,
           ssl: { rejectUnauthorized: false },
-          max: 5,
-          idleTimeoutMillis: 15000,
-          connectionTimeoutMillis: 5000,
+          max: IS_VERCEL ? 1 : 2,
+          idleTimeoutMillis: 5000,
+          connectionTimeoutMillis: 8000,
         });
         this.pgPool.on('error', (err) => {
           console.warn('[ArtAlly DB] PostgreSQL background pool notice:', err.message);
@@ -185,6 +249,8 @@ class DatabaseEngine {
     for (const t of TABLES) {
       if (!Array.isArray(parsed[t])) {
         parsed[t] = [];
+      } else {
+        parsed[t] = parsed[t].map((r) => normalizeRowFields(t, r));
       }
       const maxId = parsed[t].reduce((max, r) => Math.max(max, Number(r?.id || 0)), 0);
       if (!parsed._meta.sequences[t] || parsed._meta.sequences[t] < maxId) {
@@ -493,47 +559,65 @@ class DatabaseEngine {
       'users',
       'artist_profiles',
       'artworks',
-      'artwork_images',
       'artwork_submissions',
       'auctions',
       'authentication_invoices',
       'contract_agreements',
       'wallet_withdrawals',
       'seller_payouts',
-      'notifications',
     ];
     let recoveredAny = false;
     try {
-      const results = await Promise.all(
-        coreTables.map((t) =>
-          this.pgPool
-            .query(`SELECT * FROM public."${t}" ORDER BY id ASC`)
-            .then((r) => ({ table: t, rows: r.rows || [] }))
-            .catch(() => ({ table: t, rows: [] }))
-        )
-      );
+      const results = [];
+      for (const t of coreTables) {
+        try {
+          const r = await this.pgPool.query(`SELECT * FROM public."${t}" ORDER BY id ASC`);
+          results.push({ table: t, rows: r.rows || [] });
+        } catch (_) {
+          results.push({ table: t, rows: [] });
+        }
+      }
 
       for (const { table, rows } of results) {
         if (!Array.isArray(storeData[table])) storeData[table] = [];
-        const existingIds = new Set(storeData[table].map((r) => Number(r.id)));
+        const existingMap = new Map();
+        storeData[table].forEach((r, idx) => {
+          if (r && r.id !== undefined) {
+            existingMap.set(Number(r.id), { row: r, idx });
+          }
+        });
+        const recordedSeq = Number(storeData._meta?.sequences?.[table] || 0);
+        const currentMaxId = storeData[table].reduce((m, r) => Math.max(m, Number(r?.id || 0)), 0);
+        const maxKnownSeq = Math.max(recordedSeq, currentMaxId);
+
         for (const pgRow of rows) {
           const rowId = Number(pgRow.id);
-          if (rowId > 0 && !existingIds.has(rowId)) {
-            const normalizedRow = { ...pgRow, id: rowId };
-            for (const [k, v] of Object.entries(normalizedRow)) {
-              if (v instanceof Date) {
-                normalizedRow[k] = v.toISOString().replace('T', ' ').slice(0, 19);
+          if (!(rowId > 0)) continue;
+          const normalizedRow = normalizeRowFields(table, pgRow);
+
+          if (existingMap.has(rowId)) {
+            const { row: existingRow, idx } = existingMap.get(rowId);
+            const pgUpdatedMs = parseTimestampMs(normalizedRow.updated_at);
+            const jsonUpdatedMs = parseTimestampMs(existingRow.updated_at);
+            if (pgUpdatedMs > jsonUpdatedMs) {
+              const merged = { ...existingRow, ...normalizedRow, id: rowId };
+              // Preserve local static image path if PG still had a legacy data URL
+              if (
+                table === 'artworks' &&
+                typeof existingRow.primary_image === 'string' &&
+                existingRow.primary_image.startsWith('/uploads/') &&
+                typeof normalizedRow.primary_image === 'string' &&
+                normalizedRow.primary_image.startsWith('data:')
+              ) {
+                merged.primary_image = existingRow.primary_image;
               }
+              storeData[table][idx] = merged;
+              recoveredAny = true;
             }
-            if (table === 'users' && typeof normalizedRow.roles === 'string') {
-              try {
-                normalizedRow.roles = JSON.parse(normalizedRow.roles);
-              } catch (_) {
-                normalizedRow.roles = [normalizedRow.role || 'buyer'];
-              }
-            }
+          } else if (rowId > maxKnownSeq) {
+            // Only recover rows whose ID exceeds the sequence counter (never resurrect deleted IDs <= maxKnownSeq)
             storeData[table].push(normalizedRow);
-            existingIds.add(rowId);
+            existingMap.set(rowId, { row: normalizedRow, idx: storeData[table].length - 1 });
             recoveredAny = true;
           }
         }
@@ -551,8 +635,26 @@ class DatabaseEngine {
     if (this.hasPendingSync || this._flushInFlight) return true;
 
     const startVersion = Number(this.data._meta?.version || 0);
+    const localUpdatedMs = Number(this.data._meta?.updated_at_ms || 0);
 
     try {
+      // Fast metadata check after initial sync to avoid downloading megabytes of JSONB when unchanged
+      if (this.initialSyncCompleted && localUpdatedMs > 0) {
+        const metaRes = await this.pgPool.query(`
+          SELECT (store_data->'_meta'->>'updated_at_ms')::bigint AS remote_updated_ms,
+                 (store_data->'_meta'->>'version')::bigint AS remote_version
+          FROM public.artally_store
+          WHERE id = 1
+          LIMIT 1
+        `);
+        if (metaRes.rows.length > 0) {
+          const remoteUpdatedMs = Number(metaRes.rows[0].remote_updated_ms || 0);
+          if (remoteUpdatedMs > 0 && remoteUpdatedMs <= localUpdatedMs) {
+            return true;
+          }
+        }
+      }
+
       let res;
       try {
         res = await this.pgPool.query(
@@ -584,22 +686,23 @@ class DatabaseEngine {
         Object.keys(res.rows[0].store_data).length > 0
       ) {
         const remoteData = this.normalizeDataStructure(res.rows[0].store_data);
-        const localUpdatedMs = Number(this.data._meta?.updated_at_ms || 0);
         const remoteUpdatedMs = Number(remoteData._meta?.updated_at_ms || 0);
 
-        // If local store has a newer timestamp than remote, never overwrite local state
-        if (localUpdatedMs > 0 && localUpdatedMs > remoteUpdatedMs) {
+        // Only push local over remote if we had ALREADY synced with remote in this process lifecycle
+        if (this.initialSyncCompleted && localUpdatedMs > 0 && localUpdatedMs > remoteUpdatedMs) {
           await this.pushToSupabaseAsync();
-          this.initialSyncCompleted = true;
           return true;
         }
 
-        // If local store is already at the exact same timestamp & version after initial sync, skip heavy reconciliation
         if (this.initialSyncCompleted && localUpdatedMs > 0 && localUpdatedMs === remoteUpdatedMs) {
           return true;
         }
 
-        const recovered = await this._reconcileRelationalTablesFromPg(remoteData);
+        const wasInitialSync = !this.initialSyncCompleted;
+        let recovered = false;
+        if (wasInitialSync) {
+          recovered = await this._reconcileRelationalTablesFromPg(remoteData);
+        }
 
         if (
           this.hasPendingSync ||
@@ -615,6 +718,8 @@ class DatabaseEngine {
           fs.writeFileSync(RUNTIME_STORE_PATH, JSON.stringify(this.data, null, 2), 'utf8');
         } catch (_) {}
         if (recovered) {
+          this.markMutated();
+          this.writeDiskNow();
           await this.pushToSupabaseAsync();
         }
         return true;
@@ -634,11 +739,7 @@ class DatabaseEngine {
 
     // If we have local mutations waiting to be pushed, flush them first so they are never lost!
     if (this.hasPendingSync || this._flushInFlight) {
-      if (IS_VERCEL || force) {
-        await this.flush();
-      } else {
-        this.flush().catch(() => {});
-      }
+      await this.flush();
       return true;
     }
 
@@ -649,9 +750,8 @@ class DatabaseEngine {
     }
     this.lastSupabaseSync = now;
 
-    // On local server, refresh in the background so page navigations and button clicks are instant
-    if (!IS_VERCEL && !force) {
-      this.initialSyncCompleted = true;
+    // On local server AFTER initial sync has completed, refresh in the background so page navigations are instant
+    if (!IS_VERCEL && !force && this.initialSyncCompleted) {
       this._pullStoreFromPg().catch(() => {});
       return true;
     }
@@ -989,11 +1089,28 @@ class DatabaseEngine {
     const rows = this.data[table] || [];
     const isEmailField = field === 'email' && typeof value === 'string';
     const targetLower = isEmailField ? value.trim().toLowerCase() : null;
+    const isValueNumeric =
+      value !== null &&
+      value !== undefined &&
+      value !== '' &&
+      (typeof value === 'number' || (typeof value === 'string' && !Number.isNaN(Number(value))));
+    const numericTarget = isValueNumeric ? Number(value) : NaN;
+
     for (const row of rows) {
-      if ((row[field] ?? null) === value) {
+      const cell = row[field] ?? null;
+      if (cell === value) {
         return row;
       }
-      if (isEmailField && typeof row[field] === 'string' && row[field].trim().toLowerCase() === targetLower) {
+      if (
+        isValueNumeric &&
+        cell !== null &&
+        cell !== '' &&
+        (typeof cell === 'number' || typeof cell === 'string') &&
+        Number(cell) === numericTarget
+      ) {
+        return row;
+      }
+      if (isEmailField && typeof cell === 'string' && cell.trim().toLowerCase() === targetLower) {
         return row;
       }
     }
@@ -1022,7 +1139,7 @@ class DatabaseEngine {
           [cleanEmail]
         );
         if (res.rows && res.rows.length > 0) {
-          const dbUser = res.rows[0];
+          const dbUser = normalizeRowFields('users', res.rows[0]);
           if (!Array.isArray(this.data.users)) this.data.users = [];
           const existingIdx = this.data.users.findIndex((u) => Number(u.id) === Number(dbUser.id));
           if (existingIdx >= 0) {

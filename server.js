@@ -6,15 +6,22 @@ const { AuctionEngineService } = require('./src/auctionEngine');
 const PORT = Number(process.env.PORT || 8000);
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Automatically close auctions as soon as their countdown completes
+// Automatically close auctions as soon as their countdown completes (only after initial DB sync)
 setInterval(() => {
   try {
+    const db = DatabaseEngine.getInstance();
+    if (db.supabaseEnabled && !db.initialSyncCompleted) return;
     AuctionEngineService.synchronizeAuctions();
   } catch (_) {}
 }, 5000);
 
-app.listen(PORT, HOST, () => {
+app.listen(PORT, HOST, async () => {
   const db = DatabaseEngine.getInstance();
+  if (db.supabaseEnabled) {
+    try {
+      await db.syncFromSupabaseIfConfigured(true);
+    } catch (_) {}
+  }
   console.log('===============================================================');
   console.log('  ArtAlly — Node.js Fine Art Auction Platform');
   console.log(`  Local URL:     http://localhost:${PORT}`);

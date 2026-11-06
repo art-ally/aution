@@ -145,7 +145,9 @@ app.use(async (req, res, next) => {
   await db.syncFromSupabaseIfConfigured();
 
   try {
-    AuctionEngineService.synchronizeAuctions(db);
+    if (!db.supabaseEnabled || db.initialSyncCompleted) {
+      AuctionEngineService.synchronizeAuctions(db);
+    }
   } catch (err) {
     console.error('[ArtAlly Auction Sync]', err.message);
   }
@@ -280,7 +282,7 @@ app.use(async (req, res, next) => {
   const origRedirect = res.redirect.bind(res);
   res.redirect = function (...args) {
     saveSession();
-    if (IS_VERCEL && (db.hasPendingSync || db._flushInFlight)) {
+    if (db.supabaseEnabled && (db.hasPendingSync || db._flushInFlight)) {
       Promise.race([
         db.flush(),
         new Promise((resolve) => setTimeout(resolve, 4000)),
@@ -291,10 +293,23 @@ app.use(async (req, res, next) => {
         });
       return;
     }
-    if (db.hasPendingSync) {
-      db.flush().catch(() => {});
-    }
     return origRedirect(...args);
+  };
+
+  const origJson = res.json.bind(res);
+  res.json = function (...args) {
+    if (req.method !== 'GET' && db.supabaseEnabled && (db.hasPendingSync || db._flushInFlight)) {
+      Promise.race([
+        db.flush(),
+        new Promise((resolve) => setTimeout(resolve, 4000)),
+      ])
+        .catch(() => {})
+        .finally(() => {
+          origJson(...args);
+        });
+      return res;
+    }
+    return origJson(...args);
   };
 
   res.renderPage = (templateName, data = {}, statusCode = 200) => {
@@ -304,7 +319,7 @@ app.use(async (req, res, next) => {
       res.status(statusCode);
       renderView(res, templateName, data);
     };
-    if (IS_VERCEL && (db.hasPendingSync || db._flushInFlight)) {
+    if (db.supabaseEnabled && (db.hasPendingSync || db._flushInFlight)) {
       Promise.race([
         db.flush(),
         new Promise((resolve) => setTimeout(resolve, 4000)),
@@ -312,9 +327,6 @@ app.use(async (req, res, next) => {
         .catch(() => {})
         .finally(sendRendered);
       return;
-    }
-    if (db.hasPendingSync) {
-      db.flush().catch(() => {});
     }
     sendRendered();
   };
@@ -3651,8 +3663,14 @@ app.post('/admin/artworks/delete', (req, res) => {
   for (const img of db.where('artwork_images', (i) => Number(i.artwork_id) === artworkId)) {
     db.delete('artwork_images', img.id);
   }
+  for (const doc of db.where('artwork_documents', (d) => Number(d.artwork_id) === artworkId)) {
+    db.delete('artwork_documents', doc.id);
+  }
   for (const bid of db.where('bids', (b) => Number(b.artwork_id) === artworkId)) {
     db.delete('bids', bid.id);
+  }
+  for (const w of db.where('watchlists', (wl) => Number(wl.artwork_id) === artworkId)) {
+    db.delete('watchlists', w.id);
   }
 
   db.delete('artworks', artworkId);
@@ -3726,16 +3744,47 @@ app.post('/admin/users/delete', (req, res) => {
 
   const name = target.name || `User #${userId}`;
   for (const ap of db.where('artist_profiles', (p) => Number(p.user_id) === userId)) {
+    for (const fa of db.where('followed_artists', (f) => Number(f.artist_profile_id) === Number(ap.id))) {
+      db.delete('followed_artists', fa.id);
+    }
     db.delete('artist_profiles', ap.id);
   }
+  for (const bp of db.where('buyer_profiles', (p) => Number(p.user_id) === userId)) {
+    db.delete('buyer_profiles', bp.id);
+  }
   for (const art of db.where('artworks', (a) => Number(a.artist_id) === userId)) {
-    for (const sub of db.where('artwork_submissions', (s) => Number(s.artwork_id) === Number(art.id))) {
+    const artId = Number(art.id);
+    for (const sub of db.where('artwork_submissions', (s) => Number(s.artwork_id) === artId)) {
       db.delete('artwork_submissions', sub.id);
     }
-    for (const auc of db.where('auctions', (a) => Number(a.artwork_id) === Number(art.id))) {
+    for (const auc of db.where('auctions', (a) => Number(a.artwork_id) === artId)) {
       db.delete('auctions', auc.id);
     }
+    for (const img of db.where('artwork_images', (i) => Number(i.artwork_id) === artId)) {
+      db.delete('artwork_images', img.id);
+    }
+    for (const doc of db.where('artwork_documents', (d) => Number(d.artwork_id) === artId)) {
+      db.delete('artwork_documents', doc.id);
+    }
+    for (const bid of db.where('bids', (b) => Number(b.artwork_id) === artId)) {
+      db.delete('bids', bid.id);
+    }
+    for (const wl of db.where('watchlists', (w) => Number(w.artwork_id) === artId)) {
+      db.delete('watchlists', wl.id);
+    }
     db.delete('artworks', art.id);
+  }
+  for (const ev of db.where('email_verifications', (e) => Number(e.user_id) === userId)) {
+    db.delete('email_verifications', ev.id);
+  }
+  for (const n of db.where('notifications', (nf) => Number(nf.user_id) === userId)) {
+    db.delete('notifications', n.id);
+  }
+  for (const wl of db.where('watchlists', (w) => Number(w.user_id) === userId)) {
+    db.delete('watchlists', wl.id);
+  }
+  for (const fa of db.where('followed_artists', (f) => Number(f.user_id) === userId)) {
+    db.delete('followed_artists', fa.id);
   }
 
   db.delete('users', userId);
