@@ -470,6 +470,33 @@ function savePrivateDocument(fileObj, userId) {
   return filename;
 }
 
+function saveUploadedReceiptFile(fileObj, base64Data, invoiceId = 0) {
+  const prefix = `receipt_inv${invoiceId}_`;
+  if (base64Data && typeof base64Data === 'string' && base64Data.startsWith('data:')) {
+    if (IS_VERCEL && base64Data.length < 5 * 1024 * 1024) {
+      return base64Data;
+    }
+    const imgSaved = saveBase64Image(base64Data, 'receipts', prefix);
+    if (imgSaved) return imgSaved;
+  }
+  if (!fileObj || !fileObj.buffer || fileObj.size <= 0) return null;
+  const extRaw = path.extname(fileObj.originalname || '').toLowerCase().replace('.', '');
+  const allowed = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'jfif', 'pdf'];
+  let ext = allowed.includes(extRaw) ? extRaw : 'jpg';
+  if (ext === 'jpeg' || ext === 'jfif') ext = 'jpg';
+
+  if (IS_VERCEL && fileObj.size < 4.5 * 1024 * 1024) {
+    const mime = fileObj.mimetype || (ext === 'pdf' ? 'application/pdf' : `image/${ext}`);
+    return `data:${mime};base64,${fileObj.buffer.toString('base64')}`;
+  }
+
+  const filename = `${prefix}${crypto.randomBytes(8).toString('hex')}.${ext}`;
+  const targetDir = path.join(UPLOAD_ROOT, 'receipts');
+  fs.mkdirSync(targetDir, { recursive: true });
+  fs.writeFileSync(path.join(targetDir, filename), fileObj.buffer);
+  return `/uploads/receipts/${filename}`;
+}
+
 // ============================================================================
 // 1. PUBLIC ROUTES
 // ============================================================================
@@ -882,7 +909,7 @@ const INSTITUTIONAL_PAGES = {
   },
   contact: {
     title: 'Private Client & Specialist Concierge',
-    subtitle: 'Geneva · New York · London · Paris',
+    subtitle: 'Geneva · New York · London · Paris · Istanbul',
   },
   terms: {
     title: 'Conditions of Sale & Terms of Use',
@@ -5070,6 +5097,22 @@ function normalizeContractAgreement(db, agr) {
       normalizedInvoice?.payment_routing_details ?? agr.payment_routing_details ?? '',
     payment_bank_address:
       normalizedInvoice?.payment_bank_address ?? agr.payment_bank_address ?? '',
+    wu_receiver_name:
+      normalizedInvoice?.wu_receiver_name ?? agr.wu_receiver_name ?? '',
+    wu_receiver_country:
+      normalizedInvoice?.wu_receiver_country ?? agr.wu_receiver_country ?? '',
+    wu_receiver_city:
+      normalizedInvoice?.wu_receiver_city ?? agr.wu_receiver_city ?? '',
+    wu_receiver_address:
+      normalizedInvoice?.wu_receiver_address ?? agr.wu_receiver_address ?? '',
+    wu_receiver_phone:
+      normalizedInvoice?.wu_receiver_phone ?? agr.wu_receiver_phone ?? '',
+    wu_receiver_email:
+      normalizedInvoice?.wu_receiver_email ?? agr.wu_receiver_email ?? '',
+    wu_payout_method:
+      normalizedInvoice?.wu_payout_method ?? agr.wu_payout_method ?? '',
+    wu_mtcn_note:
+      normalizedInvoice?.wu_mtcn_note ?? agr.wu_mtcn_note ?? '',
     crypto_currency:
       normalizedInvoice?.crypto_currency ?? agr.crypto_currency ?? '',
     crypto_network:
@@ -5147,6 +5190,14 @@ function createOrSyncContractAgreementFromInvoice(db, invoice, adminId = 1, tota
       payment_account_number: normInv.payment_account_number || '',
       payment_routing_details: normInv.payment_routing_details || '',
       payment_bank_address: normInv.payment_bank_address || '',
+      wu_receiver_name: normInv.wu_receiver_name || '',
+      wu_receiver_country: normInv.wu_receiver_country || '',
+      wu_receiver_city: normInv.wu_receiver_city || '',
+      wu_receiver_address: normInv.wu_receiver_address || '',
+      wu_receiver_phone: normInv.wu_receiver_phone || '',
+      wu_receiver_email: normInv.wu_receiver_email || '',
+      wu_payout_method: normInv.wu_payout_method || '',
+      wu_mtcn_note: normInv.wu_mtcn_note || '',
       crypto_currency: normInv.crypto_currency || '',
       crypto_network: normInv.crypto_network || '',
       crypto_wallet_address: normInv.crypto_wallet_address || '',
@@ -5214,6 +5265,14 @@ function createOrSyncContractAgreementFromInvoice(db, invoice, adminId = 1, tota
     payment_account_number: normInv.payment_account_number || '',
     payment_routing_details: normInv.payment_routing_details || '',
     payment_bank_address: normInv.payment_bank_address || '',
+    wu_receiver_name: normInv.wu_receiver_name || '',
+    wu_receiver_country: normInv.wu_receiver_country || '',
+    wu_receiver_city: normInv.wu_receiver_city || '',
+    wu_receiver_address: normInv.wu_receiver_address || '',
+    wu_receiver_phone: normInv.wu_receiver_phone || '',
+    wu_receiver_email: normInv.wu_receiver_email || '',
+    wu_payout_method: normInv.wu_payout_method || '',
+    wu_mtcn_note: normInv.wu_mtcn_note || '',
     crypto_currency: normInv.crypto_currency || '',
     crypto_network: normInv.crypto_network || '',
     crypto_wallet_address: normInv.crypto_wallet_address || '',
@@ -5251,19 +5310,42 @@ app.post('/admin/invoices/generate', (req, res) => {
     helpers.gmdate('Y-m-d', helpers.strtotime('+3 days'));
   const status = req.body.status === 'paid' ? 'paid' : 'unpaid';
 
-  const paymentMethod = ['bank', 'crypto', 'bank_and_crypto'].includes(req.body.payment_method)
+  const allowedPaymentMethods = [
+    'bank_and_crypto',
+    'western_union_and_crypto',
+    'western_union',
+    'bank',
+    'crypto',
+    'bank_and_western_union',
+    'all',
+  ];
+  const paymentMethod = allowedPaymentMethods.includes(req.body.payment_method)
     ? req.body.payment_method
     : 'bank_and_crypto';
-  const paymentAccountName = String(req.body.payment_account_name || '').trim();
-  const paymentBankName = String(req.body.payment_bank_name || '').trim();
-  const paymentAccountNumber = String(req.body.payment_account_number || '').trim();
-  const paymentRoutingDetails = String(req.body.payment_routing_details || '').trim();
-  const paymentBankAddress = String(req.body.payment_bank_address || '').trim();
 
-  const cryptoCurrency = String(req.body.crypto_currency || '').trim();
-  const cryptoNetwork = String(req.body.crypto_network || '').trim();
-  const cryptoWalletAddress = String(req.body.crypto_wallet_address || '').trim();
-  const cryptoMemo = String(req.body.crypto_memo || '').trim();
+  const includeBank = ['bank', 'bank_and_crypto', 'bank_and_western_union', 'all'].includes(paymentMethod);
+  const includeWu = ['western_union', 'western_union_and_crypto', 'bank_and_western_union', 'all'].includes(paymentMethod);
+  const includeCrypto = ['crypto', 'bank_and_crypto', 'western_union_and_crypto', 'all'].includes(paymentMethod);
+
+  const paymentAccountName = includeBank ? String(req.body.payment_account_name || '').trim() : '';
+  const paymentBankName = includeBank ? String(req.body.payment_bank_name || '').trim() : '';
+  const paymentAccountNumber = includeBank ? String(req.body.payment_account_number || '').trim() : '';
+  const paymentRoutingDetails = includeBank ? String(req.body.payment_routing_details || '').trim() : '';
+  const paymentBankAddress = includeBank ? String(req.body.payment_bank_address || '').trim() : '';
+
+  const wuReceiverName = includeWu ? String(req.body.wu_receiver_name || '').trim() : '';
+  const wuReceiverCountry = includeWu ? String(req.body.wu_receiver_country || '').trim() : '';
+  const wuReceiverCity = includeWu ? String(req.body.wu_receiver_city || '').trim() : '';
+  const wuReceiverAddress = includeWu ? String(req.body.wu_receiver_address || '').trim() : '';
+  const wuReceiverPhone = includeWu ? String(req.body.wu_receiver_phone || '').trim() : '';
+  const wuReceiverEmail = includeWu ? String(req.body.wu_receiver_email || '').trim() : '';
+  const wuPayoutMethod = includeWu ? String(req.body.wu_payout_method || '').trim() : '';
+  const wuMtcnNote = includeWu ? String(req.body.wu_mtcn_note || '').trim() : '';
+
+  const cryptoCurrency = includeCrypto ? String(req.body.crypto_currency || '').trim() : '';
+  const cryptoNetwork = includeCrypto ? String(req.body.crypto_network || '').trim() : '';
+  const cryptoWalletAddress = includeCrypto ? String(req.body.crypto_wallet_address || '').trim() : '';
+  const cryptoMemo = includeCrypto ? String(req.body.crypto_memo || '').trim() : '';
 
   const paymentInstructions = String(req.body.payment_instructions || '').trim();
 
@@ -5272,11 +5354,11 @@ app.post('/admin/invoices/generate', (req, res) => {
     !artworkTitle ||
     lineItems.length === 0 ||
     feeAmount <= 0 ||
-    (!paymentAccountNumber && !cryptoWalletAddress)
+    (!paymentAccountNumber && !cryptoWalletAddress && !wuReceiverName)
   ) {
     req.setFlash(
       'error',
-      'Please enter the Artist Name, Artwork Being Verified, at least one Invoice Description item with an amount greater than 0, and at least one Receiving Payment Method (Bank Account Number or Cryptocurrency Wallet Address).'
+      'Please enter the Artist Name, Artwork Being Verified, at least one Invoice Description item with an amount greater than 0, and at least one Receiving Payment Method (Bank Account Number, Western Union Receiver Name, or Cryptocurrency Wallet Address).'
     );
     return res.redirect('/admin/dashboard#invoice-generator');
   }
@@ -5325,11 +5407,25 @@ app.post('/admin/invoices/generate', (req, res) => {
     payment_account_number: paymentAccountNumber,
     payment_routing_details: paymentRoutingDetails,
     payment_bank_address: paymentBankAddress,
+    wu_receiver_name: wuReceiverName,
+    wu_receiver_country: wuReceiverCountry,
+    wu_receiver_city: wuReceiverCity,
+    wu_receiver_address: wuReceiverAddress,
+    wu_receiver_phone: wuReceiverPhone,
+    wu_receiver_email: wuReceiverEmail,
+    wu_payout_method: wuPayoutMethod,
+    wu_mtcn_note: wuMtcnNote,
     crypto_currency: cryptoCurrency,
     crypto_network: cryptoNetwork,
     crypto_wallet_address: cryptoWalletAddress,
     crypto_memo: cryptoMemo,
     payment_instructions: paymentInstructions,
+    receipt_uploaded: false,
+    receipt_file_url: null,
+    receipt_payment_channel: null,
+    receipt_reference_number: null,
+    receipt_sender_notes: null,
+    receipt_uploaded_at: null,
     created_by: Number(admin.id),
   });
 
@@ -5537,6 +5633,83 @@ function canAccessAuthenticationInvoice(req, db, invoice) {
   return false;
 }
 
+app.post('/invoices/:id/upload-receipt', upload.single('receipt_file'), (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const db = DatabaseEngine.getInstance();
+  const invoiceId = Number(req.params.id || 0);
+  const rawInvoice = db.find('authentication_invoices', invoiceId);
+  if (!rawInvoice || !canAccessAuthenticationInvoice(req, db, rawInvoice)) {
+    req.setFlash('error', 'Authentication invoice not found or access denied.');
+    return res.redirect('/artist/dashboard#authentication-invoices');
+  }
+
+  const redirectUrl =
+    req.body.redirect_to === 'invoice'
+      ? `/invoices/${invoiceId}#payment-receipt-verification`
+      : '/artist/dashboard#authentication-invoices';
+
+  const paymentChannel = String(req.body.receipt_payment_channel || '').trim();
+  const referenceNumber = String(req.body.receipt_reference_number || '').trim();
+  const senderNotes = String(req.body.receipt_sender_notes || '').trim();
+
+  if (!paymentChannel) {
+    req.setFlash('error', 'Please select the Payment Method Used.');
+    return res.redirect(redirectUrl);
+  }
+
+  const savedReceiptUrl =
+    saveUploadedReceiptFile(req.file, req.body.receipt_file_data, invoiceId) ||
+    rawInvoice.receipt_file_url ||
+    null;
+
+  if (!savedReceiptUrl) {
+    req.setFlash('error', 'Please upload your Payment Receipt / Confirmation Slip.');
+    return res.redirect(redirectUrl);
+  }
+
+  const uploadedAt = formatUtcNow();
+  db.update('authentication_invoices', invoiceId, {
+    receipt_uploaded: true,
+    receipt_file_url: savedReceiptUrl,
+    receipt_payment_channel: paymentChannel,
+    receipt_reference_number: referenceNumber,
+    receipt_sender_notes: senderNotes,
+    receipt_uploaded_at: uploadedAt,
+  });
+
+  // Notify all administrators immediately that payment receipt has been uploaded
+  const admins = db
+    .all('users')
+    .filter((u) => helpers.userHasRole(u, 'admin'));
+  for (const adm of admins) {
+    db.insert('notifications', {
+      user_id: Number(adm.id),
+      type: 'invoice_receipt_uploaded',
+      title: `🧾 Payment Receipt Uploaded: ${rawInvoice.invoice_number} (${paymentChannel})`,
+      message: `${rawInvoice.artist_name || user.name} uploaded a payment confirmation slip for "${rawInvoice.artwork_title}" via ${paymentChannel}${referenceNumber ? ` (Ref: ${referenceNumber})` : ''}. Review the receipt in the Admin Invoice Ledger.`,
+      action_url: `/admin/dashboard#invoice-generator`,
+      read_at: null,
+    });
+  }
+
+  logAudit(
+    db,
+    user,
+    'AUTHENTICATION_INVOICE_RECEIPT_UPLOADED',
+    'authentication_invoice',
+    invoiceId,
+    `Uploaded payment confirmation receipt for invoice ${rawInvoice.invoice_number} via ${paymentChannel}${referenceNumber ? ` (Ref: ${referenceNumber})` : ''}.`,
+    req.ip
+  );
+
+  req.setFlash(
+    'success',
+    `✓ Payment Receipt / Confirmation Slip for Invoice ${rawInvoice.invoice_number} (${paymentChannel}) has been uploaded and submitted to ArtAlly Curatorial Billing.`
+  );
+  return res.redirect(redirectUrl);
+});
+
 app.get('/invoices/:id', (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
@@ -5704,7 +5877,7 @@ app.get('/invoices/:id/download', (req, res) => {
         <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(184,150,90,0.35);padding-bottom:10px;flex-wrap:wrap;gap:8px;">
           <div>
             <p style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:0.18em;color:#C6A664;font-weight:700;">Official Payment Remittance Instructions</p>
-            <h3 style="margin:4px 0 0;font-family:Georgia,serif;font-size:19px;color:#F4EFE6;">Designated Bank &amp; Cryptocurrency Payment Details</h3>
+            <h3 style="margin:4px 0 0;font-family:Georgia,serif;font-size:19px;color:#F4EFE6;">Designated Bank, Western Union &amp; Cryptocurrency Payment Details</h3>
           </div>
           <span style="font-family:monospace;font-size:12px;padding:4px 10px;border:1px solid #C6A664;color:#C6A664;">QUOTE INVOICE NO: ${helpers.e(invoice.invoice_number)}</span>
         </div>
@@ -5712,7 +5885,7 @@ app.get('/invoices/:id/download', (req, res) => {
         ${
           invoice.payment_account_number || invoice.payment_bank_name || invoice.payment_account_name
             ? `<div style="margin-top:14px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.12);">
-                <p style="margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.15em;color:#C6A664;font-weight:700;">Option A — Bank Wire / Financial Institution Transfer</p>
+                <p style="margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.15em;color:#C6A664;font-weight:700;">🏛 Bank Wire / Financial Institution Transfer</p>
                 <div class="bank-grid" style="margin-top:0;">
                   ${invoice.payment_account_name ? `<div><p class="bank-item-label">Beneficiary / Account Name</p><p class="bank-item-val">${helpers.e(invoice.payment_account_name)}</p></div>` : ''}
                   ${invoice.payment_bank_name ? `<div><p class="bank-item-label">Bank / Financial Institution</p><p class="bank-item-val">${helpers.e(invoice.payment_bank_name)}</p></div>` : ''}
@@ -5725,11 +5898,27 @@ app.get('/invoices/:id/download', (req, res) => {
         }
 
         ${
+          invoice.wu_receiver_name || invoice.wu_receiver_country || invoice.wu_receiver_city || invoice.wu_receiver_phone
+            ? `<div style="margin-top:14px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.12);">
+                <p style="margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.15em;color:#C6A664;font-weight:700;">🌐 Western Union International Money Transfer</p>
+                <div class="bank-grid" style="margin-top:0;">
+                  ${invoice.wu_receiver_name ? `<div><p class="bank-item-label">Receiver Full Name (As on Gov. ID)</p><p class="bank-item-val" style="color:#C6A664;">${helpers.e(invoice.wu_receiver_name)}</p></div>` : ''}
+                  ${invoice.wu_payout_method ? `<div><p class="bank-item-label">Transfer / Payout Method</p><p class="bank-item-val">${helpers.e(invoice.wu_payout_method)}</p></div>` : ''}
+                  ${invoice.wu_receiver_country ? `<div><p class="bank-item-label">Destination Country</p><p class="bank-item-val">${helpers.e(invoice.wu_receiver_country)}</p></div>` : ''}
+                  ${invoice.wu_receiver_city ? `<div><p class="bank-item-label">City / State / Province</p><p class="bank-item-val">${helpers.e(invoice.wu_receiver_city)}</p></div>` : ''}
+                  ${invoice.wu_receiver_address ? `<div style="grid-column: 1 / -1;"><p class="bank-item-label">Receiver Street Address &amp; Postal Code</p><p class="bank-item-val">${helpers.e(invoice.wu_receiver_address)}</p></div>` : ''}
+                  ${invoice.wu_receiver_phone ? `<div><p class="bank-item-label">Receiver Phone Number</p><p class="bank-item-val">${helpers.e(invoice.wu_receiver_phone)}</p></div>` : ''}
+                  ${invoice.wu_receiver_email ? `<div><p class="bank-item-label">Receiver Email / ID Reference</p><p class="bank-item-val">${helpers.e(invoice.wu_receiver_email)}</p></div>` : ''}
+                  ${invoice.wu_mtcn_note ? `<div style="grid-column: 1 / -1;"><p class="bank-item-label">MTCN (10-Digit Control Number) &amp; Verification Note</p><p class="bank-item-val" style="font-size:13px;font-weight:500;color:#E2DDD5;">${helpers.e(invoice.wu_mtcn_note)}</p></div>` : ''}
+                </div>
+              </div>`
+            : ''
+        }
+
+        ${
           invoice.crypto_wallet_address || invoice.crypto_currency
             ? `<div style="margin-top:14px;padding-bottom:8px;">
-                <p style="margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.15em;color:#C6A664;font-weight:700;">${
-                  invoice.payment_account_number ? 'Option B — ' : ''
-                }Cryptocurrency / Digital Asset Remittance</p>
+                <p style="margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.15em;color:#C6A664;font-weight:700;">₿ Cryptocurrency / Digital Asset Remittance</p>
                 <div class="bank-grid" style="margin-top:0;">
                   ${invoice.crypto_currency ? `<div><p class="bank-item-label">Accepted Cryptocurrency / Asset</p><p class="bank-item-val">${helpers.e(invoice.crypto_currency)}</p></div>` : ''}
                   ${invoice.crypto_network ? `<div><p class="bank-item-label">Blockchain Network / Protocol</p><p class="bank-item-val">${helpers.e(invoice.crypto_network)}</p></div>` : ''}
@@ -6055,6 +6244,14 @@ app.post('/admin/agreements/generate', (req, res) => {
     payment_account_number: targetInvoice?.payment_account_number || '',
     payment_routing_details: targetInvoice?.payment_routing_details || '',
     payment_bank_address: targetInvoice?.payment_bank_address || '',
+    wu_receiver_name: targetInvoice?.wu_receiver_name || '',
+    wu_receiver_country: targetInvoice?.wu_receiver_country || '',
+    wu_receiver_city: targetInvoice?.wu_receiver_city || '',
+    wu_receiver_address: targetInvoice?.wu_receiver_address || '',
+    wu_receiver_phone: targetInvoice?.wu_receiver_phone || '',
+    wu_receiver_email: targetInvoice?.wu_receiver_email || '',
+    wu_payout_method: targetInvoice?.wu_payout_method || '',
+    wu_mtcn_note: targetInvoice?.wu_mtcn_note || '',
     crypto_currency: targetInvoice?.crypto_currency || '',
     crypto_network: targetInvoice?.crypto_network || '',
     crypto_wallet_address: targetInvoice?.crypto_wallet_address || '',
@@ -6340,7 +6537,7 @@ app.get('/agreements/:id/download', (req, res) => {
         <div class="lh-brand">
           <div class="lh-crest">AA</div>
           <div>
-            <p style="margin:0;font-family:sans-serif;font-size:10px;letter-spacing:0.26em;text-transform:uppercase;color:#C6A664;font-weight:700;">OFFICIAL INSTITUTIONAL LETTERHEAD · GENEVA · NEW YORK · LONDON · PARIS</p>
+            <p style="margin:0;font-family:sans-serif;font-size:10px;letter-spacing:0.26em;text-transform:uppercase;color:#C6A664;font-weight:700;">OFFICIAL INSTITUTIONAL LETTERHEAD · GENEVA · NEW YORK · LONDON · PARIS · ISTANBUL</p>
             <h1 style="margin:4px 0;font-size:28px;letter-spacing:0.14em;font-weight:600;color:#FBF9F5;">ARTALLY</h1>
             <p style="margin:0;font-family:sans-serif;font-size:11px;color:#D6D0C4;">ArtAlly International Fine Art Auctioneers &amp; Curatorial House Ltd. · Rue du Rhône 42, 1204 Geneva · Art-Ally@consultant.com</p>
           </div>

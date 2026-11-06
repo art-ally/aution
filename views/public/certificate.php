@@ -20,7 +20,7 @@ $netPayout = round($finalPrice - $commissionAmt, 2);
             <div>
                 <p class="text-[11px] uppercase tracking-[0.28em] text-bronze font-semibold">International Fine Art Auctioneers</p>
                 <h1 class="font-serif text-4xl sm:text-5xl tracking-[0.18em] text-obsidian font-semibold mt-1">ArtAlly</h1>
-                <p class="text-xs text-stone mt-1">Geneva · New York · London · Paris</p>
+                <p class="text-xs text-stone mt-1">Geneva · New York · London · Paris · Istanbul</p>
             </div>
             <div class="sm:text-right text-xs">
                 <p class="font-mono font-semibold text-obsidian text-sm"><?= e($certNumber) ?></p>

@@ -91,7 +91,7 @@ $isArtistDashboard = ($currentPath === '/artist' || str_starts_with($currentPath
             <div class="flex items-center space-x-4">
                 <span class="text-bronzeLight font-medium">Autumn Evening Sales</span>
                 <span class="hidden md:inline text-stone">|</span>
-                <span class="hidden md:inline text-gray-300">Geneva · New York · London · Paris — Timed Bidding Open</span>
+                <span class="hidden md:inline text-gray-300">Geneva · New York · London · Paris · Istanbul — Timed Bidding Open</span>
             </div>
             <div class="flex items-center space-x-5">
                 <a href="/how-it-works" class="hover:text-bronzeLight transition">How Bidding Works</a>
@@ -317,7 +317,7 @@ $isArtistDashboard = ($currentPath === '/artist' || str_starts_with($currentPath
                     An international art auction house dedicated to connecting discerning collectors with vetted living artists and distinguished private collections through transparent timed auctions.
                 </p>
                 <p class="text-[11px] uppercase tracking-widest text-bronzeLight">
-                    Geneva · New York · London · Paris
+                    Geneva · New York · London · Paris · Istanbul
                 </p>
             </div>
 

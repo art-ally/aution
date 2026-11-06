@@ -25,7 +25,7 @@ class SeederService
                 'require_email_verification_for_bidding' => true,
                 'buyer_verification_code' => 'NOIR-BUYER-2026',
                 'contact_email' => 'concierge@ateliernoir.art',
-                'headquarters' => 'Geneva · New York · London · Paris',
+                'headquarters' => 'Geneva · New York · London · Paris · Istanbul',
             ]);
 
             // 2. Users (Admin, Curated Artists, Verified Collectors)

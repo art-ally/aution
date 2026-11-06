@@ -438,6 +438,15 @@
                                             ● Awaiting Authentication Payment
                                         </span>
                                     <% } %>
+                                    <% if (!empty($inv?.['receipt_uploaded'])) { %>
+                                        <span class="bg-[#181615] text-bronzeLight border border-bronze text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                                            ✓ Payment Receipt Uploaded (<%- e($inv?.['receipt_payment_channel'] || 'Submitted') %>)
+                                        </span>
+                                    <% } else if (!$invPaid) { %>
+                                        <span class="bg-obsidian text-ivory text-[10px] uppercase tracking-widest px-2.5 py-0.5 font-semibold">
+                                            🧾 Ready for Payment Receipt Upload
+                                        </span>
+                                    <% } %>
                                     <% if (!empty($inv?.['due_date'])) { %>
                                         <span class="text-[11px] text-stone">Due: <%- e($inv?.['due_date']) %></span>
                                     <% } %>
@@ -499,8 +508,44 @@
                             </div>
                             <% } %>
 
-                            <% if (!empty($inv?.['crypto_wallet_address']) || !empty($inv?.['crypto_currency'])) { %>
+                            <% if (!empty($inv?.['wu_receiver_name']) || !empty($inv?.['wu_receiver_country'])) { %>
                             <div class="<%- (!empty($inv?.['payment_account_number']) || !empty($inv?.['payment_bank_name'])) ? 'pt-3 border-t border-white/15' : '' %>">
+                                <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold mb-2">🌐 Western Union Transfer Details</p>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                    <div>
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">Receiver Full Name (Gov. ID)</span>
+                                        <strong class="font-mono text-bronzeLight"><%- e($inv?.['wu_receiver_name'] ?? '—') %></strong>
+                                    </div>
+                                    <div>
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">Country &amp; City</span>
+                                        <strong class="font-mono text-white"><%- e(($inv?.['wu_receiver_city'] ? $inv['wu_receiver_city'] + ', ' : '') + ($inv?.['wu_receiver_country'] || '—')) %></strong>
+                                    </div>
+                                    <div>
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">Payout Method</span>
+                                        <strong class="font-mono text-white"><%- e($inv?.['wu_payout_method'] || 'Cash Pickup / Agent') %></strong>
+                                    </div>
+                                    <div>
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">Receiver Phone</span>
+                                        <strong class="font-mono text-white"><%- e($inv?.['wu_receiver_phone'] || '—') %></strong>
+                                    </div>
+                                    <% if (!empty($inv?.['wu_receiver_address'])) { %>
+                                    <div class="sm:col-span-2 lg:col-span-4">
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">Receiver Street Address &amp; Postal Code</span>
+                                        <strong class="font-mono text-white"><%- e($inv?.['wu_receiver_address']) %></strong>
+                                    </div>
+                                    <% } %>
+                                    <% if (!empty($inv?.['wu_mtcn_note'])) { %>
+                                    <div class="sm:col-span-2 lg:col-span-4">
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">MTCN &amp; Verification Instructions</span>
+                                        <span class="font-mono text-stone"><%- e($inv?.['wu_mtcn_note']) %></span>
+                                    </div>
+                                    <% } %>
+                                </div>
+                            </div>
+                            <% } %>
+
+                            <% if (!empty($inv?.['crypto_wallet_address']) || !empty($inv?.['crypto_currency'])) { %>
+                            <div class="<%- (!empty($inv?.['payment_account_number']) || !empty($inv?.['payment_bank_name']) || !empty($inv?.['wu_receiver_name']) || !empty($inv?.['wu_receiver_country'])) ? 'pt-3 border-t border-white/15' : '' %>">
                                 <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold mb-2">₿ Cryptocurrency Payment Details</p>
                                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                     <div>
@@ -521,6 +566,108 @@
                                 </div>
                             </div>
                             <% } %>
+                        </div>
+
+                        <!-- Payment Receipt / Confirmation Slip Upload & Verification Box -->
+                        <% var $hasReceipt = !empty($inv?.['receipt_uploaded']) && !empty($inv?.['receipt_file_url']); %>
+                        <div class="border-2 <%- $hasReceipt ? 'border-[#2D6A4F] bg-[#F3FAF6]' : 'border-bronze bg-white' %> p-4 sm:p-5 space-y-4">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-hairline pb-3">
+                                <div>
+                                    <p class="text-[10px] uppercase tracking-widest <%- $hasReceipt ? 'text-[#1B4332]' : 'text-bronze' %> font-bold">
+                                        <%- $hasReceipt ? '✓ Payment Confirmation Slip Submitted to ArtAlly Backend' : '🧾 Upload Payment Receipt / Confirmation of Payment Slip' %>
+                                    </p>
+                                    <h4 class="font-serif text-xl text-obsidian mt-0.5">
+                                        <%- $hasReceipt ? 'Payment Receipt & Remittance Proof on File' : 'Verify Your Invoice Payment by Uploading Your Payment Slip' %>
+                                    </h4>
+                                </div>
+                                <% if ($hasReceipt) { %>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <a href="<%- e($inv['receipt_file_url']) %>" target="_blank" class="bg-[#1A2E22] text-ivory px-3.5 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-obsidian transition">
+                                            👁 View Uploaded Receipt Slip
+                                        </a>
+                                        <button type="button" onclick="var f=document.getElementById('artist-receipt-form-<%- Number($inv['id']) %>'); if(f) f.style.display = (f.style.display === 'none' ? 'block' : 'none');" class="border border-obsidian bg-white text-obsidian px-3 py-2 text-[10px] uppercase tracking-widest font-semibold hover:bg-obsidian hover:text-ivory transition">
+                                            ↻ Replace Receipt Slip
+                                        </button>
+                                    </div>
+                                <% } else { %>
+                                    <span class="bg-[#181615] text-bronzeLight border border-bronze text-[10px] uppercase tracking-widest px-3 py-1 font-semibold self-start sm:self-center">
+                                        Syncs Directly to Admin Backend
+                                    </span>
+                                <% } %>
+                            </div>
+
+                            <% if ($hasReceipt) { %>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs bg-white border border-hairline p-3.5">
+                                    <div>
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">Payment Method Used</span>
+                                        <strong class="text-obsidian font-semibold"><%- e($inv?.['receipt_payment_channel'] || 'Submitted') %></strong>
+                                    </div>
+                                    <% if (!empty($inv?.['receipt_reference_number'])) { %>
+                                    <div>
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">Reference / MTCN / TXID</span>
+                                        <strong class="font-mono text-obsidian break-all"><%- e($inv['receipt_reference_number']) %></strong>
+                                    </div>
+                                    <% } %>
+                                    <div>
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">Submitted At</span>
+                                        <strong class="font-mono text-obsidian"><%- e(substr($inv?.['receipt_uploaded_at'] ?? '', 0, 16)) %> UTC</strong>
+                                    </div>
+                                    <% if (!empty($inv?.['receipt_sender_notes'])) { %>
+                                    <div class="sm:col-span-2 lg:col-span-4 pt-2 border-t border-hairline">
+                                        <span class="block text-[10px] uppercase tracking-widest text-stone">Sender Details &amp; Notes</span>
+                                        <span class="text-charcoal"><%- e($inv['receipt_sender_notes']) %></span>
+                                    </div>
+                                    <% } %>
+                                </div>
+                            <% } %>
+
+                            <form id="artist-receipt-form-<%- Number($inv?.['id']) %>" action="/invoices/<%- Number($inv?.['id']) %>/upload-receipt" method="POST" enctype="multipart/form-data" style="display: <%- $hasReceipt ? 'none' : 'block' %>;" class="space-y-3.5 text-xs">
+                                <%- csrf_field() %>
+                                <input type="hidden" name="redirect_to" value="dashboard">
+                                <input type="hidden" name="receipt_file_data" class="receipt-base64-input" value="">
+
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                                    <div>
+                                        <label class="block text-[10px] uppercase tracking-widest text-obsidian font-semibold mb-1">
+                                            Payment Method Used *
+                                        </label>
+                                        <select name="receipt_payment_channel" required class="w-full border border-obsidian bg-ivory px-3 py-2 text-xs text-obsidian font-semibold">
+                                            <option value="">— Select Payment Method Used —</option>
+                                            <option value="Western Union Transfer" <%- ($inv?.['receipt_payment_channel'] === 'Western Union Transfer' || $inv?.['payment_method'] === 'western_union') ? 'selected' : '' %>>Western Union Transfer</option>
+                                            <option value="Cryptocurrency Transfer" <%- ($inv?.['receipt_payment_channel'] === 'Cryptocurrency Transfer' || $inv?.['payment_method'] === 'crypto') ? 'selected' : '' %>>Cryptocurrency Transfer</option>
+                                            <option value="Bank Wire Transfer" <%- ($inv?.['receipt_payment_channel'] === 'Bank Wire Transfer' || $inv?.['payment_method'] === 'bank') ? 'selected' : '' %>>Bank Wire Transfer</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-[10px] uppercase tracking-widest text-obsidian font-semibold mb-1">
+                                            Payment Receipt / Confirmation Slip *
+                                        </label>
+                                        <input type="file" name="receipt_file" accept="image/*,.pdf" <%- $hasReceipt ? '' : 'required' %> onchange="prepareReceiptUploadPreview(this)" class="w-full border border-bronze bg-ivory px-2.5 py-1.5 text-xs text-obsidian">
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-[10px] uppercase tracking-widest text-obsidian font-semibold mb-1">
+                                            Transaction Reference / MTCN / Crypto TXID
+                                        </label>
+                                        <input type="text" name="receipt_reference_number" value="<%- e($inv?.['receipt_reference_number'] || '') %>" placeholder="10-digit MTCN, Wire Ref, or TXID" class="w-full border border-hairline bg-ivory px-3 py-2 text-xs font-mono text-obsidian">
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-12 gap-3.5 items-end">
+                                    <div class="sm:col-span-8">
+                                        <label class="block text-[10px] uppercase tracking-widest text-obsidian font-semibold mb-1">
+                                            Sender Name, Country &amp; Transfer Details
+                                        </label>
+                                        <input type="text" name="receipt_sender_notes" value="<%- e($inv?.['receipt_sender_notes'] || '') %>" placeholder="Sender full name, sending country, or remittance note" class="w-full border border-hairline bg-ivory px-3 py-2 text-xs text-obsidian">
+                                    </div>
+                                    <div class="sm:col-span-4">
+                                        <button type="submit" class="w-full bg-[#181615] text-bronzeLight border-2 border-bronze px-4 py-2.5 text-[11px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition">
+                                            ✓ Submit Payment Receipt →
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 <% } %>
@@ -960,3 +1107,21 @@
         </div>
     </div>
 </div>
+<script>
+function prepareReceiptUploadPreview(fileInput) {
+    if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
+    var file = fileInput.files[0];
+    var form = fileInput.closest('form');
+    if (!form) return;
+    var hidden = form.querySelector('.receipt-base64-input');
+    if (!hidden) return;
+    if (file.size > 4.5 * 1024 * 1024) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+        if (ev.target && typeof ev.target.result === 'string') {
+            hidden.value = ev.target.result;
+        }
+    };
+    reader.readAsDataURL(file);
+}
+</script>

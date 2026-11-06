@@ -449,23 +449,27 @@ var $counterSubmissionsCount = $totalUnreadMsgCount;
                     </div>
                 </div>
 
-                <!-- Column 3: Payment Methods (Bank Account & Cryptocurrency Details) -->
+                <!-- Column 3: Payment Methods (Bank Account, Western Union & Cryptocurrency Details) -->
                 <div class="border border-bronze p-6 bg-[#181615] text-ivory space-y-4">
-                    <div class="flex items-center justify-between border-b border-white/15 pb-2 gap-2">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/15 pb-2 gap-2">
                         <p class="text-[11px] uppercase tracking-widest text-bronzeLight font-semibold">
-                            3. Payment Methods (Bank &amp; Crypto)
+                            3. Payment Methods (Bank, Western Union &amp; Crypto)
                         </p>
                         <select id="inv_payment_method" name="payment_method" onchange="toggleInvoicePaymentMethod(this.value)" class="border border-bronze bg-obsidian text-bronzeLight px-2 py-1 text-[10px] uppercase tracking-widest font-semibold">
                             <option value="bank_and_crypto">Bank + Crypto (Both)</option>
+                            <option value="western_union_and_crypto">Western Union + Crypto (Both)</option>
+                            <option value="western_union">Western Union Transfer Only</option>
                             <option value="bank">Bank Transfer Only</option>
                             <option value="crypto">Cryptocurrency Only</option>
+                            <option value="bank_and_western_union">Bank + Western Union (Both)</option>
+                            <option value="all">Bank + Western Union + Crypto (All)</option>
                         </select>
                     </div>
 
                     <!-- Bank Account Details Block -->
                     <div id="inv_bank_block" class="space-y-3 border border-white/15 bg-white/5 p-3.5">
                         <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
-                            🏛 Option A: Bank Account Details To Be Paid To
+                            🏛 Bank Account Details To Be Paid To
                         </p>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             <div>
@@ -493,10 +497,60 @@ var $counterSubmissionsCount = $totalUnreadMsgCount;
                         </div>
                     </div>
 
+                    <!-- Western Union Transfer Details Block -->
+                    <div id="inv_wu_block" style="display: none;" class="space-y-3 border border-bronze bg-[#1E1A14] p-3.5">
+                        <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
+                            🌐 Western Union Transfer Details (All Required Receiver Information)
+                        </p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Receiver Full Name (As on Gov. ID) *</label>
+                                <input type="text" name="wu_receiver_name" placeholder="First, Middle &amp; Last Name" class="w-full border border-bronze bg-white/10 px-2.5 py-1.5 text-xs font-mono text-bronzeLight placeholder-white/40">
+                            </div>
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Transfer / Payout Method</label>
+                                <input type="text" name="wu_payout_method" list="wu_payout_methods_list" placeholder="e.g., Cash Pickup at Agent Location" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                                <datalist id="wu_payout_methods_list">
+                                    <option value="Cash Pickup at Western Union Agent Location">
+                                    <option value="Direct to Receiver Bank Account">
+                                    <option value="Western Union Mobile Wallet">
+                                </datalist>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Destination Country *</label>
+                                <input type="text" name="wu_receiver_country" placeholder="e.g., United States / Switzerland / UK" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                            </div>
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">City / State / Province *</label>
+                                <input type="text" name="wu_receiver_city" placeholder="e.g., New York, NY / Geneva" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Receiver Street Address &amp; Postal / ZIP Code</label>
+                            <input type="text" name="wu_receiver_address" placeholder="Full residential or agent pickup address &amp; postal code" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Receiver Phone Number (with Country Code)</label>
+                                <input type="text" name="wu_receiver_phone" placeholder="e.g., +1 (555) 234-5678" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs font-mono text-white placeholder-white/40">
+                            </div>
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Receiver Email / ID Reference</label>
+                                <input type="text" name="wu_receiver_email" placeholder="Receiver email or ID type/ref" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">MTCN (10-Digit Control Number) &amp; Verification Instructions</label>
+                            <input type="text" name="wu_mtcn_note" value="Provide the 10-digit MTCN (Money Transfer Control Number), Sender Full Legal Name, Sender Country, and transfer receipt upon payment." placeholder="Instructions for MTCN submission &amp; test question if required" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs text-white placeholder-white/40">
+                        </div>
+                    </div>
+
                     <!-- Cryptocurrency Payment Details Block -->
                     <div id="inv_crypto_block" class="space-y-3 border border-bronze/60 bg-bronze/10 p-3.5">
                         <p class="text-[10px] uppercase tracking-widest text-bronzeLight font-semibold">
-                            ₿ Option B: Cryptocurrency Payment Details
+                            ₿ Cryptocurrency Payment Details
                         </p>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             <div>
@@ -528,8 +582,8 @@ var $counterSubmissionsCount = $totalUnreadMsgCount;
                             <input type="text" name="crypto_wallet_address" placeholder="0x... / T... / bc1q... (Paste Wallet Address)" class="w-full border border-bronze bg-white/10 px-2.5 py-1.5 text-xs font-mono text-bronzeLight placeholder-white/40">
                         </div>
                         <div>
-                            <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Memo / Destination Tag / Network Note (Optional)</label>
-                            <input type="text" name="crypto_memo" placeholder="Optional Memo / Tag or 'Send only on specified network'" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs font-mono text-white placeholder-white/40">
+                            <label class="block text-[9px] uppercase tracking-widest text-stone mb-1">Memo / Destination Tag / Network Note</label>
+                            <input type="text" name="crypto_memo" placeholder="Memo / Tag or 'Send only on specified network'" class="w-full border border-white/20 bg-white/10 px-2.5 py-1.5 text-xs font-mono text-white placeholder-white/40">
                         </div>
                     </div>
 
@@ -690,7 +744,7 @@ var $counterSubmissionsCount = $totalUnreadMsgCount;
                                 <th class="py-3 px-4">Artwork Verified</th>
                                 <th class="py-3 px-4">Receiving Account</th>
                                 <th class="py-3 px-4">Fee</th>
-                                <th class="py-3 px-4">Status</th>
+                                <th class="py-3 px-4">Status &amp; Payment Receipt</th>
                                 <th class="py-3 px-4 text-right">Actions</th>
                             </tr>
                         </thead>
@@ -722,6 +776,21 @@ var $counterSubmissionsCount = $totalUnreadMsgCount;
                                                 <% } %>
                                             </div>
                                         <% } %>
+                                        <% if (!empty($invRow?.['wu_receiver_name']) || !empty($invRow?.['wu_receiver_country'])) { %>
+                                            <div>
+                                                <span class="text-[9px] uppercase tracking-widest bg-[#1E1A14] text-bronzeLight border border-bronze px-1.5 py-0.5 mr-1">Western Union</span>
+                                                <strong class="text-obsidian"><%- e($invRow?.['wu_receiver_name']) %></strong>
+                                                <div class="text-charcoal">
+                                                    <%- e(($invRow?.['wu_receiver_city'] ? $invRow['wu_receiver_city'] + ', ' : '') + ($invRow?.['wu_receiver_country'] || '')) %>
+                                                    <% if (!empty($invRow?.['wu_payout_method'])) { %>
+                                                        · <%- e($invRow?.['wu_payout_method']) %>
+                                                    <% } %>
+                                                </div>
+                                                <% if (!empty($invRow?.['wu_receiver_phone'])) { %>
+                                                    <div class="text-[10px] text-stone font-sans">Tel: <%- e($invRow?.['wu_receiver_phone']) %></div>
+                                                <% } %>
+                                            </div>
+                                        <% } %>
                                         <% if (!empty($invRow?.['crypto_wallet_address']) || !empty($invRow?.['crypto_currency'])) { %>
                                             <div>
                                                 <span class="text-[9px] uppercase tracking-widest bg-bronze text-white px-1.5 py-0.5 mr-1">Crypto</span>
@@ -742,14 +811,47 @@ var $counterSubmissionsCount = $totalUnreadMsgCount;
                                             <%- $rowItems.length %> item(s) · Sub: <%- format_money_exact(Number($invRow?.['subtotal_amount'] ?? 0), $invRow?.['currency'] ?? 'USD') %> + 15% VAT
                                         </div>
                                     </td>
-                                    <td class="py-3.5 px-4">
+                                    <td class="py-3.5 px-4 space-y-1.5">
                                         <% if (($invRow?.['status'] ?? 'unpaid') === 'paid') { %>
-                                            <span class="bg-[#1A2E22] text-ivory text-[10px] uppercase tracking-widest px-2.5 py-1 font-semibold">✓ Paid</span>
+                                            <span class="bg-[#1A2E22] text-ivory text-[10px] uppercase tracking-widest px-2.5 py-1 font-semibold block w-max">✓ Paid</span>
                                         <% } else { %>
-                                            <span class="bg-bronze/20 text-bronze border border-bronze text-[10px] uppercase tracking-widest px-2.5 py-1 font-semibold">Unpaid</span>
+                                            <span class="bg-bronze/20 text-bronze border border-bronze text-[10px] uppercase tracking-widest px-2.5 py-1 font-semibold block w-max">Unpaid</span>
+                                        <% } %>
+
+                                        <% if (!empty($invRow?.['receipt_uploaded']) && !empty($invRow?.['receipt_file_url'])) { %>
+                                            <div class="pt-0.5 space-y-1">
+                                                <span class="bg-bronze text-white text-[10px] uppercase tracking-widest px-2 py-0.5 font-semibold block w-max">
+                                                    ✓ Receipt Uploaded
+                                                </span>
+                                                <div class="text-[10px] text-obsidian font-semibold">
+                                                    Via: <%- e($invRow?.['receipt_payment_channel'] || 'Submitted') %>
+                                                </div>
+                                                <% if (!empty($invRow?.['receipt_reference_number'])) { %>
+                                                    <div class="text-[10px] font-mono text-charcoal break-all">
+                                                        Ref: <%- e($invRow['receipt_reference_number']) %>
+                                                    </div>
+                                                <% } %>
+                                                <% if (!empty($invRow?.['receipt_sender_notes'])) { %>
+                                                    <div class="text-[10px] text-stone">
+                                                        <%- e($invRow['receipt_sender_notes']) %>
+                                                    </div>
+                                                <% } %>
+                                                <a href="<%- e($invRow['receipt_file_url']) %>" target="_blank" class="inline-block bg-[#181615] text-bronzeLight border border-bronze px-2.5 py-1 text-[9px] uppercase tracking-widest font-semibold hover:bg-bronze hover:text-white transition">
+                                                    👁 View Receipt Slip
+                                                </a>
+                                            </div>
+                                        <% } else { %>
+                                            <span class="bg-stone/20 text-charcoal text-[10px] uppercase tracking-widest px-2 py-0.5 block w-max">
+                                                Awaiting Receipt Slip
+                                            </span>
                                         <% } %>
                                     </td>
                                     <td class="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                                        <% if (!empty($invRow?.['receipt_uploaded']) && !empty($invRow?.['receipt_file_url'])) { %>
+                                            <a href="<%- e($invRow['receipt_file_url']) %>" target="_blank" class="inline-block px-3 py-1.5 bg-[#1A2E22] text-ivory text-[10px] uppercase tracking-widest font-semibold hover:bg-bronze transition" title="View Artist's Uploaded Payment Confirmation Slip">
+                                                🧾 Receipt Slip
+                                            </a>
+                                        <% } %>
                                         <form action="/admin/agreements/from-invoice" method="POST" class="inline">
                                             <%- csrf_field() %>
                                             <input type="hidden" name="invoice_id" value="<%- Number($invRow?.['id']) %>">
@@ -1175,10 +1277,14 @@ var $counterSubmissionsCount = $totalUnreadMsgCount;
     <script>
     function toggleInvoicePaymentMethod(mode) {
         var bankBlock = document.getElementById('inv_bank_block');
+        var wuBlock = document.getElementById('inv_wu_block');
         var cryptoBlock = document.getElementById('inv_crypto_block');
-        if (!bankBlock || !cryptoBlock) return;
-        bankBlock.style.display = (mode === 'crypto') ? 'none' : 'block';
-        cryptoBlock.style.display = (mode === 'bank') ? 'none' : 'block';
+        var showBank = (mode === 'bank' || mode === 'bank_and_crypto' || mode === 'bank_and_western_union' || mode === 'all');
+        var showWu = (mode === 'western_union' || mode === 'western_union_and_crypto' || mode === 'bank_and_western_union' || mode === 'all');
+        var showCrypto = (mode === 'crypto' || mode === 'bank_and_crypto' || mode === 'western_union_and_crypto' || mode === 'all');
+        if (bankBlock) bankBlock.style.display = showBank ? 'block' : 'none';
+        if (wuBlock) wuBlock.style.display = showWu ? 'block' : 'none';
+        if (cryptoBlock) cryptoBlock.style.display = showCrypto ? 'block' : 'none';
     }
     function autoFillInvoiceArtist(sel) {
         var opt = sel.options[sel.selectedIndex];

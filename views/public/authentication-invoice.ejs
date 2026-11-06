@@ -269,7 +269,7 @@ var $safePdfFilename = 'ArtAlly-Invoice-' + String($inv['invoice_number'] || 'IN
                         </div>
                         <div style="text-align: right;">
                             <div style="display: inline-block; padding: 0.3rem 0.85rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 0.55rem; border: 1px solid <%- $isPaid ? '#2D6A4F' : '#8C6D32' %>; background: <%- $isPaid ? 'rgba(45, 106, 79, 0.12)' : 'rgba(184, 150, 90, 0.15)' %>; color: <%- $isPaid ? '#1B4332' : '#705522' %>;">
-                                <%- $isPaid ? '✓ PAID & VERIFIED' : '● UNPAID — AWAITING PAYMENT' %>
+                                <%- $isPaid ? '✓ PAID & VERIFIED' : (!empty($inv['receipt_uploaded']) ? '✓ PAYMENT RECEIPT SUBMITTED' : '● UNPAID — AWAITING PAYMENT') %>
                             </div>
                             <p style="font-family: var(--font-mono); font-size: 0.92rem; font-weight: 700; color: #161514;">
                                 Invoice No: <%- e($inv['invoice_number'] ?? 'INV-AUTH-0001') %>
@@ -391,7 +391,7 @@ var $safePdfFilename = 'ArtAlly-Invoice-' + String($inv['invoice_number'] || 'IN
                                     Official Payment Remittance Instructions
                                 </p>
                                 <h3 style="font-family: var(--font-serif); font-size: 1.2rem; color: #F4EFE6; margin-top: 0.12rem;">
-                                    Designated Bank &amp; Cryptocurrency Payment Details
+                                    Designated Bank, Western Union &amp; Cryptocurrency Payment Details
                                 </h3>
                             </div>
                             <span style="font-family: var(--font-mono); font-size: 0.74rem; padding: 0.25rem 0.65rem; background: rgba(198, 166, 100, 0.16); border: 1px solid #C6A664; color: #C6A664;">
@@ -400,12 +400,17 @@ var $safePdfFilename = 'ArtAlly-Invoice-' + String($inv['invoice_number'] || 'IN
                         </div>
 
                         <% var $hasBank = !empty($inv['payment_account_number']) || !empty($inv['payment_bank_name']) || !empty($inv['payment_account_name']);
-                           var $hasCrypto = !empty($inv['crypto_wallet_address']) || !empty($inv['crypto_currency']); %>
+                           var $hasWu = !empty($inv['wu_receiver_name']) || !empty($inv['wu_receiver_country']) || !empty($inv['wu_receiver_city']) || !empty($inv['wu_receiver_phone']);
+                           var $hasCrypto = !empty($inv['crypto_wallet_address']) || !empty($inv['crypto_currency']);
+                           var $totalMethods = ($hasBank ? 1 : 0) + ($hasWu ? 1 : 0) + ($hasCrypto ? 1 : 0);
+                           var $optIdx = 0;
+                           var $optLabels = ['Option A — ', 'Option B — ', 'Option C — ']; %>
 
-                        <% if ($hasBank) { %>
-                        <div style="<%- $hasCrypto ? 'padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.14);' : '' %>">
+                        <% if ($hasBank) {
+                           var $bankPrefix = $totalMethods > 1 ? $optLabels[$optIdx++] : ''; %>
+                        <div style="<%- ($hasWu || $hasCrypto) ? 'padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.14);' : '' %>">
                             <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700; margin-bottom: 0.6rem;">
-                                🏛 Option A — Bank Wire / Financial Institution Transfer
+                                🏛 <%- $bankPrefix %>Bank Wire / Financial Institution Transfer
                             </p>
                             <div class="inv-grid-2" style="gap: 0.95rem;">
                                 <% if (!empty($inv['payment_account_name'])) { %>
@@ -446,10 +451,77 @@ var $safePdfFilename = 'ArtAlly-Invoice-' + String($inv['invoice_number'] || 'IN
                         </div>
                         <% } %>
 
-                        <% if ($hasCrypto) { %>
+                        <% if ($hasWu) {
+                           var $wuPrefix = $totalMethods > 1 ? $optLabels[$optIdx++] : ''; %>
+                        <div style="<%- $hasCrypto ? 'padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.14);' : '' %>">
+                            <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700; margin-bottom: 0.6rem;">
+                                🌐 <%- $wuPrefix %>Western Union International Money Transfer
+                            </p>
+                            <div class="inv-grid-2" style="gap: 0.95rem;">
+                                <% if (!empty($inv['wu_receiver_name'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Receiver Full Legal Name (As on Gov. ID)</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.92rem; font-weight: 700; color: #C6A664;"><%- e($inv['wu_receiver_name']) %></p>
+                                </div>
+                                <% } %>
+
+                                <% if (!empty($inv['wu_payout_method'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Transfer / Payout Method</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.88rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['wu_payout_method']) %></p>
+                                </div>
+                                <% } %>
+
+                                <% if (!empty($inv['wu_receiver_country'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Destination Country</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.88rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['wu_receiver_country']) %></p>
+                                </div>
+                                <% } %>
+
+                                <% if (!empty($inv['wu_receiver_city'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">City / State / Province</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.88rem; font-weight: 600; color: #FFFFFF;"><%- e($inv['wu_receiver_city']) %></p>
+                                </div>
+                                <% } %>
+
+                                <% if (!empty($inv['wu_receiver_address'])) { %>
+                                <div style="grid-column: 1 / -1;">
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Receiver Street Address &amp; Postal Code</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.86rem; color: #FFFFFF;"><%- e($inv['wu_receiver_address']) %></p>
+                                </div>
+                                <% } %>
+
+                                <% if (!empty($inv['wu_receiver_phone'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Receiver Contact Phone</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.88rem; color: #FFFFFF;"><%- e($inv['wu_receiver_phone']) %></p>
+                                </div>
+                                <% } %>
+
+                                <% if (!empty($inv['wu_receiver_email'])) { %>
+                                <div>
+                                    <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #A69F93; margin-bottom: 0.15rem;">Receiver Email / ID Reference</p>
+                                    <p style="font-family: var(--font-mono); font-size: 0.88rem; color: #FFFFFF;"><%- e($inv['wu_receiver_email']) %></p>
+                                </div>
+                                <% } %>
+                            </div>
+
+                            <% if (!empty($inv['wu_mtcn_note'])) { %>
+                            <div style="margin-top: 0.7rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(198, 166, 100, 0.45); padding: 0.65rem 0.85rem;">
+                                <p style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.13em; color: #C6A664; font-weight: 700; margin-bottom: 0.15rem;">MTCN (10-Digit Control Number) &amp; Verification Instructions</p>
+                                <p style="font-family: var(--font-mono); font-size: 0.82rem; color: #E2DDD5; margin: 0;"><%- e($inv['wu_mtcn_note']) %></p>
+                            </div>
+                            <% } %>
+                        </div>
+                        <% } %>
+
+                        <% if ($hasCrypto) {
+                           var $cryptoPrefix = $totalMethods > 1 ? $optLabels[$optIdx++] : ''; %>
                         <div>
                             <p style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.15em; color: #C6A664; font-weight: 700; margin-bottom: 0.6rem;">
-                                ₿ <%- $hasBank ? 'Option B — ' : '' %>Cryptocurrency / Digital Asset Remittance
+                                ₿ <%- $cryptoPrefix %>Cryptocurrency / Digital Asset Remittance
                             </p>
                             <div class="inv-grid-2" style="gap: 0.95rem;">
                                 <% if (!empty($inv['crypto_currency'])) { %>
@@ -514,10 +586,125 @@ var $safePdfFilename = 'ArtAlly-Invoice-' + String($inv['invoice_number'] || 'IN
 
             </div>
         </div>
+
+        <!-- Payment Receipt / Confirmation of Payment Slip Verification Box (Mirrors Contract Execution Box) -->
+        <% var $invHasReceipt = !empty($inv['receipt_uploaded']) && !empty($inv['receipt_file_url']); %>
+        <div id="payment-receipt-verification" class="no-print" style="margin-top: 1.75rem; background: #181615; color: #F4EFE6; border: 2px solid #B8965A; padding: 1.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; border-bottom: 1px solid rgba(184, 150, 90, 0.35); padding-bottom: 1rem; margin-bottom: 1.15rem;">
+                <div>
+                    <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.18em; color: #C6A664; font-weight: 700; margin: 0 0 0.25rem;">
+                        <%- $invHasReceipt ? '✓ Payment Receipt & Confirmation Slip Verified on File' : '🧾 Official Payment Receipt / Confirmation Slip Verification' %>
+                    </p>
+                    <h3 style="font-family: var(--font-serif); font-size: 1.4rem; color: #FBF9F5; margin: 0;">
+                        <%- $invHasReceipt ? 'Submitted Remittance Proof for ' + e($inv['invoice_number']) : 'Upload Payment Receipt or Confirmation Slip for ' + e($inv['invoice_number']) %>
+                    </h3>
+                    <p style="font-size: 0.8rem; color: #A69F93; margin-top: 0.25rem;">
+                        Upload your payment receipt or confirmation slip below so it immediately appears on the ArtAlly Curatorial Backend to verify payment of this invoice.
+                    </p>
+                </div>
+                <div style="display: flex; gap: 0.65rem; flex-wrap: wrap;">
+                    <% if ($invHasReceipt) { %>
+                        <a href="<%- e($inv['receipt_file_url']) %>" target="_blank" class="btn btn-gold btn-sm">
+                            👁 View Uploaded Receipt Slip
+                        </a>
+                        <button type="button" onclick="var el=document.getElementById('inv-page-receipt-form'); if(el) el.style.display = (el.style.display === 'none' ? 'block' : 'none');" class="btn btn-outline btn-sm" style="border-color: #C6A664; color: #C6A664;">
+                            ↻ Upload Replacement Slip
+                        </button>
+                    <% } %>
+                </div>
+            </div>
+
+            <% if ($invHasReceipt) { %>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; background: #0F0E0D; border: 1px solid rgba(198,166,100,0.45); padding: 1rem 1.25rem; margin-bottom: 1rem; font-size: 0.82rem;">
+                    <div>
+                        <span style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93;">Payment Method Used</span>
+                        <strong style="color: #C6A664; font-family: var(--font-mono);"><%- e($inv['receipt_payment_channel'] || 'Submitted') %></strong>
+                    </div>
+                    <% if (!empty($inv['receipt_reference_number'])) { %>
+                    <div>
+                        <span style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93;">Reference / MTCN / TXID</span>
+                        <strong style="color: #FFFFFF; font-family: var(--font-mono); word-break: break-all;"><%- e($inv['receipt_reference_number']) %></strong>
+                    </div>
+                    <% } %>
+                    <div>
+                        <span style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93;">Uploaded Timestamp</span>
+                        <strong style="color: #FFFFFF; font-family: var(--font-mono);"><%- e(substr($inv['receipt_uploaded_at'] ?? '', 0, 16)) %> UTC</strong>
+                    </div>
+                    <% if (!empty($inv['receipt_sender_notes'])) { %>
+                    <div style="grid-column: 1 / -1; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 0.65rem;">
+                        <span style="display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: #A69F93;">Sender Details &amp; Notes</span>
+                        <span style="color: #E2DDD5;"><%- e($inv['receipt_sender_notes']) %></span>
+                    </div>
+                    <% } %>
+                </div>
+            <% } %>
+
+            <form id="inv-page-receipt-form" action="/invoices/<%- Number($inv['id']) %>/upload-receipt" method="POST" enctype="multipart/form-data" style="display: <%- $invHasReceipt ? 'none' : 'block' %>;">
+                <%- csrf_field() %>
+                <input type="hidden" name="redirect_to" value="invoice">
+                <input type="hidden" name="receipt_file_data" id="inv-page-receipt-base64" value="">
+
+                <div class="inv-grid-2" style="gap: 1rem; margin-bottom: 1rem;">
+                    <div>
+                        <label style="display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; font-weight: 700; margin-bottom: 0.35rem;">
+                            Payment Method Used *
+                        </label>
+                        <select name="receipt_payment_channel" required style="width: 100%; background: #0F0E0D; border: 1px solid #C6A664; color: #FFFFFF; padding: 0.55rem 0.75rem; font-size: 0.85rem; font-weight: 600;">
+                            <option value="">— Select Payment Method Used —</option>
+                            <option value="Western Union Transfer" <%- ($inv['receipt_payment_channel'] === 'Western Union Transfer' || $inv['payment_method'] === 'western_union') ? 'selected' : '' %>>Western Union Transfer</option>
+                            <option value="Cryptocurrency Transfer" <%- ($inv['receipt_payment_channel'] === 'Cryptocurrency Transfer' || $inv['payment_method'] === 'crypto') ? 'selected' : '' %>>Cryptocurrency Transfer</option>
+                            <option value="Bank Wire Transfer" <%- ($inv['receipt_payment_channel'] === 'Bank Wire Transfer' || $inv['payment_method'] === 'bank') ? 'selected' : '' %>>Bank Wire Transfer</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #C6A664; font-weight: 700; margin-bottom: 0.35rem;">
+                            Upload Payment Receipt / Confirmation Slip *
+                        </label>
+                        <input type="file" name="receipt_file" accept="image/*,.pdf" <%- $invHasReceipt ? '' : 'required' %> onchange="invPagePrepareReceipt(this)" style="width: 100%; background: #0F0E0D; border: 1px solid #C6A664; color: #F4EFE6; padding: 0.42rem 0.65rem; font-size: 0.82rem;">
+                    </div>
+                </div>
+
+                <div class="inv-grid-2" style="gap: 1rem; margin-bottom: 1.15rem;">
+                    <div>
+                        <label style="display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #D6D0C4; font-weight: 600; margin-bottom: 0.35rem;">
+                            Transaction Reference / MTCN / Crypto TXID
+                        </label>
+                        <input type="text" name="receipt_reference_number" value="<%- e($inv['receipt_reference_number'] || '') %>" placeholder="10-digit MTCN, Wire Ref, or TXID" style="width: 100%; background: #0F0E0D; border: 1px solid rgba(255,255,255,0.22); color: #FFFFFF; padding: 0.55rem 0.75rem; font-family: var(--font-mono); font-size: 0.85rem;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: #D6D0C4; font-weight: 600; margin-bottom: 0.35rem;">
+                            Sender Name, Country &amp; Transfer Details
+                        </label>
+                        <input type="text" name="receipt_sender_notes" value="<%- e($inv['receipt_sender_notes'] || '') %>" placeholder="Sender full name, sending country, or remittance note" style="width: 100%; background: #0F0E0D; border: 1px solid rgba(255,255,255,0.22); color: #FFFFFF; padding: 0.55rem 0.75rem; font-size: 0.85rem;">
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end;">
+                    <button type="submit" class="btn btn-gold btn-sm" style="padding: 0.65rem 1.35rem;">
+                        ✓ Submit Payment Receipt &amp; Verify Payment →
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </section>
 
 <script>
+function invPagePrepareReceipt(fileInput) {
+    if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
+    var file = fileInput.files[0];
+    var hidden = document.getElementById('inv-page-receipt-base64');
+    if (!hidden) return;
+    if (file.size > 4.5 * 1024 * 1024) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+        if (ev.target && typeof ev.target.result === 'string') {
+            hidden.value = ev.target.result;
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
 function invViewFormatMoney(val) {
     var num = Number(val || 0);
     return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

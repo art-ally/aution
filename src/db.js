@@ -431,6 +431,8 @@ class DatabaseEngine {
           cols.authentication_invoices &&
           cols.authentication_invoices.crypto_wallet_address &&
           cols.authentication_invoices.payment_bank_address &&
+          cols.authentication_invoices.wu_receiver_name &&
+          cols.authentication_invoices.receipt_uploaded &&
           cols.authentication_invoices.line_items &&
           cols.contract_agreements &&
           cols.wallet_withdrawals &&
@@ -462,10 +464,24 @@ class DatabaseEngine {
           ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS ends_at VARCHAR(80) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS payment_method VARCHAR(40) NOT NULL DEFAULT 'bank_and_crypto';
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS payment_bank_address TEXT NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS wu_receiver_name VARCHAR(255) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS wu_receiver_country VARCHAR(160) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS wu_receiver_city VARCHAR(160) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS wu_receiver_address TEXT NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS wu_receiver_phone VARCHAR(120) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS wu_receiver_email VARCHAR(190) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS wu_payout_method VARCHAR(160) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS wu_mtcn_note TEXT NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_currency VARCHAR(120) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_network VARCHAR(120) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_wallet_address VARCHAR(255) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS crypto_memo VARCHAR(255) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS receipt_uploaded BOOLEAN NOT NULL DEFAULT false;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS receipt_file_url TEXT NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS receipt_payment_channel VARCHAR(120) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS receipt_reference_number VARCHAR(255) NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS receipt_sender_notes TEXT NULL;
+          ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS receipt_uploaded_at VARCHAR(80) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS line_items JSONB NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS subtotal_amount NUMERIC(14,2) NULL;
           ALTER TABLE public.authentication_invoices ADD COLUMN IF NOT EXISTS vat_rate NUMERIC(6,2) NOT NULL DEFAULT 15.00;
@@ -473,6 +489,14 @@ class DatabaseEngine {
           ALTER TABLE public.authentication_invoices ALTER COLUMN payment_account_name DROP NOT NULL;
           ALTER TABLE public.authentication_invoices ALTER COLUMN payment_bank_name DROP NOT NULL;
           ALTER TABLE public.authentication_invoices ALTER COLUMN payment_account_number DROP NOT NULL;
+          ALTER TABLE public.contract_agreements ADD COLUMN IF NOT EXISTS wu_receiver_name VARCHAR(255) NULL;
+          ALTER TABLE public.contract_agreements ADD COLUMN IF NOT EXISTS wu_receiver_country VARCHAR(160) NULL;
+          ALTER TABLE public.contract_agreements ADD COLUMN IF NOT EXISTS wu_receiver_city VARCHAR(160) NULL;
+          ALTER TABLE public.contract_agreements ADD COLUMN IF NOT EXISTS wu_receiver_address TEXT NULL;
+          ALTER TABLE public.contract_agreements ADD COLUMN IF NOT EXISTS wu_receiver_phone VARCHAR(120) NULL;
+          ALTER TABLE public.contract_agreements ADD COLUMN IF NOT EXISTS wu_receiver_email VARCHAR(190) NULL;
+          ALTER TABLE public.contract_agreements ADD COLUMN IF NOT EXISTS wu_payout_method VARCHAR(160) NULL;
+          ALTER TABLE public.contract_agreements ADD COLUMN IF NOT EXISTS wu_mtcn_note TEXT NULL;
         `);
 
         const refreshedColRes = await this.pgPool.query(`

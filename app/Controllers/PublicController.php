@@ -394,7 +394,7 @@ class PublicController
             ],
             'contact' => [
                 'title' => 'Private Client & Specialist Concierge',
-                'subtitle' => 'Geneva · New York · London · Paris',
+                'subtitle' => 'Geneva · New York · London · Paris · Istanbul',
             ],
             'terms' => [
                 'title' => 'Conditions of Sale & Terms of Use',

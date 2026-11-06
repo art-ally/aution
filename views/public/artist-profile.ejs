@@ -96,6 +96,9 @@
                                 <% if (!empty($inv?.['payment_account_number'])) { %>
                                     · Bank: <strong class="text-obsidian"><%- e($inv?.['payment_bank_name']) %> (<%- e($inv?.['payment_account_name']) %> · <%- e($inv?.['payment_account_number']) %><%- !empty($inv?.['payment_bank_address']) ? ' · ' + e($inv?.['payment_bank_address']) : '' %>)</strong>
                                 <% } %>
+                                <% if (!empty($inv?.['wu_receiver_name'])) { %>
+                                    · Western Union: <strong class="text-obsidian"><%- e($inv?.['wu_receiver_name']) %> (<%- e(($inv?.['wu_receiver_city'] ? $inv['wu_receiver_city'] + ', ' : '') + ($inv?.['wu_receiver_country'] || '')) %><%- !empty($inv?.['wu_payout_method']) ? ' · ' + e($inv?.['wu_payout_method']) : '' %>)</strong>
+                                <% } %>
                                 <% if (!empty($inv?.['crypto_wallet_address'])) { %>
                                     · Crypto: <strong class="text-obsidian"><%- e($inv?.['crypto_currency'] || 'Crypto') %> (<%- e($inv?.['crypto_network'] || 'Mainnet') %> · <span class="font-mono"><%- e($inv?.['crypto_wallet_address']) %></span>)</strong>
                                 <% } %>
